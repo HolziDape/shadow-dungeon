@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Wings - Striker Edition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div id="space-bg"></div>
+
+    <div class="hud-bar" id="main-hud">
+        <div class="hud-left">
+            <div class="currency-badge" id="hud-level">LEVEL 1</div>
+            <div class="currency-badge" id="hud-wave">WAVE 0/0</div>
+        </div>
+        <div class="hud-right">
+            <div class="currency-badge currency-gold">GOLD <span id="hud-gold">0</span></div>
+            <div class="currency-badge currency-gems">GEMS <span id="hud-gems">0</span></div>
+            <button class="settings-button" id="settings-button" type="button" onclick="openSettings()">SET</button>
+        </div>
+    </div>
+
+    <div id="fight-screen" class="screen active">
+        <section class="hero-panel">
+            <div>
+                <p class="eyebrow">Vertical Progression Run</p>
+                <h1>NEON WINGS</h1>
+                <p class="hero-copy">OP gunfeel, one-hit hearts and a real skill curve. Drag on the battlefield to move.</p>
+            </div>
+            <div class="mission-card">
+                <p class="eyebrow">Selected Mission</p>
+                <h2 id="selected-level-label">Level 1</h2>
+                <p id="selected-level-desc">4 waves. Enemies scale by level, abilities scale by kills.</p>
+                <div class="mission-meta">
+                    <div class="meta-pill">3 Hearts</div>
+                    <div class="meta-pill" id="selected-level-difficulty">Threat Low</div>
+                    <div class="meta-pill" id="selected-mode-pill">Mission</div>
+                </div>
+            </div>
+        </section>
+
+        <div id="roadmap-container">
+            <div class="progress-beam">
+                <div class="progress-fill" id="road-progress"></div>
+            </div>
+            <div class="planet planet-a"></div>
+            <div class="planet planet-b"></div>
+            <div class="planet planet-c"></div>
+        </div>
+
+        <div class="cta-wrap">
+            <div class="cta-actions">
+                <button class="btn-aaa btn-green" id="battle-button" onclick="startCurrentLevel()">Fight Mission</button>
+                <button class="btn-aaa btn-endless" id="endless-button" onclick="startEndlessMode()">Endless</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="hub-screen" class="screen">
+        <div class="screen-shell">
+            <h1 class="screen-title">STRIKER-X</h1>
+            <p class="screen-subtitle">Upgrade rings animate around the ship like the reference layout.</p>
+            <div class="striker-hub">
+                <div class="hub-stage">
+                    <div class="hub-ring ring-outer"></div>
+                    <div class="hub-ring ring-mid"></div>
+                    <div class="hub-ring ring-inner"></div>
+                    <div id="hub-ring-progress"></div>
+                    <div class="hub-ship">▲</div>
+                    <div id="hub-stats-readout" class="hub-readout">Damage 1.0 > 1.0</div>
+                </div>
+                <div id="hub-grid" class="upgrade-row"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="shop-screen" class="screen">
+        <div class="screen-shell">
+            <h1 class="screen-title accent-orange">MARKET</h1>
+            <p class="screen-subtitle">Card packs up top, utility below, premium on its own cleaner shelf.</p>
+            <div class="market-columns market-stack">
+                <section class="market-feature">
+                    <div class="market-header card-market">
+                        <h2>Card Shop</h2>
+                        <span>Gold Packs</span>
+                    </div>
+                    <div id="shop-gold" class="shop-grid pack-shop-grid"></div>
+                </section>
+                <section class="market-feature">
+                    <div class="market-header premium">
+                        <h2>Skin Packs</h2>
+                        <span>Gold, Gems, Premium</span>
+                    </div>
+                    <div id="shop-skins" class="shop-grid pack-shop-grid"></div>
+                </section>
+                <div class="shop-lower-grid">
+                    <section>
+                        <div class="market-header premium">
+                            <h2>Gem Lab</h2>
+                            <span>Utility</span>
+                        </div>
+                        <div id="shop-gems" class="shop-grid single-column premium-column"></div>
+                    </section>
+                    <section>
+                        <div class="market-header premium real-money">
+                            <h2>Premium Vault</h2>
+                            <span>Real Money</span>
+                        </div>
+                        <div id="shop-real" class="shop-grid single-column premium-column"></div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="inventory-screen" class="screen">
+        <div class="screen-shell">
+            <h1 class="screen-title">INVENTORY</h1>
+            <p class="screen-subtitle">Open stored packs here and sell spare cards for gold.</p>
+            <div id="inventory-grid" class="shop-grid"></div>
+        </div>
+    </div>
+
+    <div id="loadout-screen" class="screen">
+        <div class="screen-shell">
+            <h1 class="screen-title">LOADOUT</h1>
+            <p class="screen-subtitle" id="loadout-subtitle">Equip account cards. More slots unlock with level progress.</p>
+            <div id="loadout-summary" class="mission-card"></div>
+            <div id="loadout-normal" class="loadout-section"></div>
+            <div id="loadout-legendary" class="loadout-section"></div>
+            <div id="loadout-cards" class="shop-grid"></div>
+        </div>
+    </div>
+
+    <div id="abilities-screen" class="screen">
+        <div class="screen-shell">
+            <h1 class="screen-title">ABILITY ARCHIVE</h1>
+            <p class="screen-subtitle" id="ability-archive-status">0/0 unlocked</p>
+            <div id="ability-milestones" class="ability-milestones"></div>
+            <div id="ability-archive-grid" class="shop-grid ability-archive-grid"></div>
+        </div>
+    </div>
+
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ability-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-topline">
+                <h2 class="modal-title">Choose Ability</h2>
+                <button id="ability-reroll" class="mini-action" type="button" onclick="rerollAbilities()">Reroll 5 Gems</button>
+            </div>
+            <p class="screen-subtitle">Every kill fills the ability XP bar.</p>
+            <div id="ability-cards" class="ability-list"></div>
+        </div>
+    </div>
+
+    <div id="result-overlay" class="modal-overlay">
+        <div class="modal-content result-content">
+            <div class="result-badge" id="result-badge">Victory</div>
+            <h2 class="result-title" id="result-title">Mission Clear</h2>
+            <p class="result-copy" id="result-copy">Rewards granted.</p>
+            <div class="result-stats" id="result-stats"></div>
+            <div class="result-actions">
+                <button id="result-secondary" class="mini-action result-secondary" type="button" onclick="handleResultSecondary()">Map</button>
+                <button id="result-primary" class="inline-button" type="button" onclick="handleResultPrimary()">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-overlay" class="modal-overlay">
+        <div class="modal-content settings-content">
+            <div class="modal-topline">
+                <h2 class="modal-title">Settings</h2>
+                <button class="mini-action" type="button" onclick="closeSettings()">Close</button>
+            </div>
+            <div class="settings-list">
+                <label class="settings-row" for="settings-sfx">
+                    <div>
+                        <div class="settings-label">SFX Volume</div>
+                        <div class="settings-copy">Shots, hits, pickups and ability sounds.</div>
+                    </div>
+                    <span class="settings-value" id="settings-sfx-value">70%</span>
+                </label>
+                <input id="settings-sfx" class="settings-range" type="range" min="0" max="100" step="5" oninput="updateSfxSetting(this.value)">
+
+                <label class="settings-row" for="settings-music">
+                    <div>
+                        <div class="settings-label">Music Volume</div>
+                        <div class="settings-copy">Ambient background mix.</div>
+                    </div>
+                    <span class="settings-value" id="settings-music-value">35%</span>
+                </label>
+                <input id="settings-music" class="settings-range" type="range" min="0" max="100" step="5" oninput="updateMusicSetting(this.value)">
+
+                <label class="settings-toggle">
+                    <div>
+                        <div class="settings-label">Haptics</div>
+                        <div class="settings-copy">Short vibration on hits and reward moments.</div>
+                    </div>
+                    <input id="settings-haptics" type="checkbox" onchange="toggleHaptics(this.checked)">
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="pack-overlay" class="modal-overlay">
+        <div class="modal-content pack-content">
+            <div class="modal-topline">
+                <h2 class="modal-title">Card Pack</h2>
+                <button class="mini-action" type="button" onclick="closePackOverlay()">Close</button>
+            </div>
+            <p class="screen-subtitle" id="pack-subtitle">Spin the reel and claim a permanent account card.</p>
+            <div class="pack-stage">
+                <div class="pack-marker"></div>
+                <div class="pack-viewport">
+                    <div id="pack-track" class="pack-track"></div>
+                </div>
+            </div>
+            <div id="pack-result" class="pack-result">Opening pack...</div>
+            <button id="pack-claim-button" class="inline-button" type="button" onclick="claimPackReward()" disabled>Claim Card</button>
+        </div>
+    </div>
+
+    <div id="upgrade-toast" class="upgrade-toast"></div>
+
+    <nav id="global-nav">
+        <button class="nav-btn" onclick="showShop()" id="nav-shop" type="button">SHOP</button>
+        <button class="nav-btn active" onclick="showFight()" id="nav-fight" type="button">MAP</button>
+        <button class="nav-btn" onclick="showHub()" id="nav-hub" type="button">UPGRADES</button>
+        <button class="nav-btn" onclick="showInventory()" id="nav-inventory" type="button">INVENTORY</button>
+        <button class="nav-btn" onclick="showLoadout()" id="nav-loadout" type="button">LOADOUT</button>
+        <button class="nav-btn" onclick="showAbilities()" id="nav-abilities" type="button">SKILLS</button>
+    </nav>
+
+    <script src="config.js"></script>
+    <script src="render.js"></script>
+    <script src="game.js"></script>
+    <script>
+        const bg = document.getElementById('space-bg');
+        for (let i = 0; i < 160; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            const size = Math.random() * 2.6;
+            star.style.width = size + 'px';
+            star.style.height = size + 'px';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.opacity = Math.random();
+            star.style.animationDelay = (Math.random() * 4).toFixed(2) + 's';
+            bg.appendChild(star);
+        }
+    </script>
+</body>
+</html>

@@ -42,9 +42,9 @@ function drawLightningBolts() {
 }
 
 function drawBackgroundGrid(width, height) {
-    const pulse = 0.04 + Math.min(0.08, powerPulse * 0.04);
-    ctx.strokeStyle = `rgba(0, 242, 255, ${pulse})`;
-    ctx.lineWidth = 1;
+    const pulse = 0.03 + Math.min(0.06, powerPulse * 0.03);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
+    ctx.lineWidth = 0.5;
     const size = 48;
     const camX = camera?.x || 0;
     const camY = camera?.y || 0;
@@ -70,8 +70,8 @@ function drawBackgroundGrid(width, height) {
         const top = arena.top - camY;
         const right = arena.width - camX;
         const bottom = arena.height - camY;
-        ctx.strokeStyle = 'rgba(0, 242, 255, 0.22)';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 1;
         ctx.strokeRect(left, top, right - left, bottom - top);
     }
 }
@@ -132,9 +132,10 @@ function drawProjectiles() {
         ctx.save();
         ctx.translate(projectile.x, projectile.y);
         ctx.rotate(projectile.spin || 0);
-        ctx.shadowBlur = projectile.tornado ? 22 : 14;
-        ctx.shadowColor = projectile.color;
-        ctx.fillStyle = projectile.color;
+        ctx.shadowBlur = projectile.tornado ? 18 : 12;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         if (projectile.tornado) {
             ctx.moveTo(0, -projectile.r);
@@ -145,6 +146,8 @@ function drawProjectiles() {
         } else {
             ctx.arc(0, 0, projectile.r, 0, Math.PI * 2);
         }
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.fill();
         ctx.restore();
     });
@@ -157,9 +160,12 @@ function drawEnemies() {
         ctx.save();
         ctx.translate(enemy.x, enemy.y);
         ctx.rotate(enemy.ai === 'sprint' ? Math.sin(enemy.aiClock * 8) * 0.18 : 0);
-        ctx.shadowBlur = enemy.isBoss ? 38 : 18;
-        ctx.shadowColor = enemy.glow;
-        ctx.fillStyle = enemy.hitFlash > 0 ? '#ffffff' : enemy.color;
+
+        const neonColor = enemy.hitFlash > 0 ? '#ffffff' : enemy.color;
+        ctx.shadowBlur = enemy.isBoss ? 30 : 16;
+        ctx.shadowColor = neonColor;
+        ctx.strokeStyle = neonColor;
+        ctx.lineWidth = enemy.isBoss ? 2 : 1.5;
 
         ctx.beginPath();
         if (enemy.isBoss) {
@@ -181,13 +187,18 @@ function drawEnemies() {
         } else {
             ctx.arc(0, 0, enemy.r, 0, Math.PI * 2);
         }
-        ctx.fill();
+        ctx.stroke();
+        if (enemy.hitFlash > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, 0.25)`;
+            ctx.fill();
+        }
 
         ctx.font = enemy.isBoss ? '700 18px Rajdhani' : '700 14px Rajdhani';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
         ctx.lineWidth = 4;
+        ctx.shadowBlur = 0;
         const label = formatCompactNumber(enemy.hp);
         ctx.strokeText(label, 0, -enemy.r - 12);
         ctx.fillText(label, 0, -enemy.r - 12);
@@ -201,12 +212,13 @@ function drawOrbiters() {
     player.orbiters.forEach((orbiter) => {
         ctx.save();
         ctx.translate(orbiter.x, orbiter.y);
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = '#bc13fe';
-        ctx.fillStyle = '#bc13fe';
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(0, 0, orbiter.r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.stroke();
         ctx.restore();
     });
 }
@@ -222,7 +234,7 @@ function drawPlayer() {
             ctx.save();
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            const baseWidth = equippedSkin.rarity === 'gold' ? 12 : equippedSkin.rarity === 'red' ? 11 : 9;
+            const baseWidth = 6;
             for (let i = 0; i < trail.length - 1; i++) {
                 const prev = trail[Math.max(0, i - 1)];
                 const current = trail[i];
@@ -232,11 +244,11 @@ function drawPlayer() {
                 const endX = (current.x + next.x) * 0.5;
                 const endY = (current.y + next.y) * 0.5;
                 const fade = 1 - (i / Math.max(1, trail.length - 1));
-                const alpha = Math.max(0.02, current.life * 0.5 * fade);
-                ctx.shadowBlur = 10 + (fade * 10);
-                ctx.shadowColor = style.core;
-                ctx.strokeStyle = style.trail.replace(/rgba\(([^)]+),\s*[\d.]+\)/, `rgba($1, ${alpha.toFixed(3)})`);
-                ctx.lineWidth = Math.max(1.5, baseWidth * current.width * (0.24 + fade * 0.76));
+                const alpha = Math.max(0.02, current.life * 0.4 * fade);
+                ctx.shadowBlur = 8 + (fade * 8);
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+                ctx.lineWidth = Math.max(1, baseWidth * current.width * (0.24 + fade * 0.76));
                 ctx.beginPath();
                 ctx.moveTo(startX, startY);
                 ctx.quadraticCurveTo(current.x, current.y, endX, endY);
@@ -248,11 +260,12 @@ function drawPlayer() {
 
     if (powerPulse > 0) {
         ctx.save();
-        ctx.globalAlpha = Math.min(0.35, powerPulse * 0.18);
-        ctx.fillStyle = style.pulse;
+        ctx.globalAlpha = Math.min(0.2, powerPulse * 0.1);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(player.x, player.y, 34 + (powerPulse * 14), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.stroke();
         ctx.restore();
     }
 
@@ -260,34 +273,33 @@ function drawPlayer() {
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle || 0);
     ctx.globalAlpha = player.invulnerable > 0 && Math.floor(player.invulnerable * 12) % 2 === 0 ? 0.45 : 1;
-    ctx.shadowBlur = equippedSkin.rarity === 'gold' ? 38 : equippedSkin.rarity === 'red' ? 34 : 28;
-    ctx.shadowColor = style.core;
-    ctx.fillStyle = style.ship;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.7)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, -player.r);
     ctx.lineTo(player.r * 0.82, player.r);
     ctx.lineTo(0, player.r * 0.42);
     ctx.lineTo(-player.r * 0.82, player.r);
     ctx.closePath();
-    ctx.fill();
+    ctx.stroke();
 
-    ctx.fillStyle = style.core;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.beginPath();
-    ctx.arc(0, -4, 5, 0, Math.PI * 2);
+    ctx.arc(0, -4, 4, 0, Math.PI * 2);
     ctx.fill();
 
-    if (equippedSkin.rarity === 'purple' || equippedSkin.rarity === 'red' || equippedSkin.rarity === 'gold') {
-        ctx.strokeStyle = style.pulse;
-        ctx.lineWidth = equippedSkin.rarity === 'gold' ? 3.5 : 2.5;
-        ctx.globalAlpha *= 0.85;
-        ctx.beginPath();
-        ctx.moveTo(0, -player.r - 5);
-        ctx.lineTo(player.r * 0.98, player.r + 5);
-        ctx.lineTo(0, player.r * 0.5);
-        ctx.lineTo(-player.r * 0.98, player.r + 5);
-        ctx.closePath();
-        ctx.stroke();
-    }
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -player.r - 4);
+    ctx.lineTo(player.r * 0.98, player.r + 4);
+    ctx.lineTo(0, player.r * 0.5);
+    ctx.lineTo(-player.r * 0.98, player.r + 4);
+    ctx.closePath();
+    ctx.stroke();
+
     ctx.restore();
     ctx.globalAlpha = 1;
 }
@@ -461,12 +473,15 @@ function drawInGameHud(width) {
 }
 
 function drawHeartShape(color) {
-    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.shadowBlur = color === 'rgba(255,255,255,0.12)' ? 0 : 10;
+    ctx.shadowColor = color;
     ctx.beginPath();
     ctx.moveTo(0, 10);
     ctx.bezierCurveTo(12, 2, 12, -10, 0, -4);
     ctx.bezierCurveTo(-12, -10, -12, 2, 0, 10);
-    ctx.fill();
+    ctx.stroke();
 }
 
 function drawOverlayFx(width, height) {

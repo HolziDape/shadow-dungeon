@@ -18,7 +18,12 @@
         <div class="hud-right">
             <div class="currency-badge currency-gold">GOLD <span id="hud-gold">0</span></div>
             <div class="currency-badge currency-gems">GEMS <span id="hud-gems">0</span></div>
-            <button class="settings-button" id="settings-button" type="button" onclick="openSettings()">SET</button>
+            <button class="settings-button" id="settings-button" type="button" onclick="openSettings()" aria-label="Settings">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9 1.65 1.65 0 0 0 4.27 7.18l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </button>
         </div>
     </div>
 
@@ -56,6 +61,62 @@
                 <button class="btn-aaa btn-endless" id="endless-button" onclick="startEndlessMode()">Endless</button>
             </div>
         </div>
+
+        <section class="daily-panel mission-card legacy-hidden">
+            <div class="daily-header">
+                <div>
+                    <p class="eyebrow">Daily Login</p>
+                    <h2 id="daily-login-title">Tag 1 bereit</h2>
+                </div>
+                <div class="meta-pill" id="daily-login-streak">Streak 0</div>
+            </div>
+            <p class="daily-copy" id="daily-login-copy">Hier siehst du, was schon eingesammelt wurde und was als Naechstes kommt.</p>
+            <div id="daily-login-grid" class="daily-grid"></div>
+        </section>
+
+        <aside class="map-rail" id="map-rail">
+            <button class="map-rail-btn daily" type="button" id="rail-daily" onclick="openDailyOverlay()">
+                <span class="rail-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg></span>
+                <span class="rail-label" id="rail-daily-label">Daily</span>
+                <span class="rail-badge" id="rail-daily-badge" style="display:none">!</span>
+            </button>
+            <button class="map-rail-btn challenges" type="button" onclick="openChallengesOverlay()">
+                <span class="rail-icon"><svg viewBox="0 0 24 24"><polygon points="12,3 15,9 22,10 17,15 18,22 12,18 6,22 7,15 2,10 9,9"/></svg></span>
+                <span class="rail-label">Quests</span>
+                <span class="rail-badge" id="rail-challenge-badge">3</span>
+            </button>
+            <button class="map-rail-btn no-ads" type="button" id="rail-no-ads" onclick="buyPremiumOffer('no_ads')">
+                <span class="rail-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+                <span class="rail-label" id="rail-no-ads-label">No Ads</span>
+            </button>
+        </aside>
+
+        <section class="leaderboard-panel" id="leaderboard-panel">
+            <h4>Weekly Top</h4>
+            <div class="leaderboard-list" id="leaderboard-list"></div>
+        </section>
+    </div>
+
+    <div id="daily-overlay" class="modal-overlay" onclick="closeDailyOverlay(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-topline">
+                <h2 class="modal-title">Daily Login</h2>
+                <button class="mini-action" type="button" onclick="closeDailyOverlay()">Close</button>
+            </div>
+            <p class="screen-subtitle" id="daily-overlay-status">Tag 1 bereit</p>
+            <div id="daily-overlay-grid" class="daily-grid" style="margin-top:14px"></div>
+        </div>
+    </div>
+
+    <div id="challenges-overlay" class="modal-overlay" onclick="closeChallengesOverlay(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-topline">
+                <h2 class="modal-title">Daily Challenges</h2>
+                <button class="mini-action" type="button" onclick="closeChallengesOverlay()">Close</button>
+            </div>
+            <p class="screen-subtitle">Complete to climb the weekly leaderboard.</p>
+            <div id="challenges-list" style="display:flex; flex-direction:column; gap:8px; margin-top:14px"></div>
+        </div>
     </div>
 
     <div id="hub-screen" class="screen">
@@ -77,9 +138,11 @@
     </div>
 
     <div id="shop-screen" class="screen">
+        <div class="shop-bg-aura"></div>
         <div class="screen-shell">
             <h1 class="screen-title accent-orange">MARKET</h1>
             <p class="screen-subtitle">Card packs up top, utility below, premium on its own cleaner shelf.</p>
+            <div id="shop-feature-banner-mount"></div>
             <div class="market-columns market-stack">
                 <section class="market-feature">
                     <div class="market-header card-market">
@@ -206,20 +269,47 @@
     </div>
 
     <div id="pack-overlay" class="modal-overlay">
-        <div class="modal-content pack-content">
+        <div class="modal-content pack-content" id="pack-content">
             <div class="modal-topline">
                 <h2 class="modal-title">Card Pack</h2>
                 <button class="mini-action" type="button" onclick="closePackOverlay()">Close</button>
             </div>
             <p class="screen-subtitle" id="pack-subtitle">Spin the reel and claim a permanent account card.</p>
-            <div class="pack-stage">
+            <div class="pack-stage" id="pack-stage">
+                <div id="pack-rip" class="pack-rip hidden">
+                    <div class="pack-rip-left"></div>
+                    <div class="pack-rip-right"></div>
+                </div>
                 <div class="pack-marker"></div>
                 <div class="pack-viewport">
                     <div id="pack-track" class="pack-track"></div>
                 </div>
+                <div id="pack-confetti" class="pack-confetti"></div>
             </div>
             <div id="pack-result" class="pack-result">Opening pack...</div>
-            <button id="pack-claim-button" class="inline-button" type="button" onclick="claimPackReward()" disabled>Claim Card</button>
+            <button id="pack-claim-button" class="btn-glossy btn-gold" type="button" onclick="claimPackReward()" disabled>Claim Card</button>
+        </div>
+    </div>
+
+    <div id="peek-overlay" class="modal-overlay" onclick="closePackPeek(event)">
+        <div class="modal-content peek-content" id="peek-content" onclick="event.stopPropagation()">
+            <div class="peek-header">
+                <div>
+                    <div class="peek-pack-name" id="peek-pack-name">Pack</div>
+                    <p class="screen-subtitle" id="peek-pack-sub" style="margin-top:4px">Possible drops</p>
+                </div>
+                <button class="peek-close" type="button" onclick="closePackPeek()">×</button>
+            </div>
+            <div class="peek-odds-bar" id="peek-odds-bar"></div>
+            <div class="peek-odds-legend" id="peek-odds-legend"></div>
+            <div class="peek-grid" id="peek-grid"></div>
+        </div>
+    </div>
+
+    <div id="ability-detail-overlay" class="modal-overlay" onclick="closeAbilityDetail(event)">
+        <div class="modal-content ability-detail-content" id="ability-detail-content" onclick="event.stopPropagation()">
+            <button class="ability-detail-close" type="button" onclick="closeAbilityDetail()">×</button>
+            <div class="ability-detail-card" id="ability-detail-card"></div>
         </div>
     </div>
 
@@ -228,7 +318,7 @@
     <nav id="global-nav">
         <button class="nav-btn" onclick="showShop()" id="nav-shop" type="button">SHOP</button>
         <button class="nav-btn active" onclick="showFight()" id="nav-fight" type="button">MAP</button>
-        <button class="nav-btn" onclick="showHub()" id="nav-hub" type="button">UPGRADES</button>
+        <button class="nav-btn has-notifier" onclick="showHub()" id="nav-hub" type="button">UPGRADES<span id="upgrade-nav-dot" class="nav-notifier" aria-hidden="true"></span></button>
         <button class="nav-btn" onclick="showInventory()" id="nav-inventory" type="button">INVENTORY</button>
         <button class="nav-btn" onclick="showLoadout()" id="nav-loadout" type="button">LOADOUT</button>
         <button class="nav-btn" onclick="showAbilities()" id="nav-abilities" type="button">SKILLS</button>
@@ -239,16 +329,19 @@
     <script src="game.js"></script>
     <script>
         const bg = document.getElementById('space-bg');
-        for (let i = 0; i < 160; i++) {
+        for (let i = 0; i < 100; i++) {
             const star = document.createElement('div');
             star.className = 'star';
-            const size = Math.random() * 2.6;
-            star.style.width = size + 'px';
-            star.style.height = size + 'px';
-            star.style.top = Math.random() * 100 + '%';
-            star.style.left = Math.random() * 100 + '%';
-            star.style.opacity = Math.random();
-            star.style.animationDelay = (Math.random() * 4).toFixed(2) + 's';
+            const size = Math.random() > 0.8 ? 2 : 1;
+            star.style.cssText = `
+                left: ${Math.random() * 100}%;
+                top: ${Math.random() * 100}%;
+                width: ${size}px;
+                height: ${size}px;
+                --d: ${2 + Math.random() * 4}s;
+                --delay: ${-Math.random() * 6}s;
+                --op: ${0.2 + Math.random() * 0.55};
+            `;
             bg.appendChild(star);
         }
     </script>

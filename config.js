@@ -2,35 +2,179 @@ const WALL = 10;
 
 const PLAYER_STATS = {
     hearts: { base: 3 },
-    dmg: { name: 'Damage', base: 1, steps: [0.22, 0.3, 0.45, 0.7, 1.05] },
-    atkSpd: { name: 'Fire Rate', base: 1, steps: [0.06, 0.08, 0.12, 0.18, 0.24] },
-    range: { name: 'Range', base: 420, inc: 24 },
-    speed: { name: 'Speed', base: 230, steps: [10, 14, 20, 28, 38] },
-    armor: { name: 'Armor', base: 0, inc: 1 },
-    magnet: { name: 'Magnet', base: 130, inc: 16 }
+    // Bigger early-level payoff (minorBase up), then tighter growth so late upgrades feel small.
+    // Major spikes still pop but their growth is curbed past mid-game.
+    dmg:     { name: 'Damage',    base: 3,   progression: { minorBase: 0.22, minorGrowth: 1.045, majorBase: 1.10, majorGrowth: 1.10 } },
+    atkSpd:  { name: 'Fire Rate', base: 1,   progression: { minorBase: 0.075, minorGrowth: 1.030, majorBase: 0.24, majorGrowth: 1.07 } },
+    economy: { name: 'Income',    base: 1,   progression: { minorBase: 0.12, minorGrowth: 1.035, majorBase: 0.42, majorGrowth: 1.08 } },
+    range:   { name: 'Range',     base: 420, inc: 24 },
+    speed:   { name: 'Speed',     base: 230 },
+    armor:   { name: 'Armor',     base: 0,   inc: 1 },
+    magnet:  { name: 'Magnet',    base: 130, inc: 16 }
 };
 
+// Seed costs are CHEAPER for the first 5 levels (fast progress) and the tail
+// growth is SHARPER (slow progress later), so the curve feels Clash-Royale-y.
 const UPGRADES = [
-    { id: 'dmg', name: 'Schaden', icon: 'DMG', color: '#ffb100', seedCosts: [28, 44, 66, 96, 136, 188], tailGrowth: 1.185, tailFlat: 36, max: 30, desc: 'Mehr Basisschaden pro Run.' },
-    { id: 'atkSpd', name: 'Feuerrate', icon: 'RPM', color: '#1ec8ff', seedCosts: [30, 48, 72, 104, 148, 202], tailGrowth: 1.18, tailFlat: 38, max: 30, desc: 'Schnellere Volleys und fluessigeres Combat.' },
-    { id: 'speed', name: 'Triebwerk', icon: 'SPD', color: '#00ff9d', seedCosts: [24, 38, 58, 86, 122, 170], tailGrowth: 1.175, tailFlat: 30, max: 30, desc: 'Mehr Tempo zum Dodgen.' }
+    { id: 'dmg',     name: 'Schaden',   icon: 'DMG', color: '#ffb100', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [18, 26, 38, 56, 84, 132, 198], tailGrowth: 1.32, tailFlat: 60, majorCostMultiplier: 1.95, max: 42, desc: 'Mehr Basisschaden pro Run.' },
+    { id: 'atkSpd',  name: 'Feuerrate', icon: 'RPM', color: '#1ec8ff', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [20, 30, 42, 60, 92, 144, 214], tailGrowth: 1.33, tailFlat: 62, majorCostMultiplier: 1.92, max: 42, desc: 'Schnellere Volleys und fluessigeres Combat.' },
+    { id: 'economy', name: 'Einkommen', icon: 'GLD', color: '#00ff9d', cycleRange: [5, 7], cycleOffset: 2, seedCosts: [16, 24, 34, 50, 76, 122, 184], tailGrowth: 1.30, tailFlat: 56, majorCostMultiplier: 1.98, max: 42, desc: 'Mehr Gold aus Kills und Missionen.' }
 ];
 
-const ABILITIES = [
-    { id: 'damage_boost', name: 'Damage +30%', desc: 'Ein cleaner 30% Damage Boost.', icon: 'DMG', rarity: 'common', unlockLevel: 1 },
-    { id: 'rapid_fire', name: 'Rapid Barrel', desc: '18% mehr Feuerrate.', icon: 'ROF', rarity: 'common', unlockLevel: 1 },
-    { id: 'multi', name: 'Twin Volley', desc: '+1 zusaetzliches Projektil.', icon: 'VOL', rarity: 'common', unlockLevel: 1 },
-    { id: 'pierce', name: 'Pierce Core', desc: 'Schuesse durchdringen einen weiteren Feind.', icon: 'PRC', rarity: 'rare', unlockLevel: 5 },
-    { id: 'orbiter', name: 'Defense Drone', desc: 'Eine Drohne kreist um dein Schiff.', icon: 'ORB', rarity: 'rare', unlockLevel: 8 },
-    { id: 'echo_shot', name: 'Echo Shot', desc: 'Jede vierte Volley feuert einen Echo-Schuss mit.', icon: 'ECH', rarity: 'rare', unlockLevel: 10 },
-    { id: 'heal_heart', name: 'Patch Heart', desc: 'Stellt ein Herz wieder her.', icon: 'HP+', rarity: 'rare', unlockLevel: 12 },
-    { id: 'chain_lightning', name: 'Kettenblitz', desc: 'Treffer springen auf nahe Gegner ueber.', icon: 'ARC', rarity: 'epic', unlockLevel: 15 },
-    { id: 'tornado_shot', name: 'Tornado Shot', desc: 'Jede dritte Volley feuert Tornado-Schuesse.', icon: 'TOR', rarity: 'epic', unlockLevel: 15 },
-    { id: 'phoenix_drive', name: 'Phoenix Drive', desc: 'Bei Herzverlust explodierst du in einer Feuerwelle.', icon: 'PHX', rarity: 'epic', unlockLevel: 15 },
-    { id: 'ion_round', name: 'Ion Round', desc: 'Jede fuenfte Volley laedt ein starkes Ion-Geschoss.', icon: 'ION', rarity: 'epic', unlockLevel: 28 },
-    { id: 'shock_nova', name: 'Shock Nova', desc: 'Alle 12 Kills entlaedt sich ein Blitzkreis.', icon: 'NVA', rarity: 'epic', unlockLevel: 36 },
-    { id: 'singularity', name: 'Singularity', desc: 'Jede achte Volley erzeugt kurz ein Zugfeld.', icon: 'SGR', rarity: 'epic', unlockLevel: 52 }
+const DAILY_LOGIN_REWARDS = [
+    { label: '600 Gold', gold: 600 },
+    { label: '850 Gold', gold: 850 },
+    { label: '18 Gems', gems: 18 },
+    { label: '1200 Gold', gold: 1200 },
+    { label: '1 Pack I', packKey: 'supply_pack_i' },
+    { label: '30 Gems', gems: 30 },
+    { label: '1 Pack II', packKey: 'strike_pack_ii' }
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SKILL TREE — every ability evolves over 4 ranks. Each rank has a name + tier
+// (common/rare/epic/legendary) so the picker can colour them. Innovative late
+// ranks: not just "more damage" but new behaviours / VFX.
+// ─────────────────────────────────────────────────────────────────────────────
+const ABILITIES = [
+    {
+        id: 'damage_boost', name: 'Damage Core', icon: 'DMG', rarity: 'common', unlockLevel: 1,
+        desc: 'Damage +18%, light overcharge VFX.',
+        tree: [
+            { name: 'Damage Core',        tier: 'common',    desc: 'Damage +18%. Subtle red overcharge glow.' },
+            { name: 'Power Cell',         tier: 'rare',      desc: 'Damage +30% and bullets leave a faint red trail.' },
+            { name: 'Overcharge Reactor', tier: 'epic',      desc: 'Damage +55% and every 5th bullet is a CRIT for x3.' },
+            { name: 'Singularity Coil',   tier: 'legendary', desc: 'All bullets crit for x2 and emit a small impact flash.' }
+        ]
+    },
+    {
+        id: 'rapid_fire', name: 'Rapid Barrel', icon: 'ROF', rarity: 'common', unlockLevel: 1,
+        desc: '+22% fire rate, faster reload feel.',
+        tree: [
+            { name: 'Rapid Barrel',  tier: 'common',    desc: '+22% fire rate.' },
+            { name: 'Hyper Barrel',  tier: 'rare',      desc: '+38% fire rate, muzzle flash bigger.' },
+            { name: 'Auto-Loader',   tier: 'epic',      desc: '+58% fire rate. Every kill gives 0.5s frenzy +30% extra.' },
+            { name: 'Minigun Mode',  tier: 'legendary', desc: 'x2 fire rate. Bullets ricochet once on walls.' }
+        ]
+    },
+    {
+        id: 'multi', name: 'Twin Volley', icon: 'VOL', rarity: 'common', unlockLevel: 1,
+        desc: '+1 extra projectile per volley.',
+        tree: [
+            { name: 'Twin Volley',  tier: 'common',    desc: '+1 extra projectile.' },
+            { name: 'Triple Tap',   tier: 'rare',      desc: '+2 projectiles, slight spread.' },
+            { name: 'Storm Volley', tier: 'epic',      desc: '+3 projectiles + arc spread, hits feel like a shotgun.' },
+            { name: 'Pulsar Burst', tier: 'legendary', desc: 'Every 4th volley fires a 360° ring of bullets.' }
+        ]
+    },
+    {
+        id: 'pierce', name: 'Pierce Core', icon: 'PRC', rarity: 'rare', unlockLevel: 4,
+        desc: 'Bullets pierce one extra enemy.',
+        tree: [
+            { name: 'Pierce Core',     tier: 'rare',      desc: 'Bullets pierce +1 enemy.' },
+            { name: 'Lance Round',     tier: 'epic',      desc: 'Bullets pierce +3 enemies and gain +20% damage per pierce.' },
+            { name: 'Railgun Mode',    tier: 'legendary', desc: 'Bullets pierce ALL enemies, leaving an arc trail.' },
+            { name: 'Void Lance',      tier: 'legendary', desc: 'Pierce all + 35% chance to mark hit enemies (next hit = double damage).' }
+        ]
+    },
+    {
+        id: 'orbiter', name: 'Defense Drone', icon: 'ORB', rarity: 'rare', unlockLevel: 6,
+        desc: 'A drone orbits and protects you.',
+        tree: [
+            { name: 'Defense Drone',  tier: 'rare',      desc: 'One drone orbits and shoots automatically.' },
+            { name: 'Twin Drones',    tier: 'epic',      desc: 'Two drones, faster orbit, each shoots individually.' },
+            { name: 'Drone Swarm',    tier: 'epic',      desc: 'Four drones at half size each, full coverage.' },
+            { name: 'Sentinel Halo',  tier: 'legendary', desc: 'Six drones + ring of micro-shots every 3s.' }
+        ]
+    },
+    {
+        id: 'echo_shot', name: 'Echo Shot', icon: 'ECH', rarity: 'rare', unlockLevel: 8,
+        desc: 'Every 4th volley fires a delayed echo.',
+        tree: [
+            { name: 'Echo Shot',     tier: 'rare',      desc: 'Every 4th volley fires a delayed echo.' },
+            { name: 'Double Echo',   tier: 'epic',      desc: 'Every 3rd volley fires two echoes.' },
+            { name: 'Resonance',     tier: 'epic',      desc: 'Every echo also splits sideways into two extra bullets.' },
+            { name: 'Phantom Salvo', tier: 'legendary', desc: 'Every shot has a 25% ghost echo. Stacks insanely.' }
+        ]
+    },
+    {
+        id: 'heal_heart', name: 'Patch Heart', icon: 'HP+', rarity: 'rare', unlockLevel: 10,
+        desc: 'Restores one heart immediately.',
+        tree: [
+            { name: 'Patch Heart',     tier: 'rare',      desc: 'Restore one heart now.' },
+            { name: 'Field Surgeon',   tier: 'epic',      desc: 'Restore +1 max heart and one heart now.' },
+            { name: 'Lifeline',        tier: 'epic',      desc: '+2 max hearts. Killing 25 enemies heals 1 heart.' },
+            { name: 'Crimson Aegis',   tier: 'legendary', desc: '+2 hearts. First lethal hit per run is blocked.' }
+        ]
+    },
+    {
+        id: 'chain_lightning', name: 'Kettenblitz', icon: 'ARC', rarity: 'epic', unlockLevel: 12,
+        desc: 'Hits chain to nearby enemies.',
+        tree: [
+            { name: 'Kettenblitz',  tier: 'epic',      desc: 'Hits chain to 1 nearby enemy.' },
+            { name: 'Storm Chain',  tier: 'epic',      desc: 'Chain to 3 enemies, longer range.' },
+            { name: 'Tesla Net',    tier: 'legendary', desc: 'Chain to 6 enemies, paralyzes targets briefly.' },
+            { name: 'Thor\'s Will', tier: 'legendary', desc: 'Every kill triggers a free chain to 4 nearby enemies.' }
+        ]
+    },
+    {
+        id: 'tornado_shot', name: 'Tornado Shot', icon: 'TOR', rarity: 'epic', unlockLevel: 14,
+        desc: 'Every 3rd volley fires tornado bullets.',
+        tree: [
+            { name: 'Tornado Shot',     tier: 'epic',      desc: 'Every 3rd volley fires tornado bullets.' },
+            { name: 'Cyclone Volley',   tier: 'epic',      desc: 'Every 2nd volley is a tornado, twice the radius.' },
+            { name: 'Maelstrom',        tier: 'legendary', desc: 'Tornados pull enemies and tick damage every 0.2s.' },
+            { name: 'Eye of the Storm', tier: 'legendary', desc: 'Permanent tornado follows your cursor.' }
+        ]
+    },
+    {
+        id: 'phoenix_drive', name: 'Phoenix Drive', icon: 'PHX', rarity: 'epic', unlockLevel: 16,
+        desc: 'Lose a heart → fire wave revenge.',
+        tree: [
+            { name: 'Phoenix Drive',     tier: 'epic',      desc: 'On heart-loss, explode in a fire wave.' },
+            { name: 'Ash Bloom',         tier: 'epic',      desc: 'Fire wave leaves burning ground for 4s.' },
+            { name: 'Solar Halo',        tier: 'legendary', desc: 'Wave hits twice and grants 3s i-frames.' },
+            { name: 'Eternal Phoenix',   tier: 'legendary', desc: 'On lethal damage: revive once with full hearts (per run).' }
+        ]
+    },
+    {
+        id: 'ion_round', name: 'Ion Round', icon: 'ION', rarity: 'epic', unlockLevel: 20,
+        desc: 'Every 5th volley charges a heavy ion shot.',
+        tree: [
+            { name: 'Ion Round',     tier: 'epic',      desc: 'Every 5th volley fires a heavy ion shot.' },
+            { name: 'Plasma Round',  tier: 'epic',      desc: 'Ion shot splash radius +50%.' },
+            { name: 'Ion Cannon',    tier: 'legendary', desc: 'Ion shot becomes a piercing beam.' },
+            { name: 'Antimatter Bolt', tier: 'legendary', desc: 'Ion bolt vaporizes anything that isn\'t a boss.' }
+        ]
+    },
+    {
+        id: 'shock_nova', name: 'Shock Nova', icon: 'NVA', rarity: 'epic', unlockLevel: 24,
+        desc: 'Every 12 kills releases a lightning ring.',
+        tree: [
+            { name: 'Shock Nova',  tier: 'epic',      desc: 'Every 12 kills release a lightning ring.' },
+            { name: 'Pulse Nova',  tier: 'epic',      desc: 'Trigger every 8 kills, ring is bigger.' },
+            { name: 'Chain Nova',  tier: 'legendary', desc: 'Every nova spawns 6 chain-bolts to random enemies.' },
+            { name: 'Eternal Storm', tier: 'legendary', desc: 'Nova every 4 kills + permanent shock aura around you.' }
+        ]
+    },
+    {
+        id: 'singularity', name: 'Singularity', icon: 'SGR', rarity: 'epic', unlockLevel: 30,
+        desc: 'Every 8th volley creates a brief pull field.',
+        tree: [
+            { name: 'Singularity',     tier: 'epic',      desc: 'Every 8th volley creates a brief pull field.' },
+            { name: 'Black Pull',      tier: 'epic',      desc: 'Pull field lasts longer and ticks small damage.' },
+            { name: 'Void Implosion',  tier: 'legendary', desc: 'After pull, field implodes for huge damage.' },
+            { name: 'Event Horizon',   tier: 'legendary', desc: 'Permanent micro-singularity around your ship.' }
+        ]
+    }
+];
+
+// Convenience: get the descriptor at the player's CURRENT rank for an ability
+function getAbilityRankDef(ability, rank) {
+    if (!ability || !ability.tree) return { name: ability?.name || '?', tier: ability?.rarity || 'common', desc: ability?.desc || '' };
+    const idx = Math.max(0, Math.min(ability.tree.length - 1, (rank || 0)));
+    return ability.tree[idx];
+}
 
 const ENEMY_TYPES = {
     drone: { hp: 5, spd: 1.55, r: 13, color: '#00f2ff', glow: '#00f2ff', exp: 1, ai: 'strafe' },
@@ -41,16 +185,16 @@ const ENEMY_TYPES = {
 
 function getEnemyLevelStats(typeKey, level) {
     const base = ENEMY_TYPES[typeKey];
-    let scale = 1;
+    let scale = 2 + ((Math.max(1, level) - 1) * 1.8);
 
-    if (level <= 10) {
-        scale = 1 + ((level - 1) * 0.04);
-    } else if (level <= 25) {
-        scale = (1 + (9 * 0.04)) * Math.pow(1.082, level - 10);
-    } else if (level <= 60) {
-        scale = (1 + (9 * 0.04)) * Math.pow(1.082, 15) * Math.pow(1.068, level - 25);
-    } else {
-        scale = (1 + (9 * 0.04)) * Math.pow(1.082, 15) * Math.pow(1.068, 35) * Math.pow(1.045, level - 60);
+    if (level > 10 && level <= 25) {
+        const t = (level - 10) / 15;
+        scale = 18 * Math.pow(12, t);
+    } else if (level > 25 && level <= 50) {
+        const t = (level - 25) / 25;
+        scale = 216 * Math.pow(100, t);
+    } else if (level > 50) {
+        scale = 21600 * Math.pow(1.16, level - 50);
     }
 
     return {
@@ -59,22 +203,60 @@ function getEnemyLevelStats(typeKey, level) {
     };
 }
 
+function getUpgradeCycleSize(upgrade, blockIndex) {
+    const min = upgrade.cycleRange?.[0] || 5;
+    const max = upgrade.cycleRange?.[1] || min;
+    const span = Math.max(1, max - min + 1);
+    return min + ((blockIndex + (upgrade.cycleOffset || 0)) % span);
+}
+
+function getUpgradeTierInfo(upgrade, level) {
+    let consumed = 0;
+    let blockIndex = 0;
+
+    while (consumed <= level) {
+        const cycleSize = getUpgradeCycleSize(upgrade, blockIndex);
+        const blockTotal = cycleSize + 1;
+        if (level < consumed + blockTotal) {
+            const position = level - consumed;
+            return {
+                blockIndex,
+                surge: blockIndex + 1,
+                cycleSize,
+                position,
+                step: Math.min(position + 1, cycleSize + 1),
+                isMajor: position === cycleSize,
+                nextIsMajor: position === cycleSize - 1
+            };
+        }
+        consumed += blockTotal;
+        blockIndex += 1;
+    }
+
+    return { blockIndex: 0, surge: 1, cycleSize: getUpgradeCycleSize(upgrade, 0), position: 0, step: 1, isMajor: false, nextIsMajor: false };
+}
+
 function getUpgradeCost(upgrade, level) {
     if (level >= upgrade.max) return null;
-    if (level < upgrade.seedCosts.length) return upgrade.seedCosts[level];
-
-    let cost = upgrade.seedCosts[upgrade.seedCosts.length - 1];
-    for (let i = upgrade.seedCosts.length; i <= level; i++) {
-        cost = (cost * upgrade.tailGrowth) + upgrade.tailFlat;
+    const tier = getUpgradeTierInfo(upgrade, level);
+    let cost = 0;
+    if (level < upgrade.seedCosts.length) {
+        cost = upgrade.seedCosts[level];
+    } else {
+        cost = upgrade.seedCosts[upgrade.seedCosts.length - 1];
+        for (let i = upgrade.seedCosts.length; i <= level; i++) {
+            cost = (cost * upgrade.tailGrowth) + upgrade.tailFlat;
+        }
     }
+    if (tier.isMajor) cost *= upgrade.majorCostMultiplier || 1.75;
     return Math.round(cost);
 }
 
 function getLevelGoldReward(level) {
-    if (level <= 10) return 95 + (level * 26);
-    if (level <= 30) return 355 + ((level - 10) * 16);
-    if (level <= 70) return 675 + ((level - 30) * 13);
-    return 1195 + ((level - 70) * 15);
+    if (level <= 10) return 95 + (level * 24);
+    if (level <= 25) return 340 + ((level - 10) * 34);
+    if (level <= 50) return 850 + Math.round(Math.pow(level - 24, 1.46) * 44);
+    return Math.round(6200 * Math.pow(1.115, level - 50));
 }
 
 function getLevelWaves(level) {
@@ -85,7 +267,8 @@ function getLevelWaves(level) {
     else if (level <= 10) count = 3;
     else if (level <= 18) count = 4;
     else if (level <= 28) count = 5;
-    else count = 6;
+    else if (level <= 40) count = 6;
+    else count = 7;
 
     for (let i = 0; i < count; i++) {
         const wave = [];
@@ -208,55 +391,52 @@ const PACK_DEFINITIONS = {
     }
 };
 
+// Skins now have unique themes — each one is a distinct ship silhouette,
+// colour palette, trail FX flavour and short flavour line. The `theme` key
+// drives a different SVG art template in getRewardArtSvg() and the runtime VFX.
 const SKIN_DEFINITIONS = {
     stock: {
-        rarity: 'blue',
-        weight: 1,
-        name: 'Stock White',
-        sigil: 'STOCK',
-        desc: 'Clean stock frame with neutral trail.',
-        style: { ship: '#ffffff', core: '#00f2ff', trail: 'rgba(0,242,255,0.3)', shot: '#f5fbff', pulse: '#00f2ff' }
+        rarity: 'blue', weight: 1,
+        name: 'Stock White', sigil: 'STOCK',
+        desc: 'Clean factory frame. Neutral cyan engine signature.',
+        theme: 'arrow',
+        style: { ship: '#ffffff', core: '#00f2ff', trail: 'rgba(0,242,255,0.30)', shot: '#f5fbff', pulse: '#00f2ff' }
     },
     ember_blade: {
-        rarity: 'blue',
-        weight: 34,
-        name: 'Ember Blade',
-        sigil: 'EMBER',
-        desc: 'Orange hull glow and hotter impact sparks.',
-        style: { ship: '#ffd0a6', core: '#ff9d00', trail: 'rgba(255,157,0,0.38)', shot: '#ffd27d', pulse: '#ff9d00' }
+        rarity: 'blue', weight: 34,
+        name: 'Ember Blade', sigil: 'EMBER',
+        desc: 'Hot magma plate with embers trailing the wake.',
+        theme: 'molten',
+        style: { ship: '#ff8030', core: '#ffe168', trail: 'rgba(255,120,30,0.55)', shot: '#ffd27d', pulse: '#ff7020' }
     },
     violet_drift: {
-        rarity: 'dark',
-        weight: 24,
-        name: 'Violet Drift',
-        sigil: 'DRIFT',
-        desc: 'Purple trail and smoother energy wake.',
-        style: { ship: '#f1dcff', core: '#bc13fe', trail: 'rgba(188,19,254,0.4)', shot: '#d78fff', pulse: '#bc13fe' }
+        rarity: 'dark', weight: 24,
+        name: 'Violet Drift', sigil: 'DRIFT',
+        desc: 'Void wave envelope, leaves a glassy purple ribbon.',
+        theme: 'wave',
+        style: { ship: '#c890ff', core: '#bc13fe', trail: 'rgba(188,19,254,0.55)', shot: '#d78fff', pulse: '#bc13fe' }
     },
     solar_flare: {
-        rarity: 'purple',
-        weight: 16,
-        name: 'Solar Flare',
-        sigil: 'SOLAR',
-        desc: 'Bright gold core with heavier muzzle flash.',
-        style: { ship: '#fff4bf', core: '#ffd14d', trail: 'rgba(255,209,77,0.42)', shot: '#ffe698', pulse: '#ffd14d' }
+        rarity: 'purple', weight: 16,
+        name: 'Solar Flare', sigil: 'SOLAR',
+        desc: 'Stellar corona with heavy gold muzzle flash.',
+        theme: 'corona',
+        style: { ship: '#ffe698', core: '#ffd14d', trail: 'rgba(255,209,77,0.60)', shot: '#ffe698', pulse: '#ffd14d' }
     },
     crimson_afterburn: {
-        rarity: 'red',
-        weight: 9,
-        name: 'Crimson Afterburn',
-        sigil: 'BURN',
-        desc: 'Aggressive red pulse and stronger finisher VFX.',
-        style: { ship: '#ffd3dc', core: '#ff375f', trail: 'rgba(255,55,95,0.46)', shot: '#ff8ba2', pulse: '#ff375f' },
+        rarity: 'red', weight: 9,
+        name: 'Crimson Afterburn', sigil: 'BURN',
+        desc: 'Razor red blade with twin afterburn cones.',
+        theme: 'blade',
+        style: { ship: '#ff375f', core: '#ffe1e8', trail: 'rgba(255,55,95,0.65)', shot: '#ff8ba2', pulse: '#ff375f' },
         exclusive: true
     },
     aurora_zero: {
-        rarity: 'gold',
-        weight: 5,
-        name: 'Aurora Zero',
-        sigil: 'AUR0',
-        desc: 'Top-tier skin with layered cyan-gold VFX.',
-        style: { ship: '#fffbe8', core: '#ffd14d', trail: 'rgba(123,232,255,0.5)', shot: '#fff4b0', pulse: '#7be8ff' },
+        rarity: 'gold', weight: 5,
+        name: 'Aurora Zero', sigil: 'AUR0',
+        desc: 'Prismatic aurora foil. Cyan-gold rainbow pulse.',
+        theme: 'aurora',
+        style: { ship: '#fffbe8', core: '#ffd14d', trail: 'rgba(123,232,255,0.7)', shot: '#fff4b0', pulse: '#7be8ff' },
         exclusive: true
     }
 };

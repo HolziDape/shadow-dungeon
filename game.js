@@ -8,7 +8,7 @@ let save = {
     gems: 0,
     unlocked: 1,
     selectedLevel: 1,
-    stats: { dmg: 0, atkSpd: 0, speed: 0 },
+    stats: { dmg: 0, atkSpd: 0, economy: 0 },
     reviveCharges: 0,
     rerollTokens: 0,
     bonusAbilityXp: 0,
@@ -20,6 +20,7 @@ let save = {
     premium: { noAds: false, neonTrail: false },
     inventory: [],
     lastLogin: 0,
+    daily: { streak: 0, cycleDay: 0, lastClaimKey: '' },
     settings: { sfx: 0.7, music: 0.35, haptics: false },
     metaSlots: { normalExtra: 0, legendaryExtra: 0 }
 };
@@ -57,6 +58,14 @@ let resultSecondaryAction = null;
 let audioContext = null;
 let musicGain = null;
 let musicNodesStarted = false;
+let musicNodes = null;
+let musicBassGain = null;
+let musicBassFreqs = null;
+let musicPluckGain = null;
+let musicPluckFilter = null;
+let musicPluckFreqs = null;
+let musicStep = 0;
+let musicSchedulerInterval = null;
 let packOpeningState = null;
 let packTickTimer = null;
 let packAnimationFrame = null;
@@ -64,6 +73,7 @@ let endlessWaveRewardGold = 0;
 let arena = { width: window.innerWidth, height: window.innerHeight, top: 150 };
 let camera = { x: 0, y: 0 };
 let runRerollCredits = 0;
+let lastHapticAt = {};
 
 function getUnlockedAbilities(level = save.unlocked) {
     return ABILITIES.filter((ability) => (ability.unlockLevel || 1) <= level);
@@ -178,12 +188,127 @@ function getArenaSpawnEdgePoint() {
 }
 
 function getSfxVolume() {
-    return Math.max(0, Math.min(1, save.settings?.sfx | 0.7));
+    return Math.max(0, Math.min(1, save.settings?.sfx ?? 0.7));
 }
 
-function triggerHaptic(pattern) {
-    if (!save.settings?.haptics || !navigator.vibrate) return;
-    navigator.vibrate(pattern);
+function triggerHaptic(pattern, options = {}) {
+    if (!save.settings?.haptics) return;
+
+    const preset = typeof options === 'string' ? options : options.preset;
+    const channel = typeof options === 'object' && options.channel ? options.channel : (preset || 'default');
+    const minInterval = typeof options === 'object' && options.minInterval ? options.minInterval : 0;
+    const now = performance.now();
+    if (minInterval && now - (lastHapticAt[channel] || 0) < minInterval) return;
+    lastHapticAt[channel] = now;
+
+    const feedback = window.Telegram?.WebApp?.HapticFeedback;
+    if (feedback && preset) {
+        if (preset === 'soft') feedback.impactOccurred('light');
+        else if (preset === 'medium') feedback.impactOccurred('medium');
+        else if (preset === 'hard') feedback.impactOccurred('heavy');
+        else if (preset === 'success') feedback.notificationOccurred('success');
+    }
+
+    if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+function playHaptic(type) {
+    const map = {
+        soft: { pattern: 6, preset: 'soft', channel: 'soft', minInterval: 18 },
+        medium: { pattern: 10, preset: 'medium', channel: 'medium', minInterval: 28 },
+        hard: { pattern: [16, 18, 18], preset: 'hard', channel: 'hard', minInterval: 90 },
+        success: { pattern: [12, 22, 18], preset: 'success', channel: 'success', minInterval: 100 },
+        packTick: { pattern: 5, preset: 'soft', channel: 'packTick', minInterval: 40 },
+        // Mobile gambling-feel patterns
+        tap: { pattern: 6, preset: 'soft', channel: 'tap', minInterval: 12 },
+        packRip: { pattern: [50, 30, 60, 30, 80], preset: 'hard', channel: 'rip', minInterval: 200 },
+        revealCommon: { pattern: 24, preset: 'soft', channel: 'reveal', minInterval: 120 },
+        revealRare: { pattern: [40, 30, 40], preset: 'medium', channel: 'reveal', minInterval: 160 },
+        revealEpic: { pattern: [70, 30, 70, 30, 70], preset: 'hard', channel: 'reveal', minInterval: 220 },
+        revealLegendary: { pattern: [200, 80, 200, 80, 200, 80, 320], preset: 'success', channel: 'reveal', minInterval: 400 },
+        peek: { pattern: 12, preset: 'soft', channel: 'peek', minInterval: 80 }
+    };
+    const entry = map[type];
+    if (!entry) return;
+    triggerHaptic(entry.pattern, entry);
+}
+
+function getTodayKey(date = new Date()) {
+    return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
+}
+
+function getYesterdayKey(date = new Date()) {
+    const copy = new Date(date);
+    copy.setUTCDate(copy.getUTCDate() - 1);
+    return getTodayKey(copy);
+}
+
+function applyDailyReward(reward) {
+    if (!reward) return;
+    if (reward.gold) save.gold += reward.gold;
+    if (reward.gems) save.gems += reward.gems;
+    if (reward.packKey) save.packs.push(reward.packKey);
+}
+
+function getUpgradeDefinition(id) {
+    return UPGRADES.find((entry) => entry.id === id);
+}
+
+function hasAffordableUpgrade() {
+    return UPGRADES.some((upgrade) => {
+        const level = save.stats[upgrade.id] || 0;
+        const cost = getUpgradeCost(upgrade, level);
+        return cost !== null && save.gold >= cost;
+    });
+}
+
+function updateUpgradeNotifier() {
+    const dot = document.getElementById('upgrade-nav-dot');
+    if (!dot) return;
+    dot.classList.toggle('visible', hasAffordableUpgrade());
+}
+
+function getEconomyMultiplier() {
+    return 1 + getUpgradeBonus(PLAYER_STATS.economy, save.stats.economy, 'economy');
+}
+
+function getUpgradeCardMeta(upgrade, level) {
+    const tier = getUpgradeTierInfo(upgrade, level);
+    return {
+        tier,
+        phaseLabel: tier.isMajor ? 'Core Boost' : `Step ${Math.min(tier.step, tier.cycleSize)}/${tier.cycleSize}`,
+        surgeLabel: `Surge ${tier.surge}`,
+        buttonLabel: tier.isMajor ? 'BIG UPGRADE' : 'UPGRADE'
+    };
+}
+
+function renderDailyLoginPanel() {
+    const title = document.getElementById('daily-login-title');
+    const streak = document.getElementById('daily-login-streak');
+    const copy = document.getElementById('daily-login-copy');
+    const grid = document.getElementById('daily-login-grid');
+    if (!title || !streak || !copy || !grid) return;
+
+    const cycleDay = Math.max(1, save.daily?.cycleDay || 1);
+    const claimedToday = save.daily?.lastClaimKey === getTodayKey();
+    title.textContent = claimedToday ? `Tag ${cycleDay} abgeholt` : `Tag ${cycleDay} bereit`;
+    streak.textContent = `Streak ${save.daily?.streak || 0}`;
+    copy.textContent = claimedToday
+        ? 'Heute ist eingesammelt. Die naechsten Tage sind schon sichtbar.'
+        : 'Heute kannst du den aktuellen Reward holen. Bereits eingesammelte Tage bleiben markiert.';
+
+    grid.innerHTML = DAILY_LOGIN_REWARDS.map((reward, index) => {
+        const day = index + 1;
+        const status = day < cycleDay ? 'claimed' : day === cycleDay ? (claimedToday ? 'claimed today' : 'today') : 'upcoming';
+        const statusText = day < cycleDay ? 'Done' : day === cycleDay ? (claimedToday ? 'Heute' : 'Jetzt') : 'Spaeter';
+        return `
+            <div class="daily-card ${status}">
+                <div class="daily-day">Tag ${day}</div>
+                <div class="daily-reward">${reward.label}</div>
+                <div class="daily-status">${statusText}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 function ensureMusicEngine() {
@@ -196,47 +321,163 @@ function ensureMusicEngine() {
         audioContext.resume().catch(() => {});
     }
 
+    // master music bus
     musicGain = audioContext.createGain();
     musicGain.gain.value = 0;
+
+    // gentle compressor on the bus to glue layers
+    const comp = audioContext.createDynamicsCompressor();
+    comp.threshold.value = -22;
+    comp.knee.value = 28;
+    comp.ratio.value = 6;
+    comp.attack.value = 0.04;
+    comp.release.value = 0.18;
+    comp.connect(musicGain);
     musicGain.connect(audioContext.destination);
 
-    const filter = audioContext.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 720;
-    filter.Q.value = 0.4;
-    filter.connect(musicGain);
+    // ── PAD layer (lush triangle stack with slow filter sweep) ───
+    const padFilter = audioContext.createBiquadFilter();
+    padFilter.type = 'lowpass';
+    padFilter.frequency.value = 720;
+    padFilter.Q.value = 1.4;
+    const padGain = audioContext.createGain();
+    padGain.gain.value = 0.55;
+    padFilter.connect(padGain);
+    padGain.connect(comp);
 
-    [
-        { freq: 110, type: 'triangle', gain: 0.3 },
-        { freq: 164.81, type: 'sine', gain: 0.18 },
-        { freq: 220, type: 'triangle', gain: 0.12 }
-    ].forEach((voice) => {
+    // chord: A minor 9 (A2, E3, A3, C4, E4) — moody, future-bass-friendly
+    const padVoices = [
+        { freq: 110.00, type: 'triangle', gain: 0.18 },  // A2
+        { freq: 164.81, type: 'sine',     gain: 0.12 },  // E3
+        { freq: 220.00, type: 'triangle', gain: 0.10 },  // A3
+        { freq: 261.63, type: 'sine',     gain: 0.07 },  // C4
+        { freq: 329.63, type: 'sine',     gain: 0.06 }   // E4
+    ];
+    musicNodes = musicNodes || [];
+    padVoices.forEach((v) => {
         const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        osc.type = voice.type;
-        osc.frequency.value = voice.freq;
-        gain.gain.value = voice.gain;
-        osc.connect(gain);
-        gain.connect(filter);
+        const g = audioContext.createGain();
+        osc.type = v.type;
+        osc.frequency.value = v.freq;
+        // gentle detune so it breathes
+        osc.detune.value = (Math.random() - 0.5) * 6;
+        g.gain.value = v.gain;
+        osc.connect(g); g.connect(padFilter);
         osc.start();
+        musicNodes.push(osc);
     });
 
-    const lfo = audioContext.createOscillator();
-    const lfoGain = audioContext.createGain();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.18;
-    lfoGain.gain.value = 110;
-    lfo.connect(lfoGain);
-    lfoGain.connect(filter.frequency);
-    lfo.start();
+    // slow filter LFO on the pad (pulse)
+    const padLfo = audioContext.createOscillator();
+    const padLfoGain = audioContext.createGain();
+    padLfo.type = 'sine';
+    padLfo.frequency.value = 0.14;
+    padLfoGain.gain.value = 320;
+    padLfo.connect(padLfoGain);
+    padLfoGain.connect(padFilter.frequency);
+    padLfo.start();
+
+    // ── BASS layer (deep sine with rhythm) ──────────────────────
+    const bassGain = audioContext.createGain();
+    bassGain.gain.value = 0.28;
+    bassGain.connect(comp);
+    musicBassGain = bassGain;
+    musicBassFreqs = [55, 55, 55, 49, 55, 55, 65.4, 55]; // A1, A1, A1, G1, A1, A1, C2, A1
+
+    // ── PLUCK arpeggio (light, 8th notes) ───────────────────────
+    const pluckGain = audioContext.createGain();
+    pluckGain.gain.value = 0.22;
+    const pluckFilter = audioContext.createBiquadFilter();
+    pluckFilter.type = 'lowpass';
+    pluckFilter.frequency.value = 2400;
+    pluckGain.connect(comp);
+    musicPluckGain = pluckGain;
+    musicPluckFilter = pluckFilter;
+    // A minor pentatonic over two octaves: A3 C4 D4 E4 G4 A4 C5 E5
+    musicPluckFreqs = [220.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 659.25];
+
+    // ── Tempo clock (96 BPM → 16th = 0.156s) ────────────────────
+    const bpm = 96;
+    const sixteenth = 60 / bpm / 4; // 0.156s
+    musicStep = 0;
+    musicSchedulerInterval = window.setInterval(() => {
+        if (!audioContext) return;
+        const now = audioContext.currentTime;
+        // schedule next 8 sixteenths
+        for (let i = 0; i < 8; i++) {
+            const stepTime = now + i * sixteenth;
+            const step = (musicStep + i) % 32;
+            scheduleBeat(step, stepTime, sixteenth);
+        }
+        musicStep = (musicStep + 8) % 32;
+    }, sixteenth * 8 * 1000 * 0.9);
 
     musicNodesStarted = true;
     syncMusicVolume();
 }
 
+function scheduleBeat(step, when, dur) {
+    if (!audioContext) return;
+
+    // Bass plays on every quarter (steps 0, 4, 8, 12, 16, 20, 24, 28)
+    if (step % 4 === 0) {
+        const idx = (step / 4) % musicBassFreqs.length;
+        const freq = musicBassFreqs[idx];
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        o.type = 'sine';
+        o.frequency.value = freq;
+        // sub layer
+        const o2 = audioContext.createOscillator();
+        o2.type = 'triangle';
+        o2.frequency.value = freq * 0.5;
+        const g2 = audioContext.createGain();
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(0.45, when + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.4);
+        g2.gain.setValueAtTime(0.0001, when);
+        g2.gain.exponentialRampToValueAtTime(0.18, when + 0.02);
+        g2.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.6);
+        o.connect(g); o2.connect(g2);
+        g.connect(musicBassGain); g2.connect(musicBassGain);
+        o.start(when); o2.start(when);
+        o.stop(when + dur * 4); o2.stop(when + dur * 4);
+    }
+
+    // Pluck arpeggio plays on every 8th (steps where step % 2 === 0), accent off-beats
+    if (step % 2 === 0) {
+        const idx = (step / 2) % musicPluckFreqs.length;
+        const freq = musicPluckFreqs[idx];
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        o.type = 'triangle';
+        o.frequency.value = freq;
+        const accent = (step % 8 === 4) ? 1.4 : 1.0;
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(0.32 * accent, when + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 2.2);
+        o.connect(g); g.connect(musicPluckFilter);
+        musicPluckFilter.connect(musicPluckGain);
+        o.start(when); o.stop(when + dur * 2.4);
+    }
+
+    // Soft hi-hat tick on the off (step % 4 === 2)
+    if (step % 4 === 2) {
+        const noise = createNoiseSource(audioContext, dur * 1.5);
+        if (!noise) return;
+        const f = audioContext.createBiquadFilter();
+        f.type = 'highpass'; f.frequency.value = 6800;
+        const g = audioContext.createGain();
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(0.06, when + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.06);
+        noise.connect(f); f.connect(g); g.connect(musicBassGain);
+    }
+}
+
 function syncMusicVolume() {
     if (!musicGain) return;
-    const target = Math.max(0, Math.min(1, save.settings?.music | 0.35)) * 0.055;
+    const target = Math.max(0, Math.min(1, save.settings?.music ?? 0.35)) * 0.18;
     const now = audioContext ? audioContext.currentTime : 0;
     musicGain.gain.cancelScheduledValues(now);
     musicGain.gain.linearRampToValueAtTime(target, now + 0.18);
@@ -352,6 +593,86 @@ function playSfx(kind, intensity = 1) {
         type = 'sine';
         cutoff = 3200;
         peak = 0.07;
+    } else if (kind === 'packRipLow') {
+        // tearing low end thump
+        startFreq = 240;
+        endFreq = 70;
+        duration = 0.32;
+        type = 'sawtooth';
+        cutoff = 700;
+        peak = 0.08;
+    } else if (kind === 'packRipHi') {
+        // sharp paper tear
+        startFreq = 3400;
+        endFreq = 1900;
+        duration = 0.18;
+        type = 'sawtooth';
+        cutoff = 4800;
+        peak = 0.045;
+    } else if (kind === 'packReveal') {
+        // whoosh that lifts the curtain
+        startFreq = 240;
+        endFreq = 1480;
+        duration = 0.32;
+        type = 'triangle';
+        cutoff = 2400;
+        peak = 0.05;
+    } else if (kind === 'revealCommon') {
+        startFreq = 500;
+        endFreq = 720;
+        duration = 0.18;
+        type = 'sine';
+        cutoff = 1800;
+        peak = 0.035;
+    } else if (kind === 'revealRare') {
+        startFreq = 700;
+        endFreq = 1280;
+        duration = 0.34;
+        type = 'triangle';
+        cutoff = 2600;
+        peak = 0.05;
+    } else if (kind === 'revealEpic') {
+        startFreq = 600;
+        endFreq = 1820;
+        duration = 0.55;
+        type = 'sawtooth';
+        cutoff = 3000;
+        peak = 0.06;
+    } else if (kind === 'revealLegendary') {
+        startFreq = 880;
+        endFreq = 2640;
+        duration = 0.78;
+        type = 'sine';
+        cutoff = 3400;
+        peak = 0.085;
+    } else if (kind === 'coinClink') {
+        startFreq = 1860;
+        endFreq = 2300;
+        duration = 0.06;
+        type = 'square';
+        cutoff = 4600;
+        peak = 0.03;
+    } else if (kind === 'tap') {
+        startFreq = 880;
+        endFreq = 540;
+        duration = 0.04;
+        type = 'sine';
+        cutoff = 2400;
+        peak = 0.024;
+    } else if (kind === 'tapAccent') {
+        startFreq = 660;
+        endFreq = 1240;
+        duration = 0.08;
+        type = 'triangle';
+        cutoff = 2600;
+        peak = 0.034;
+    } else if (kind === 'peekOpen') {
+        startFreq = 320;
+        endFreq = 880;
+        duration = 0.22;
+        type = 'triangle';
+        cutoff = 2200;
+        peak = 0.04;
     }
 
     osc.type = type;
@@ -367,6 +688,117 @@ function playSfx(kind, intensity = 1) {
     gain.connect(audioContext.destination);
     osc.start(now);
     osc.stop(now + duration + 0.02);
+}
+
+// Layered "rip the pack open" sound — low body + paper tear + sparkle tail
+function playPackRip() {
+    playSfx('packRipLow', 1.0);
+    setTimeout(() => playSfx('packRipHi', 0.95), 30);
+    setTimeout(() => playSfx('packReveal', 0.85), 240);
+}
+
+// Casino-style build-up: rising sweep + filter open over `seconds`
+function playBuildUp(seconds = 2.4) {
+    if (!audioContext) {
+        ensureMusicEngine();
+        if (!audioContext) return null;
+    }
+    const volume = getSfxVolume();
+    if (volume <= 0.01) return null;
+    const now = audioContext.currentTime;
+
+    const osc = audioContext.createOscillator();
+    const sub = audioContext.createOscillator();
+    const noise = createNoiseSource(audioContext, seconds + 0.4);
+    const gain = audioContext.createGain();
+    const filter = audioContext.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(380, now);
+    filter.frequency.exponentialRampToValueAtTime(3600, now + seconds);
+    filter.Q.value = 6;
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(110, now);
+    osc.frequency.exponentialRampToValueAtTime(620, now + seconds);
+
+    sub.type = 'triangle';
+    sub.frequency.setValueAtTime(55, now);
+    sub.frequency.exponentialRampToValueAtTime(220, now + seconds);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.06 * volume, now + seconds * 0.85);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds + 0.18);
+
+    osc.connect(filter);
+    sub.connect(filter);
+    if (noise) noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioContext.destination);
+    osc.start(now);
+    sub.start(now);
+    osc.stop(now + seconds + 0.25);
+    sub.stop(now + seconds + 0.25);
+
+    return { osc, sub, noise, gain, filter, ends: now + seconds + 0.3 };
+}
+
+// Brief noise generator helper (white noise burst)
+function createNoiseSource(ctx, seconds) {
+    try {
+        const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * seconds), ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.4;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.start();
+        return src;
+    } catch (e) { return null; }
+}
+
+// Fanfare burst on jackpot — three layered tones with detune
+function playJackpotFanfare() {
+    if (!audioContext) {
+        ensureMusicEngine();
+        if (!audioContext) return;
+    }
+    const volume = getSfxVolume();
+    if (volume <= 0.01) return;
+    const base = audioContext.currentTime;
+    const notes = [880, 1320, 1760, 2640];
+    notes.forEach((freq, i) => {
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        const f = audioContext.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 4200;
+        o.type = i === 0 ? 'triangle' : 'sine';
+        o.frequency.setValueAtTime(freq, base + i * 0.09);
+        g.gain.setValueAtTime(0.0001, base + i * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.075 * volume, base + i * 0.09 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, base + i * 0.09 + 0.55);
+        o.connect(f); f.connect(g); g.connect(audioContext.destination);
+        o.start(base + i * 0.09);
+        o.stop(base + i * 0.09 + 0.6);
+    });
+    // shimmer tail
+    setTimeout(() => playSfx('revealLegendary', 1.1), 280);
+}
+
+// Confetti DOM rays burst from center of #pack-confetti
+function spawnPackConfetti(color = '#ffd14d', count = 30) {
+    const host = document.getElementById('pack-confetti');
+    if (!host) return;
+    host.innerHTML = '';
+    const palette = [color, '#ffffff', '#ffe698', color];
+    for (let i = 0; i < count; i++) {
+        const a = (Math.random() * 360).toFixed(1);
+        const c = palette[i % palette.length];
+        const span = document.createElement('span');
+        span.style.setProperty('--a', `${a}deg`);
+        span.style.setProperty('--c', c);
+        span.style.setProperty('--delay', `${(Math.random() * 0.18).toFixed(2)}s`);
+        host.appendChild(span);
+    }
 }
 
 function addLightningBolt(x1, y1, x2, y2, color = '#00f2ff', life = 0.18, width = 3) {
@@ -398,13 +830,17 @@ window.startCurrentLevel = function() {
     currentMode = 'mission';
     currentLevel = Math.max(1, save.unlocked);
     currentLevelWaves = getLevelWaves(currentLevel);
+    playHaptic('medium');
     startLevel();
 };
 
 window.startEndlessMode = function() {
     currentMode = 'endless';
-    currentLevel = Math.max(1, save.unlocked);
+    // Endless ALWAYS starts at level 1 difficulty regardless of player progression.
+    // Difficulty scales solely by elapsed waves inside spawnEndlessWave.
+    currentLevel = 1;
     currentLevelWaves = [];
+    playHaptic('medium');
     startLevel();
 };
 
@@ -475,7 +911,8 @@ function loadSave() {
 
     save.unlocked = Math.max(1, save.unlocked || 1);
     save.selectedLevel = Math.max(1, save.unlocked || 1);
-    save.stats = Object.assign({ dmg: 0, atkSpd: 0, speed: 0 }, save.stats || {});
+    const migratedEconomy = save.stats?.economy ?? save.stats?.speed ?? 0;
+    save.stats = Object.assign({ dmg: 0, atkSpd: 0, economy: migratedEconomy }, save.stats || {});
     save.premium = Object.assign({ noAds: false, neonTrail: false, neonTrailEnabled: true }, save.premium || {});
     save.inventory = Array.isArray(save.inventory) ? save.inventory : [];
     save.packs = Array.isArray(save.packs) ? save.packs : [];
@@ -483,7 +920,12 @@ function loadSave() {
     save.equippedSkin = SKIN_DEFINITIONS[save.equippedSkin] ? save.equippedSkin : (save.skins[0] || 'stock');
     save.equippedCards = Array.isArray(save.equippedCards) ? save.equippedCards : [];
     save.metaSlots = Object.assign({ normalExtra: 0, legendaryExtra: 0 }, save.metaSlots || {});
+    save.daily = Object.assign({ streak: 0, cycleDay: 0, lastClaimKey: '' }, save.daily || {});
     save.settings = Object.assign({ sfx: 0.7, music: 0.35, haptics: false }, save.settings || {});
+    // Permanent micro-boosts trickled in from pack drops (small but persistent)
+    save.permanentBoosts = Object.assign({ damageMultiplier: 0, attackSpeedMultiplier: 0, magnetFlat: 0, packsOpened: 0 }, save.permanentBoosts || {});
+    save.abilityRanks = Object.assign({}, save.abilityRanks || {});
+    save.leaderboardSeed = save.leaderboardSeed || (Math.floor(Math.random() * 99999) + 1);
     if (typeof save.settings.sfx !== 'number' && typeof save.settings.vfx === 'number') {
         save.settings.sfx = save.settings.vfx;
     }
@@ -495,14 +937,23 @@ function loadSave() {
 
 function grantDailyLoginBonus() {
     const now = new Date();
-    const todayKey = `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}`;
+    const todayKey = getTodayKey(now);
+    const yesterdayKey = getYesterdayKey(now);
+    save.daily = Object.assign({ streak: 0, cycleDay: 0, lastClaimKey: '' }, save.daily || {});
 
-    if (save.lastLogin !== todayKey) {
-        save.gold += 600;
+    if (save.daily.lastClaimKey !== todayKey) {
+        const continued = save.daily.lastClaimKey === yesterdayKey;
+        save.daily.streak = continued ? (save.daily.streak || 0) + 1 : 1;
+        save.daily.cycleDay = continued ? ((save.daily.cycleDay || 0) % DAILY_LOGIN_REWARDS.length) + 1 : 1;
+        save.daily.lastClaimKey = todayKey;
         save.lastLogin = todayKey;
+        applyDailyReward(DAILY_LOGIN_REWARDS[(save.daily.cycleDay || 1) - 1]);
         saveSave();
-        showToast('Daily login: +600 Gold');
+        showToast(`Daily login: ${DAILY_LOGIN_REWARDS[(save.daily.cycleDay || 1) - 1].label}`);
+        playHaptic('success');
     }
+
+    renderDailyLoginPanel();
 }
 
 function saveSave() {
@@ -516,15 +967,15 @@ function syncSettingsUi() {
     const musicValue = document.getElementById('settings-music-value');
     const hapticsToggle = document.getElementById('settings-haptics');
 
-    if (sfxSlider) sfxSlider.value = Math.round((save.settings?.sfx | 0.7) * 100);
-    if (sfxValue) sfxValue.textContent = `${Math.round((save.settings?.sfx | 0.7) * 100)}%`;
-    if (musicSlider) musicSlider.value = Math.round((save.settings?.music | 0.35) * 100);
-    if (musicValue) musicValue.textContent = `${Math.round((save.settings?.music | 0.35) * 100)}%`;
+    if (sfxSlider) sfxSlider.value = Math.round((save.settings?.sfx ?? 0.7) * 100);
+    if (sfxValue) sfxValue.textContent = `${Math.round((save.settings?.sfx ?? 0.7) * 100)}%`;
+    if (musicSlider) musicSlider.value = Math.round((save.settings?.music ?? 0.35) * 100);
+    if (musicValue) musicValue.textContent = `${Math.round((save.settings?.music ?? 0.35) * 100)}%`;
     if (hapticsToggle) hapticsToggle.checked = !!save.settings?.haptics;
 }
 
 function getInventoryBonuses() {
-    return save.equippedCards.reduce((acc, cardId) => {
+    const bonuses = save.equippedCards.reduce((acc, cardId) => {
         const card = INVENTORY_CARDS[cardId];
         if (!card) return acc;
         acc.damageMultiplier += card.effect.damageMultiplier || 0;
@@ -533,6 +984,29 @@ function getInventoryBonuses() {
         acc.magnetFlat += card.effect.magnetFlat || 0;
         return acc;
     }, { damageMultiplier: 0, speedMultiplier: 0, attackSpeedMultiplier: 0, magnetFlat: 0 });
+    // Permanent trickle from pack drops (tiny but stacks; capped soft via diminishing returns later)
+    const p = save.permanentBoosts || {};
+    bonuses.damageMultiplier      += p.damageMultiplier      || 0;
+    bonuses.attackSpeedMultiplier += p.attackSpeedMultiplier || 0;
+    bonuses.magnetFlat            += p.magnetFlat            || 0;
+    return bonuses;
+}
+
+// Tiny permanent trickle when a pack drop is collected. Higher rarity = more.
+function trickleBoostFromReward(rewardRarity) {
+    save.permanentBoosts = save.permanentBoosts || { damageMultiplier: 0, attackSpeedMultiplier: 0, magnetFlat: 0, packsOpened: 0 };
+    const trickle = {
+        blue:   { damageMultiplier: 0.003, attackSpeedMultiplier: 0.002, magnetFlat: 0.4 },
+        dark:   { damageMultiplier: 0.006, attackSpeedMultiplier: 0.004, magnetFlat: 0.8 },
+        purple: { damageMultiplier: 0.012, attackSpeedMultiplier: 0.008, magnetFlat: 1.4 },
+        red:    { damageMultiplier: 0.022, attackSpeedMultiplier: 0.014, magnetFlat: 2.4 },
+        gold:   { damageMultiplier: 0.040, attackSpeedMultiplier: 0.025, magnetFlat: 4.0 }
+    };
+    const t = trickle[rewardRarity] || trickle.blue;
+    save.permanentBoosts.damageMultiplier      += t.damageMultiplier;
+    save.permanentBoosts.attackSpeedMultiplier += t.attackSpeedMultiplier;
+    save.permanentBoosts.magnetFlat            += t.magnetFlat;
+    save.permanentBoosts.packsOpened          = (save.permanentBoosts.packsOpened || 0) + 1;
 }
 
 function getCardSellValue(cardId) {
@@ -562,43 +1036,25 @@ function getEquippedCounts() {
     }, {});
 }
 
-function getUpgradeBonus(statConfig, level) {
-    if (!level || level <= 0) {
+function getUpgradeBonus(statConfig, level, upgradeId) {
+    if (!level || level <= 0 || !statConfig?.progression) {
         return 0;
     }
 
-    if (Array.isArray(statConfig.steps)) {
-        const baseSteps = statConfig.steps;
-        const baseBonus = baseSteps.reduce((sum, value) => sum + value, 0);
+    const upgrade = getUpgradeDefinition(upgradeId);
+    if (!upgrade) return 0;
 
-        if (level <= baseSteps.length) {
-            return baseSteps.slice(0, level).reduce((sum, value) => sum + value, 0);
+    let total = 0;
+    for (let i = 0; i < level; i++) {
+        const tier = getUpgradeTierInfo(upgrade, i);
+        if (tier.isMajor) {
+            total += statConfig.progression.majorBase * Math.pow(statConfig.progression.majorGrowth, tier.blockIndex);
+        } else {
+            const localProgress = Math.max(0, tier.step - 1);
+            total += statConfig.progression.minorBase * Math.pow(statConfig.progression.minorGrowth, tier.blockIndex + (localProgress * 0.22));
         }
-
-        const extraLevels = level - baseSteps.length;
-        let extraBonus = 0;
-
-        if (statConfig.name === 'Damage') {
-            const earlyExtra = Math.min(extraLevels, 10);
-            const lateExtra = Math.max(0, extraLevels - 10);
-            extraBonus += earlyExtra * 0.7;
-            extraBonus += lateExtra * 1.45;
-        } else if (statConfig.name === 'Fire Rate') {
-            const earlyExtra = Math.min(extraLevels, 10);
-            const lateExtra = Math.max(0, extraLevels - 10);
-            extraBonus += earlyExtra * 0.06;
-            extraBonus += lateExtra * 0.11;
-        } else if (statConfig.name === 'Speed') {
-            const earlyExtra = Math.min(extraLevels, 10);
-            const lateExtra = Math.max(0, extraLevels - 10);
-            extraBonus += earlyExtra * 10;
-            extraBonus += lateExtra * 16;
-        }
-
-        return baseBonus + extraBonus;
     }
-
-    return level * (statConfig.inc || 0);
+    return total;
 }
 
 function updateMetaHud() {
@@ -632,12 +1088,12 @@ function updateMetaHud() {
         }
     }
 
-    if (label) label.textContent = currentMode === 'endless' ? `Endless Lv ${save.unlocked}` : `Level ${save.unlocked}`;
+    if (label) label.textContent = currentMode === 'endless' ? `Endless · Wave ${currentWave + 1}` : `Level ${save.unlocked}`;
     if (desc) {
         const previewDrone = formatCompactNumber(getEnemyLevelStats('drone', save.unlocked).hp);
         const waves = getLevelWaves(save.unlocked).length;
         desc.textContent = currentMode === 'endless'
-            ? `Infinite waves with almost no gold payout. Starts around Level ${save.unlocked}. Drone HP: ${previewDrone}.`
+            ? `Infinite waves. Always starts at Level 1 — difficulty climbs with every wave you survive.`
             : `Early kills are faster, late-game slows down. ${waves} waves. Drone HP: ${previewDrone}.`;
     }
     if (difficulty) {
@@ -663,11 +1119,13 @@ window.openSettings = function() {
     syncSettingsUi();
     const overlay = document.getElementById('settings-overlay');
     if (overlay) overlay.classList.add('active');
+    playHaptic('soft');
 };
 
 window.closeSettings = function() {
     const overlay = document.getElementById('settings-overlay');
     if (overlay) overlay.classList.remove('active');
+    playHaptic('soft');
 };
 
 window.updateSfxSetting = function(value) {
@@ -688,7 +1146,7 @@ window.toggleHaptics = function(enabled) {
     save.settings.haptics = !!enabled;
     saveSave();
     syncSettingsUi();
-    if (enabled) triggerHaptic(12);
+    if (enabled) playHaptic('medium');
 };
 
 function showScreen(id) {
@@ -698,6 +1156,12 @@ function showScreen(id) {
     if (window.canvas) {
         window.canvas.style.display = id === 'game-canvas' ? 'block' : 'none';
     }
+    // Map rail + leaderboard only visible on the fight (map) screen
+    const onFight = id === 'fight-screen';
+    const rail = document.getElementById('map-rail');
+    const lb = document.getElementById('leaderboard-panel');
+    if (rail) rail.style.display = onFight ? 'flex' : 'none';
+    if (lb) lb.style.display = onFight ? 'flex' : 'none';
 }
 
 window.buildRoadmap = function() {
@@ -747,12 +1211,11 @@ window.buildRoadmap = function() {
 function createPlayer() {
     const inventory = getInventoryBonuses();
     const spawn = getArenaSpawnPoint();
-    const earlyDamageBoost = save.unlocked <= 10 ? 1.18 : save.unlocked <= 20 ? 1.08 : 1;
-    const damageUpgrade = getUpgradeBonus(PLAYER_STATS.dmg, save.stats.dmg);
-    const fireRateUpgrade = getUpgradeBonus(PLAYER_STATS.atkSpd, save.stats.atkSpd);
-    const speedUpgrade = getUpgradeBonus(PLAYER_STATS.speed, save.stats.speed);
+    const earlyDamageBoost = save.unlocked <= 10 ? 1.12 : save.unlocked <= 20 ? 1.04 : 1;
+    const damageUpgrade = getUpgradeBonus(PLAYER_STATS.dmg, save.stats.dmg, 'dmg');
+    const fireRateUpgrade = getUpgradeBonus(PLAYER_STATS.atkSpd, save.stats.atkSpd, 'atkSpd');
     const baseDamage = (PLAYER_STATS.dmg.base + damageUpgrade) * Math.max(0.18, 1 + inventory.damageMultiplier) * earlyDamageBoost;
-    const speed = (PLAYER_STATS.speed.base + speedUpgrade) * (1 + inventory.speedMultiplier);
+    const speed = PLAYER_STATS.speed.base * (1 + inventory.speedMultiplier);
     const magnet = PLAYER_STATS.magnet.base + inventory.magnetFlat;
     const atkSpeedMult = Math.max(0.35, (PLAYER_STATS.atkSpd.base + fireRateUpgrade) * (1 + inventory.attackSpeedMultiplier));
 
@@ -932,7 +1395,9 @@ function spawnWave(index) {
 
 function spawnEndlessWave(index) {
     currentWave = index;
-    const scaledLevel = Math.max(1, save.unlocked + Math.floor(index / 3));
+    // Endless difficulty depends ONLY on the elapsed waves, not on save.unlocked.
+    // wave 0 = lvl 1, then climbs ~1 level every 2 waves with a soft cap floor early on
+    const scaledLevel = Math.max(1, 1 + Math.floor(index / 2));
     currentLevel = scaledLevel;
     const waveSet = getLevelWaves(scaledLevel);
     const templateWave = waveSet[index % waveSet.length] || waveSet[0] || [{ t: 'drone', n: 8 }];
@@ -1497,7 +1962,9 @@ function checkWaveProgress() {
 function triggerKill(enemy) {
     if (!enemy.alive) return;
     enemy.alive = false;
-    const killGold = currentMode === 'endless' ? (enemy.isBoss ? 2 : 0) : (enemy.isBoss ? 10 : 1);
+    const economy = getEconomyMultiplier();
+    const killGoldBase = currentMode === 'endless' ? (enemy.isBoss ? 2 : 0) : (enemy.isBoss ? 10 : 1);
+    const killGold = Math.max(0, Math.round(killGoldBase * economy));
     addP(enemy.x, enemy.y, enemy.glow, enemy.isBoss ? 42 : 18, enemy.isBoss ? 260 : 210, 0.8, enemy.isBoss ? 7 : 4);
     addP(enemy.x, enemy.y, '#ffffff', enemy.isBoss ? 16 : 6, enemy.isBoss ? 180 : 120, 0.26, enemy.isBoss ? 4 : 2);
     if (killGold > 0) {
@@ -1518,7 +1985,7 @@ function triggerKill(enemy) {
     killStreakTimer = 2.2;
     screenShake = Math.min(2.9, screenShake + (enemy.isBoss ? 1.05 : 0.28));
     powerPulse = Math.min(2.3, powerPulse + (enemy.isBoss ? 0.88 : 0.2));
-    if (enemy.isBoss) triggerHaptic([18, 24, 30]);
+    if (enemy.isBoss) playHaptic('hard');
     addFxText(enemy.x, enemy.y - enemy.r - 12, enemy.isBoss ? 'BOSS DOWN' : `+${enemy.exp} XP`, enemy.isBoss ? '#ff9d00' : '#ffffff', enemy.isBoss ? 0.85 : 0.45, enemy.isBoss ? 24 : 16);
     updateMetaHud();
 }
@@ -1531,7 +1998,7 @@ function releaseShockNova() {
     playSfx('chain', 1.15);
     powerPulse = Math.min(2.4, powerPulse + 0.5);
     screenShake = Math.min(3, screenShake + 0.45);
-    triggerHaptic([12, 14, 18]);
+    playHaptic('medium');
 
     enemies.forEach((enemy) => {
         if (!enemy.alive) return;
@@ -1597,20 +2064,24 @@ function getAbilityEvolutionText(id, rank) {
 }
 
 function getAbilityIconMarkup(id, fallback) {
-    const icons = {
-        damage_boost: '<div class="ability-symbol fist"><span></span><span></span><span></span></div>',
-        rapid_fire: '<div class="ability-symbol barrage"><span></span><span></span><span></span></div>',
-        multi: '<div class="ability-symbol volley"><span></span><span></span><span></span></div>',
-        pierce: '<div class="ability-symbol pierce"><span></span><span></span></div>',
-        chain_lightning: '<div class="ability-symbol lightning"><span></span><span></span><span></span></div>',
-        tornado_shot: '<div class="ability-symbol tornado"><span></span><span></span><span></span></div>',
-        echo_shot: '<div class="ability-symbol echo"><span></span><span></span><span></span></div>',
-        ion_round: '<div class="ability-symbol ion"><span></span><span></span></div>',
-        shock_nova: '<div class="ability-symbol nova"><span></span><span></span><span></span></div>',
-        heal_heart: '<div class="ability-symbol heart"><span></span></div>',
-        orbiter: '<div class="ability-symbol orbit"><span></span><span></span><span></span></div>'
+    const svgs = {
+        damage_boost: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 18 L13 5 L18 18"/><line x1="9.5" y1="14" x2="16.5" y2="14"/><line x1="13" y1="5" x2="13" y2="2"/><polyline points="10.5,4 13,2 15.5,4"/></svg>`,
+        rapid_fire: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="13" x2="20" y2="13"/><line x1="4" y1="18" x2="20" y2="18"/><polyline points="17,5.5 21,8 17,10.5" stroke-linejoin="round"/><polyline points="17,10.5 21,13 17,15.5" stroke-linejoin="round"/><polyline points="17,15.5 21,18 17,20.5" stroke-linejoin="round"/></svg>`,
+        multi: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="21" x2="13" y2="6"/><line x1="7" y1="21" x2="9" y2="6"/><line x1="19" y1="21" x2="17" y2="6"/><polyline points="11,8 13,6 15,8"/><polyline points="5.5,8.5 7.5,6.5 9.5,8.5"/><polyline points="16.5,8.5 18.5,6.5 20.5,8.5"/></svg>`,
+        pierce: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="3" y1="13" x2="23" y2="13"/><polyline points="18,9 23,13 18,17" stroke-linejoin="round"/><circle cx="8" cy="13" r="2.5"/><circle cx="15" cy="13" r="2.5"/></svg>`,
+        chain_lightning: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,2 9,13 13.5,13 10,24"/><line x1="4" y1="7" x2="8.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="22" y1="7" x2="17.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="4" y1="19" x2="9.5" y2="16.5" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="4" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="22" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="4" cy="19" r="1.8" fill="currentColor" stroke="none"/></svg>`,
+        tornado_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4,7 Q13,3.5 22,7" stroke-width="1.8"/><path d="M6.5,12 Q13,9.5 19.5,12" stroke-width="1.6"/><path d="M9,17 Q13,15 17,17" stroke-width="1.4"/><line x1="13" y1="17" x2="13" y2="22" stroke-width="1.6"/><path d="M11,22 Q13,24.5 15,22" stroke-width="1.3"/></svg>`,
+        echo_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3" stroke-width="1.8"/><circle cx="13" cy="13" r="6.5" stroke-width="1.2" stroke-dasharray="3 2"/><circle cx="13" cy="13" r="10" stroke-width="1" stroke-dasharray="2 3"/><line x1="13" y1="3" x2="13" y2="6.5" stroke-width="1.5"/><line x1="13" y1="19.5" x2="13" y2="23" stroke-width="1.5"/></svg>`,
+        ion_round: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="13" cy="13" rx="3.5" ry="10" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="2" fill="currentColor" stroke="none"/></svg>`,
+        shock_nova: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="5" stroke-width="1.8"/><line x1="13" y1="2" x2="13" y2="7" stroke-width="1.6"/><line x1="13" y1="19" x2="13" y2="24" stroke-width="1.6"/><line x1="2" y1="13" x2="7" y2="13" stroke-width="1.6"/><line x1="19" y1="13" x2="24" y2="13" stroke-width="1.6"/><line x1="5" y1="5" x2="8.2" y2="8.2" stroke-width="1.4"/><line x1="21" y1="5" x2="17.8" y2="8.2" stroke-width="1.4"/><line x1="5" y1="21" x2="8.2" y2="17.8" stroke-width="1.4"/><line x1="21" y1="21" x2="17.8" y2="17.8" stroke-width="1.4"/></svg>`,
+        heal_heart: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,21 C13,21 4,15 4,9 C4,6.2 6.2,4 9,4 C10.8,4 12.3,5 13,6.2 C13.7,5 15.2,4 17,4 C19.8,4 22,6.2 22,9 C22,15 13,21 13,21Z"/><line x1="13" y1="9" x2="13" y2="15"/><line x1="10" y1="12" x2="16" y2="12"/></svg>`,
+        orbiter: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="2.5" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(60 13 13)"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(120 13 13)"/></svg>`,
+        phoenix_drive: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,2 L15.5,9 L23,9 L17,14 L19.5,22 L13,17.5 L6.5,22 L9,14 L3,9 L10.5,9 Z"/></svg>`,
+        singularity: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="7" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="13" cy="13" r="10.5" stroke-width="1" stroke-dasharray="1 3"/><line x1="4" y1="4" x2="9" y2="9" stroke-width="1.3"/><line x1="22" y1="4" x2="17" y2="9" stroke-width="1.3"/><line x1="4" y1="22" x2="9" y2="17" stroke-width="1.3"/><line x1="22" y1="22" x2="17" y2="17" stroke-width="1.3"/></svg>`
     };
-    return icons[id] || fallback;
+    const wrap = svgs[id];
+    if (wrap) return `<div class="ability-icon ability-${id}">${wrap}</div>`;
+    return fallback;
 }
 
 function drawAbilityChoices() {
@@ -1621,17 +2092,34 @@ function drawAbilityChoices() {
     }
 
     cards.innerHTML = '';
-    activeAbilityChoices = [...ABILITIES].sort(() => Math.random() - 0.5).slice(0, 3);
+    // Filter pool by what the player can still rank up
+    const pool = ABILITIES.filter((a) => {
+        const r = getAbilityRank(a.id);
+        return r < (a.tree?.length || 1);
+    });
+    const source = pool.length >= 3 ? pool : ABILITIES;
+    activeAbilityChoices = [...source].sort(() => Math.random() - 0.5).slice(0, 3);
+
     activeAbilityChoices.forEach((ability) => {
         const rank = getAbilityRank(ability.id);
+        const isEvolve = rank > 0;
+        // The card shows the NEXT rank descriptor (what you'd get if you pick it)
+        const nextIdx = Math.min((ability.tree?.length || 1) - 1, rank);
+        const nextDef = ability.tree ? ability.tree[nextIdx] : { name: ability.name, tier: ability.rarity, desc: ability.desc };
+        const tier = nextDef.tier || ability.rarity || 'common';
+
         const card = document.createElement('div');
-        card.className = 'shop-card ability-card';
+        card.className = `shop-card ability-card ability-pick rarity-tier-${tier} ${isEvolve ? 'pick-evolve' : ''}`.trim();
         card.innerHTML = `
-            <div class="card-icon ability-icon ability-${ability.id}">${getAbilityIconMarkup(ability.id, ability.icon)}</div>
-            <div class="card-title">${ability.name}</div>
-            <div class="card-meta">${rank > 0 ? `Owned Lv ${rank}` : ability.rarity.toUpperCase()}</div>
-            <div class="card-copy">${getAbilityEvolutionText(ability.id, rank)}</div>
-            <button class="inline-button" type="button">${rank > 0 ? 'Evolve' : 'Select'}</button>
+            <div class="pick-tag">${isEvolve ? `EVOLVE → Lv ${rank + 1}` : `NEW · ${tier.toUpperCase()}`}</div>
+            <div class="pick-icon-wrap">${getAbilityIconMarkup(ability.id, ability.icon)}</div>
+            <div class="card-title">${nextDef.name}</div>
+            <div class="card-meta">
+                <span class="rarity-tag tier-${tier}">${tier}</span>
+                ${isEvolve ? `from ${ability.tree[nextIdx - 1]?.name || ability.name}` : ability.name}
+            </div>
+            <div class="card-copy">${nextDef.desc}</div>
+            <button class="btn-glossy ${tier === 'legendary' ? 'btn-gold' : tier === 'epic' ? 'btn-purple' : tier === 'rare' ? '' : ''}" type="button">${isEvolve ? 'EVOLVE' : 'TAKE'}</button>
         `;
         card.querySelector('button').onclick = () => {
             applyAbility(ability.id);
@@ -1648,60 +2136,117 @@ function applyAbility(id) {
     player.abilityRanks[id] = (player.abilityRanks[id] || 0) + 1;
     const rank = player.abilityRanks[id];
     const ability = ABILITIES.find((entry) => entry.id === id);
+    const rankDef = getAbilityRankDef(ability, rank - 1);
+    const isEvolved = rank > 1;
 
     switch (id) {
-        case 'damage_boost':
-            player.damageMultiplier *= 1.22;
+        case 'damage_boost': {
+            // 1: x1.18  2: x1.30  3: x1.55 + crit chance  4: x2.0 always-crit
+            const mult = [1.18, 1.30, 1.55, 2.00][rank - 1] || 1.20;
+            player.damageMultiplier *= mult;
+            if (rank >= 3) player.critChance = Math.max(player.critChance || 0, 0.20);
+            if (rank >= 4) { player.critChance = 1.0; player.critMultiplier = 2.0; }
             break;
-        case 'rapid_fire':
-            player.atkCooldown *= 0.86;
+        }
+        case 'rapid_fire': {
+            const mult = [0.78, 0.62, 0.42, 0.30][rank - 1] || 0.80;
+            player.atkCooldown *= mult;
+            if (rank >= 3) player.frenzyOnKill = true;
+            if (rank >= 4) player.bulletsRicochet = true;
             break;
-        case 'multi':
-            player.multishot += 1;
+        }
+        case 'multi': {
+            const add = [1, 2, 3, 4][rank - 1] || 1;
+            player.multishot += add;
+            if (rank >= 3) player.multiSpread = (player.multiSpread || 0) + 0.10;
+            if (rank >= 4) player.pulsarBurst = true;
             break;
-        case 'pierce':
-            player.pierce += 1;
+        }
+        case 'pierce': {
+            const add = [1, 3, 99, 99][rank - 1] || 1;
+            player.pierce += add;
+            if (rank >= 2) player.pierceDamageBonus = (player.pierceDamageBonus || 0) + 0.20;
+            if (rank >= 4) player.markOnHit = true;
             break;
+        }
         case 'chain_lightning':
             player.chainLightning = true;
+            player.chainCount = [1, 3, 6, 6][rank - 1] || 1;
+            if (rank >= 3) player.chainParalyze = true;
+            if (rank >= 4) player.chainOnKill = true;
             break;
         case 'tornado_shot':
             player.tornadoShot = true;
+            player.tornadoEvery = [3, 2, 2, 1][rank - 1] || 3;
+            if (rank >= 3) player.tornadoPull = true;
+            if (rank >= 4) player.permaTornado = true;
             break;
         case 'echo_shot':
             player.echoShot = true;
+            player.echoEvery = [4, 3, 3, 1][rank - 1] || 4;
+            player.echoCount = [1, 2, 2, 1][rank - 1] || 1;
+            if (rank >= 3) player.echoSplit = true;
+            if (rank >= 4) player.phantomChance = 0.25;
             break;
         case 'ion_round':
             player.ionRound = true;
+            player.ionEvery = [5, 5, 4, 4][rank - 1] || 5;
+            player.ionRadiusMult = [1.0, 1.5, 1.8, 2.4][rank - 1] || 1.0;
+            if (rank >= 3) player.ionPiercing = true;
+            if (rank >= 4) player.ionVaporize = true;
             break;
         case 'shock_nova':
             player.shockNova = true;
+            player.shockEvery = [12, 8, 5, 4][rank - 1] || 12;
+            if (rank >= 3) player.shockChainOnNova = true;
+            if (rank >= 4) player.shockAura = true;
+            break;
+        case 'singularity':
+            player.singularity = true;
+            player.singularityEvery = [8, 6, 5, 1][rank - 1] || 8;
+            if (rank >= 3) player.singularityImplode = true;
+            if (rank >= 4) player.permaSingularity = true;
+            break;
+        case 'phoenix_drive':
+            player.phoenixDrive = true;
+            if (rank >= 2) player.phoenixBurning = true;
+            if (rank >= 3) player.phoenixDouble = true;
+            if (rank >= 4) player.phoenixRevive = true;
             break;
         case 'heal_heart':
             player.hp = Math.min(player.maxHp, player.hp + 1);
-            if (rank > 1) {
-                player.damageMultiplier *= 1.08;
-                player.atkCooldown *= 0.95;
-            }
+            if (rank >= 2) { player.maxHp += 1; player.hp = Math.min(player.maxHp, player.hp + 1); }
+            if (rank >= 3) { player.maxHp += 1; player.healPerKills = 25; }
+            if (rank >= 4) { player.firstLethalBlock = true; }
             break;
         case 'orbiter':
-            player.orbiters.push({
-                id: nextOrbiterId++,
-                angle: Math.random() * Math.PI * 2,
-                distance: 50 + player.orbiters.length * 12,
-                r: 7,
-                damage: 18,
-                x: player.x,
-                y: player.y
-            });
+            // rank 1 = 1 drone, 2 = +1 (total 2), 3 = +2 (total 4), 4 = +2 (total 6)
+            const adds = [1, 1, 2, 2][rank - 1] || 1;
+            for (let n = 0; n < adds; n++) {
+                player.orbiters.push({
+                    id: nextOrbiterId++,
+                    angle: Math.random() * Math.PI * 2,
+                    distance: 50 + player.orbiters.length * 10,
+                    r: rank >= 3 ? 5 : 7,
+                    damage: 18 + rank * 4,
+                    x: player.x,
+                    y: player.y
+                });
+            }
+            if (rank >= 4) player.sentinelHalo = true;
             break;
         default:
             break;
     }
-    playSfx('ability', ability?.rarity === 'epic' ? 1.25 : 1);
-    powerPulse = Math.min(2.2, powerPulse + (ability?.rarity === 'epic' ? 0.58 : 0.32));
-    screenShake = Math.min(2.7, screenShake + (ability?.rarity === 'epic' ? 0.42 : 0.18));
-    triggerHaptic(ability?.rarity === 'epic' ? [14, 18, 24] : 12);
+
+    // SFX/haptic intensity now scales with the WINNING rank tier (more dopamine on evolves)
+    const tier = rankDef.tier || ability?.rarity || 'common';
+    const intensity = tier === 'legendary' ? 1.6 : tier === 'epic' ? 1.25 : tier === 'rare' ? 1.0 : 0.85;
+    playSfx('ability', intensity);
+    powerPulse = Math.min(2.6, powerPulse + (tier === 'legendary' ? 0.85 : tier === 'epic' ? 0.58 : 0.32));
+    screenShake = Math.min(3.2, screenShake + (tier === 'legendary' ? 0.65 : tier === 'epic' ? 0.42 : 0.18));
+    playHaptic(tier === 'legendary' ? 'revealLegendary' : tier === 'epic' ? 'hard' : 'medium');
+    if (isEvolved) showToast(`Evolved → ${rankDef.name}`);
 }
 
 function findNearestEnemy(range) {
@@ -1726,7 +2271,7 @@ function damagePlayer(source) {
     addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.48, 22);
     screenShake = Math.min(2.5, screenShake + 0.5);
     playSfx('hit', source === 'boss' ? 1.15 : 1);
-    triggerHaptic(source === 'boss' ? [18, 20, 22] : 14);
+    playHaptic(source === 'boss' ? 'hard' : 'medium');
 
     if (player.hp > 0) return;
 
@@ -1797,7 +2342,7 @@ function gameOver() {
     saveSave();
     closeMission();
     playSfx('death', 1.1);
-    triggerHaptic([40, 35, 40]);
+    playHaptic('hard');
     if (currentMode === 'endless') {
         const endlessGold = endlessWaveRewardGold;
         const endlessGems = Math.floor(currentWave / 12);
@@ -1846,7 +2391,7 @@ function gameOver() {
 
 function victory() {
     if (currentMode === 'endless') return;
-    const goldReward = getLevelGoldReward(currentLevel);
+    const goldReward = Math.round(getLevelGoldReward(currentLevel) * getEconomyMultiplier());
     const gemReward = 1 + Math.floor(currentLevel / 6);
     save.unlocked = Math.max(save.unlocked, currentLevel + 1);
     save.selectedLevel = save.unlocked;
@@ -1855,7 +2400,7 @@ function victory() {
     saveSave();
     closeMission();
     playSfx('win', 1);
-    triggerHaptic([18, 20, 28]);
+    playHaptic('success');
     showResultOverlay({
         title: `Level ${currentLevel} Clear`,
         copy: 'Rewards paid out. The next mission is live.',
@@ -1903,9 +2448,9 @@ function updateHubVisualization(focusId) {
 }
 
 function getUpgradePreviewValue(id, level) {
-    if (id === 'dmg') return (PLAYER_STATS.dmg.base + getUpgradeBonus(PLAYER_STATS.dmg, level)).toFixed(1);
-    if (id === 'atkSpd') return (PLAYER_STATS.atkSpd.base + getUpgradeBonus(PLAYER_STATS.atkSpd, level)).toFixed(2);
-    if (id === 'speed') return Math.round(PLAYER_STATS.speed.base + getUpgradeBonus(PLAYER_STATS.speed, level));
+    if (id === 'dmg') return (PLAYER_STATS.dmg.base + getUpgradeBonus(PLAYER_STATS.dmg, level, 'dmg')).toFixed(1);
+    if (id === 'atkSpd') return (PLAYER_STATS.atkSpd.base + getUpgradeBonus(PLAYER_STATS.atkSpd, level, 'atkSpd')).toFixed(2);
+    if (id === 'economy') return `+${Math.round(getUpgradeBonus(PLAYER_STATS.economy, level, 'economy') * 100)}%`;
     return level;
 }
 
@@ -1917,14 +2462,21 @@ function renderHub() {
     UPGRADES.forEach((upgrade) => {
         const level = save.stats[upgrade.id] || 0;
         const cost = getUpgradeCost(upgrade, level);
+        const meta = getUpgradeCardMeta(upgrade, level);
         const card = document.createElement('div');
         card.className = `shop-card ${lastUpgradeId === upgrade.id ? 'upgraded' : ''}`.trim();
         card.innerHTML = `
-            <div class="card-icon" style="color:${upgrade.color}; border-color:${upgrade.color}55;">${upgrade.icon}</div>
+            <div class="upgrade-card-topline">
+                <div class="card-icon" style="color:${upgrade.color}; border-color:${upgrade.color}55;">${upgrade.icon}</div>
+                <div class="upgrade-tag ${meta.tier.isMajor ? 'major' : 'minor'}">${meta.phaseLabel}</div>
+            </div>
             <div class="card-title">${upgrade.name}</div>
-            <div class="card-meta">Level ${level}/${upgrade.max}</div>
+            <div class="card-meta">${meta.surgeLabel} | ${level >= upgrade.max ? 'Maxed' : (meta.tier.nextIsMajor ? 'Next: Big spike' : 'Build-up active')}</div>
             <div class="card-copy">${upgrade.desc}</div>
-            <button class="inline-button" type="button" ${level >= upgrade.max ? 'disabled' : ''}>${level >= upgrade.max ? 'MAXED' : `BUY ${cost} GOLD`}</button>
+            <div class="upgrade-card-footer">
+                <div class="upgrade-surge">${meta.tier.isMajor ? 'Major step' : `Cycle ${Math.min(meta.tier.step, meta.tier.cycleSize)}/${meta.tier.cycleSize}`}</div>
+                <button class="inline-button" type="button" ${level >= upgrade.max ? 'disabled' : ''}>${level >= upgrade.max ? 'MAXED' : `${meta.buttonLabel} ${cost} GOLD`}</button>
+            </div>
         `;
         card.onmouseenter = () => updateHubVisualization(upgrade.id);
         card.onclick = () => buyUpgrade(upgrade.id);
@@ -1932,13 +2484,39 @@ function renderHub() {
     });
 
     updateHubVisualization();
+    updateUpgradeNotifier();
 }
 
 function renderShop() {
+    renderShopFeatureBanner();
     renderCardPackStoreColumn();
     renderSkinStoreColumn();
     renderStoreColumn('shop-gems', SHOP_SECTIONS.gemItems, 'gems');
     renderRealMoneyColumn();
+}
+
+// Wire up data-buy / data-peek buttons on a freshly-rendered pack card
+function wirePackCardButtons(card, item, premium) {
+    const buyBtn = card.querySelector('[data-buy]');
+    const peekBtn = card.querySelector('[data-peek]');
+    if (buyBtn) {
+        buyBtn.onclick = (e) => {
+            e.stopPropagation();
+            playSfx('tapAccent', 0.85);
+            playHaptic('tap');
+            if (premium) buyPremiumPack(item.id);
+            else buyShopItem(item.id);
+        };
+    }
+    if (peekBtn) {
+        peekBtn.onclick = (e) => {
+            e.stopPropagation();
+            playSfx('tap', 0.7);
+            playHaptic('tap');
+            const key = peekBtn.getAttribute('data-peek');
+            if (key) showPackPeek(key);
+        };
+    }
 }
 
 function renderSkinStoreColumn() {
@@ -1954,13 +2532,10 @@ function renderSkinStoreColumn() {
     items.forEach((item) => {
         const packDef = item.reward?.packKey ? PACK_DEFINITIONS[item.reward.packKey] : null;
         const premium = !item.currency;
-        const card = document.createElement('div');
-        card.className = `shop-card pack-offer ${packDef ? `rarity-${packDef.rarity}` : ''}`.trim();
-        card.innerHTML = getPackOfferMarkup(item, packDef, premium);
-        card.querySelector('button').onclick = () => {
-            if (premium) buyPremiumPack(item.id);
-            else buyShopItem(item.id);
-        };
+        const wrap = document.createElement('div');
+        wrap.innerHTML = getPackOfferMarkup(item, packDef, premium);
+        const card = wrap.firstElementChild;
+        wirePackCardButtons(card, item, premium);
         grid.appendChild(card);
     });
 }
@@ -1978,13 +2553,10 @@ function renderCardPackStoreColumn() {
     items.forEach((item) => {
         const packDef = item.reward?.packKey ? PACK_DEFINITIONS[item.reward.packKey] : null;
         const premium = !item.currency;
-        const card = document.createElement('div');
-        card.className = `shop-card pack-offer ${packDef ? `rarity-${packDef.rarity}` : ''}`.trim();
-        card.innerHTML = getPackOfferMarkup(item, packDef, premium);
-        card.querySelector('button').onclick = () => {
-            if (premium) buyPremiumPack(item.id);
-            else buyShopItem(item.id);
-        };
+        const wrap = document.createElement('div');
+        wrap.innerHTML = getPackOfferMarkup(item, packDef, premium);
+        const card = wrap.firstElementChild;
+        wirePackCardButtons(card, item, premium);
         grid.appendChild(card);
     });
 }
@@ -2023,33 +2595,505 @@ function getCardVisualMarkup(cardId, compact = false) {
 }
 
 function getPackOfferMarkup(item, packDef, premium = false) {
-    const title = packDef ? packDef.name : item.name;
+    if (!packDef) {
+        // non-pack item — handled elsewhere via getShopItemMarkup
+        return getShopItemMarkup(item, premium);
+    }
+    const title = packDef.name;
     const price = premium ? item.price : `${item.cost} ${item.currency.toUpperCase()}`;
-    const odds = packDef ? formatPackOdds(packDef) : item.bonus;
-    const badge = premium ? 'Premium' : packDef ? getRarityLabel(packDef.rarity) : item.currency.toUpperCase();
-    const priceClass = premium ? '' : item.currency === 'gems' ? 'price-gems' : 'price-gold';
+    const priceClass = premium ? 'money' : (item.currency === 'gems' ? 'gems' : 'gold');
+    const tierKey = item.reward?.packKey || 'supply_pack_i';
+    const buttonClass = premium ? 'btn-glossy btn-gold' : (packDef.rarity === 'gold' || packDef.rarity === 'red' ? 'btn-glossy btn-purple' : 'btn-glossy');
+    const buttonLabel = premium ? 'Premium' : 'Buy Pack';
+
+    const best = getBestDropForPack(item.reward.packKey);
+    const heroSvg = best ? getRewardArtSvg(best.id, packDef.rewardType === 'skin' ? 'skin' : 'chip') : '';
+    const tierLabel = getRarityLabel(packDef.rarity);
+    const minis = getMiniDropsForPack(item.reward.packKey);
+    const bestName = best ? (best.def.name || best.id) : '';
 
     return `
-        <div class="pack-shell ${packDef ? `rarity-${packDef.rarity}` : ''}">
-            <div class="pack-shell-art">
-                <div class="pack-case ${packDef ? `rarity-${packDef.rarity}` : ''}">
-                    <div class="pack-case-glow"></div>
-                    <div class="pack-case-weapon weapon-${item.icon.toLowerCase()}">
-                        <span></span><span></span><span></span>
-                    </div>
-                    <div class="pack-top-badge">${badge}</div>
-                </div>
+        <div class="pack-card-v2 tier-${tierKey}" data-pack="${tierKey}" onclick="playSfx('tap',0.7); playHaptic('tap');">
+            <div class="pack-foil"></div>
+            <div class="pack-hero">
+                <div class="pack-hero-tag">★ Top Drop · ${bestName}</div>
+                <div class="pack-tier-badge">${tierLabel}</div>
+                <div class="pack-hero-icon">${heroSvg}</div>
             </div>
-            <div class="pack-shell-body">
-                <div class="card-title">${title}</div>
-                <div class="card-copy odds-copy">${odds}</div>
-                <div class="pack-shell-footer">
-                    <div class="mini-price ${priceClass}">${price}</div>
-                    <button class="${premium ? 'money-button' : 'inline-button'}" type="button">${packDef ? 'Get Pack' : 'Buy'}</button>
+            <div class="pack-mini-strip">
+                ${minis.map((m) => `<div class="pack-mini-drop tier-${m.tier}" title="${m.name}">${getMiniArtSvgInline(m.id, packDef.rewardType === 'skin' ? 'skin' : 'chip')}</div>`).join('')}
+            </div>
+            <div class="pack-body">
+                <div class="pack-name">${title}</div>
+                <div class="pack-sub">${item.bonus || formatPackOdds(packDef)}</div>
+                <div class="pack-actions">
+                    <button class="pack-peek-btn" type="button" data-peek="${item.reward.packKey}">PEEK</button>
+                    <button class="${buttonClass}" type="button" data-buy="1">
+                        ${buttonLabel} <span class="pack-price-chip ${priceClass}">${price}</span>
+                    </button>
                 </div>
             </div>
         </div>
     `;
+}
+
+// Generic shop item markup (gems/utility/real-money non-pack)
+function getShopItemMarkup(item, premium = false) {
+    const utilClass = getUtilClass(item.id);
+    const price = premium ? item.price : `${item.cost} ${item.currency.toUpperCase()}`;
+    const priceClass = premium ? 'money' : (item.currency === 'gems' ? 'gems' : 'gold');
+    const buttonClass = premium ? 'btn-glossy btn-gold' : 'btn-glossy';
+    return `
+        <div class="shop-item-v2 ${utilClass}">
+            <div class="util-art">${getUtilSvg(item.id, item.icon)}</div>
+            <div class="util-name">${item.name}</div>
+            <div class="util-desc">${item.bonus}</div>
+            <button class="${buttonClass} item-buy" type="button" data-buy="1">
+                ${premium ? 'Buy' : 'Get'} <span class="pack-price-chip ${priceClass}">${price}</span>
+            </button>
+        </div>
+    `;
+}
+
+function getUtilClass(id) {
+    const map = {
+        reroll_pack: 'util-reroll',
+        storm_license: 'util-storm',
+        boss_pass: 'util-boss',
+        neon_skin: 'util-trail',
+        gold_stash_s: 'util-gold-stash',
+        gold_stash_l: 'util-gold-stash',
+        gems_pouch_s: 'util-gem-pouch',
+        gems_pouch_l: 'util-gem-pouch',
+        no_ads: 'util-no-ads',
+        starter_bundle: 'util-bundle',
+        supporter_pack: 'util-supporter',
+        extra_normal_slot: 'util-extra-slot',
+        extra_legend_slot: 'util-extra-slot'
+    };
+    return map[id] || '';
+}
+
+function getUtilSvg(id, fallback) {
+    const svgs = {
+        reroll_pack:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11A8 8 0 0 0 7 7"/><polyline points="21,4 21,11 14,11"/><path d="M5 15a8 8 0 0 0 14 4"/><polyline points="5,22 5,15 12,15"/></svg>`,
+        storm_license:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="14,2 6,14 12,14 9,24 20,11 13,11 16,2"/></svg>`,
+        boss_pass:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3l3 6 6 1-4.5 4.5L19 21l-6-3-6 3 1.5-6.5L4 10l6-1z"/><circle cx="13" cy="13" r="2"/></svg>`,
+        neon_skin:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h6l2-7 4 14 2-7h6"/></svg>`,
+        gold_stash_s:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="8"/><path d="M10 13h6M13 10v6"/></svg>`,
+        gold_stash_l:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="18" height="13" rx="2"/><path d="M7 8V6a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="13" cy="14.5" r="2"/></svg>`,
+        gems_pouch_s:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 22,11 13,23 4,11"/><polyline points="4,11 22,11"/><polyline points="13,3 9,11 13,23"/><polyline points="13,3 17,11 13,23"/></svg>`,
+        gems_pouch_l:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,2 22,11 13,24 4,11"/><polygon points="9,11 13,7 17,11 13,15"/></svg>`,
+        no_ads:         `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="10"/><line x1="6" y1="6" x2="20" y2="20"/></svg>`,
+        starter_bundle: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="20" height="13" rx="1.5"/><polyline points="3,9 13,3 23,9"/><line x1="13" y1="3" x2="13" y2="22"/></svg>`,
+        supporter_pack: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 22s-9-6-9-13a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 13-9 13z"/></svg>`,
+        extra_normal_slot:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="18" height="14" rx="2"/><line x1="13" y1="10" x2="13" y2="16"/><line x1="10" y1="13" x2="16" y2="13"/></svg>`,
+        extra_legend_slot:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 16,10 23,10 17.5,14 19.5,21 13,17 6.5,21 8.5,14 3,10 10,10"/></svg>`,
+        premium_alpha:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7"><polygon points="13,3 22,9 22,17 13,23 4,17 4,9"/><polyline points="13,3 13,23"/><polyline points="4,9 22,17"/><polyline points="22,9 4,17"/></svg>`,
+        royal_omega:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7"><polygon points="13,3 22,9 22,17 13,23 4,17 4,9"/><circle cx="13" cy="13" r="3"/></svg>`,
+        legend_skin_pack: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7"><polygon points="13,3 22,9 22,17 13,23 4,17 4,9"/></svg>`
+    };
+    return svgs[id] || `<span style="font-family:var(--font-ui); color:#fff">${fallback}</span>`;
+}
+
+// Find the rarest reward reachable in a given pack
+function getBestDropForPack(packKey) {
+    const packDef = PACK_DEFINITIONS[packKey];
+    if (!packDef) return null;
+    const order = ['gold','red','purple','dark','blue'];
+    for (const r of order) {
+        if ((packDef.odds[r] || 0) <= 0) continue;
+        const pool = getPackPool(packDef, r);
+        if (!pool.length) continue;
+        // pick highest weight in that rarity
+        const sorted = [...pool].sort((a, b) => (b[1].weight || 1) - (a[1].weight || 1));
+        const [id, def] = sorted[0];
+        return { id, def, rarity: r };
+    }
+    return null;
+}
+
+// Up to 3 drops to show under hero, one per top tier
+function getMiniDropsForPack(packKey) {
+    const packDef = PACK_DEFINITIONS[packKey];
+    if (!packDef) return [];
+    const order = ['gold','red','purple','dark','blue'];
+    const tierToTag = { gold: 'legendary', red: 'legendary', purple: 'epic', dark: 'rare', blue: 'rare' };
+    const out = [];
+    for (const r of order) {
+        if (out.length >= 3) break;
+        if ((packDef.odds[r] || 0) <= 0) continue;
+        const pool = getPackPool(packDef, r);
+        if (!pool.length) continue;
+        const sorted = [...pool].sort((a, b) => (b[1].weight || 1) - (a[1].weight || 1));
+        const [id, def] = sorted[0];
+        out.push({ id, name: def.name, tier: tierToTag[r] || 'common' });
+    }
+    return out;
+}
+
+// Mini SVG art for chip / skin / ability used in mini-strip and peek tiles
+function getMiniArtSvgInline(id, type) {
+    if (type === 'skin') return `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polygon points="13,2 22,22 13,17 4,22"/></svg>`;
+    if (type === 'ability') {
+        // small lightning glyph fallback
+        return `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polyline points="15,2 9,13 13.5,13 10,24"/></svg>`;
+    }
+    // chip
+    const card = INVENTORY_CARDS[id];
+    const sigil = card?.sigil || card?.icon || '?';
+    return `<span style="font-family:var(--font-ui); font-size:8px; letter-spacing:0.6px;">${(sigil || '').slice(0,4)}</span>`;
+}
+
+// Big hero SVG art for pack-hero or peek tile
+function getRewardArtSvg(id, type) {
+    if (type === 'skin') {
+        const skin = SKIN_DEFINITIONS[id];
+        if (!skin) return '';
+        const s = skin.style;
+        const theme = skin.theme || 'arrow';
+        const auraGrad = `<defs><radialGradient id="g-${id}" cx="50%" cy="60%" r="60%">
+            <stop offset="0%" stop-color="${s.pulse}" stop-opacity="0.95"/>
+            <stop offset="55%" stop-color="${s.core}" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+        </radialGradient></defs>
+        <circle cx="50" cy="60" r="38" fill="url(#g-${id})"/>`;
+
+        // Each theme draws a unique ship + flair
+        let body = '';
+        if (theme === 'arrow') {
+            body = `
+                <polygon points="50,12 74,84 50,72 26,84" fill="${s.ship}" stroke="${s.core}" stroke-width="1.5"/>
+                <circle cx="50" cy="50" r="7" fill="${s.core}"/>
+                <line x1="34" y1="80" x2="66" y2="80" stroke="${s.trail}" stroke-width="3" stroke-linecap="round"/>`;
+        } else if (theme === 'molten') {
+            // Magma plate with cracks + ember sparks
+            body = `
+                <polygon points="50,10 80,86 50,76 20,86" fill="${s.ship}" stroke="${s.pulse}" stroke-width="1.5"/>
+                <polyline points="50,18 46,40 52,52 44,68" fill="none" stroke="${s.core}" stroke-width="1.6"/>
+                <polyline points="50,18 56,38 48,46 56,66" fill="none" stroke="${s.core}" stroke-width="1.4" opacity="0.8"/>
+                <circle cx="40" cy="86" r="2" fill="${s.core}"/>
+                <circle cx="60" cy="86" r="2" fill="${s.core}"/>
+                <circle cx="50" cy="48" r="6" fill="${s.core}"/>`;
+        } else if (theme === 'wave') {
+            // Glass wing with rippling void wave behind
+            body = `
+                <path d="M 18 80 Q 30 64, 50 76 T 82 80" fill="none" stroke="${s.trail}" stroke-width="2"/>
+                <path d="M 14 88 Q 28 70, 50 84 T 86 88" fill="none" stroke="${s.pulse}" stroke-width="1.5" opacity="0.7"/>
+                <polygon points="50,14 78,80 50,68 22,80" fill="${s.ship}" opacity="0.95"/>
+                <polygon points="50,28 64,72 50,62 36,72" fill="${s.pulse}" opacity="0.4"/>
+                <circle cx="50" cy="48" r="6" fill="${s.core}"/>`;
+        } else if (theme === 'corona') {
+            // Sun ship: spikes radiate outward
+            const spikes = Array.from({ length: 8 }, (_, i) => {
+                const a = (i / 8) * Math.PI * 2;
+                const x1 = 50 + Math.cos(a) * 24, y1 = 50 + Math.sin(a) * 24;
+                const x2 = 50 + Math.cos(a) * 38, y2 = 50 + Math.sin(a) * 38;
+                return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${s.core}" stroke-width="2.4" opacity="0.85"/>`;
+            }).join('');
+            body = `${spikes}
+                <circle cx="50" cy="50" r="22" fill="${s.ship}" opacity="0.95" stroke="${s.pulse}" stroke-width="1.5"/>
+                <circle cx="50" cy="50" r="9" fill="${s.core}"/>`;
+        } else if (theme === 'blade') {
+            // Sharp red dagger silhouette + twin afterburners
+            body = `
+                <polygon points="50,8 60,80 50,72 40,80" fill="${s.ship}" stroke="${s.core}" stroke-width="1.4"/>
+                <polygon points="42,76 50,90 38,86" fill="${s.trail}" opacity="0.9"/>
+                <polygon points="58,76 50,90 62,86" fill="${s.trail}" opacity="0.9"/>
+                <polygon points="46,84 50,96 54,84" fill="${s.core}" opacity="0.8"/>
+                <circle cx="50" cy="48" r="5" fill="${s.core}"/>`;
+        } else if (theme === 'aurora') {
+            // Prismatic ship with rainbow ribbon and stars
+            body = `
+                <defs><linearGradient id="aur-${id}" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#7be8ff"/><stop offset="40%" stop-color="#fffbe8"/>
+                    <stop offset="70%" stop-color="#ffd14d"/><stop offset="100%" stop-color="#ff8ba2"/>
+                </linearGradient></defs>
+                <path d="M 14 84 Q 30 60, 50 78 T 86 84" stroke="url(#aur-${id})" stroke-width="3" fill="none"/>
+                <polygon points="50,12 76,84 50,72 24,84" fill="${s.ship}" opacity="0.95" stroke="url(#aur-${id})" stroke-width="1.5"/>
+                <circle cx="50" cy="50" r="7" fill="${s.core}"/>
+                <circle cx="22" cy="22" r="1.5" fill="#fff"/>
+                <circle cx="78" cy="26" r="1.2" fill="#fff"/>
+                <circle cx="74" cy="60" r="1.2" fill="#fff"/>
+                <circle cx="30" cy="60" r="1.2" fill="#fff"/>`;
+        } else {
+            body = `
+                <polygon points="50,12 74,84 50,72 26,84" fill="${s.ship}" stroke="${s.core}" stroke-width="1.5"/>
+                <circle cx="50" cy="50" r="7" fill="${s.core}"/>`;
+        }
+
+        return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">${auraGrad}${body}</svg>`;
+    }
+    if (type === 'chip') {
+        const chip = INVENTORY_CARDS[id];
+        if (!chip) return '';
+        const colorMap = { blue: '#2b96ff', dark: '#5566ff', purple: '#bc13fe', red: '#ff375f', gold: '#ffd14d' };
+        const color = colorMap[chip.rarity] || '#fff';
+        // pick shape per chip
+        const shapeMap = {
+            damage_chip:      `<polyline points="50,15 32,55 50,55 42,85" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`,
+            magnet_chip:      `<path d="M30 55 a20 20 0 0 1 40 0" fill="none" stroke="${color}" stroke-width="4"/><line x1="30" y1="55" x2="30" y2="78" stroke="${color}" stroke-width="4"/><line x1="70" y1="55" x2="70" y2="78" stroke="${color}" stroke-width="4"/>`,
+            stability_chip:   `<rect x="22" y="40" width="56" height="20" rx="3" fill="none" stroke="${color}" stroke-width="2"/><line x1="32" y1="50" x2="68" y2="50" stroke="${color}" stroke-width="2"/>`,
+            rpm_chip:         `<line x1="20" y1="30" x2="80" y2="30" stroke="${color}" stroke-width="3"/><line x1="20" y1="50" x2="80" y2="50" stroke="${color}" stroke-width="3"/><line x1="20" y1="70" x2="80" y2="70" stroke="${color}" stroke-width="3"/><polyline points="62,22 80,30 62,38" fill="none" stroke="${color}" stroke-width="2.5"/><polyline points="62,42 80,50 62,58" fill="none" stroke="${color}" stroke-width="2.5"/><polyline points="62,62 80,70 62,78" fill="none" stroke="${color}" stroke-width="2.5"/>`,
+            overcharge_core:  `<circle cx="50" cy="50" r="22" fill="none" stroke="${color}" stroke-width="3"/><polygon points="50,30 56,50 50,70 44,50" fill="${color}"/>`,
+            arc_battery:      `<rect x="32" y="22" width="36" height="56" rx="4" fill="none" stroke="${color}" stroke-width="2.5"/><rect x="42" y="14" width="16" height="8" fill="${color}"/><polyline points="42,40 56,50 42,55 56,68" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`,
+            siege_loader:     `<polygon points="20,80 50,20 80,80" fill="none" stroke="${color}" stroke-width="3"/><line x1="35" y1="55" x2="65" y2="55" stroke="${color}" stroke-width="2.5"/>`,
+            apex_emblem:      `<polygon points="50,12 88,32 80,76 50,90 20,76 12,32" fill="none" stroke="${color}" stroke-width="3"/><polygon points="50,30 70,42 65,68 50,76 35,68 30,42" fill="${color}" opacity="0.6"/>`,
+            minigun_protocol: `<line x1="22" y1="40" x2="78" y2="40" stroke="${color}" stroke-width="4"/><line x1="22" y1="55" x2="78" y2="55" stroke="${color}" stroke-width="4"/><line x1="22" y1="70" x2="78" y2="70" stroke="${color}" stroke-width="4"/><circle cx="20" cy="40" r="3" fill="${color}"/><circle cx="20" cy="55" r="3" fill="${color}"/><circle cx="20" cy="70" r="3" fill="${color}"/>`,
+            vortex_array:     `<circle cx="50" cy="50" r="32" fill="none" stroke="${color}" stroke-width="2"/><circle cx="50" cy="50" r="22" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4 4"/><circle cx="50" cy="50" r="10" fill="${color}"/>`,
+            solar_crown:      `<polygon points="20,80 30,40 50,55 50,15 50,55 70,40 80,80" fill="none" stroke="${color}" stroke-width="3"/><circle cx="50" cy="55" r="6" fill="${color}"/>`,
+            crimson_zero:     `<line x1="20" y1="50" x2="80" y2="50" stroke="${color}" stroke-width="3"/><polyline points="62,38 80,50 62,62" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/><circle cx="22" cy="50" r="6" fill="none" stroke="${color}" stroke-width="2.5"/>`
+        };
+        const shape = shapeMap[id] || `<rect x="30" y="30" width="40" height="40" fill="none" stroke="${color}" stroke-width="3"/>`;
+        return `
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <radialGradient id="cg-${id}" cx="50%" cy="50%" r="55%">
+                        <stop offset="0%" stop-color="${color}" stop-opacity="0.45"/>
+                        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+                    </radialGradient>
+                </defs>
+                <circle cx="50" cy="50" r="42" fill="url(#cg-${id})"/>
+                ${shape}
+            </svg>`;
+    }
+    return '';
+}
+
+// Mount the shop feature banner (shows the rarest pack in shop as the "headline")
+function renderShopFeatureBanner() {
+    const mount = document.getElementById('shop-feature-banner-mount');
+    if (!mount) return;
+    mount.innerHTML = `
+        <div class="shop-feature-banner">
+            <div class="feature-icon">★</div>
+            <div>
+                <h3>NEW · ROYAL OMEGA</h3>
+                <p>Top crate. Maximum gold and red odds. Exclusives unlocked.</p>
+            </div>
+        </div>
+    `;
+}
+
+// ───────────────────────── PACK PEEK ─────────────────────────
+window.showPackPeek = function(packKey) {
+    const packDef = PACK_DEFINITIONS[packKey];
+    if (!packDef) return;
+    const overlay = document.getElementById('peek-overlay');
+    const content = document.getElementById('peek-content');
+    const grid = document.getElementById('peek-grid');
+    const oddsBar = document.getElementById('peek-odds-bar');
+    const legend = document.getElementById('peek-odds-legend');
+    const name = document.getElementById('peek-pack-name');
+    const sub = document.getElementById('peek-pack-sub');
+    if (!overlay || !content || !grid || !oddsBar || !legend) return;
+
+    name.textContent = packDef.name;
+    sub.textContent = packDef.rewardType === 'skin' ? 'Possible skin drops' : 'Possible chip drops';
+
+    content.classList.remove('tier-blue','tier-dark','tier-purple','tier-red','tier-gold');
+    content.classList.add(`tier-${packDef.rarity}`);
+
+    // odds bar — flex segments proportional to odds %
+    const order = ['blue','dark','purple','red','gold'];
+    const total = order.reduce((s, r) => s + (packDef.odds[r] || 0), 0) || 1;
+    oddsBar.style.display = 'flex';
+    oddsBar.style.gridTemplateColumns = '';
+    oddsBar.innerHTML = order.map((r) => {
+        const pct = ((packDef.odds[r] || 0) / total) * 100;
+        return pct > 0
+            ? `<span class="seg-${r}" style="flex:${pct.toFixed(2)} 0 0; min-width:4px;"></span>`
+            : '';
+    }).join('');
+
+    legend.innerHTML = order.map((r) => {
+        const pct = packDef.odds[r] || 0;
+        return pct > 0 ? `<span><span class="dot ${r}"></span>${getRarityLabel(r)} ${pct}%</span>` : '';
+    }).join('');
+
+    // tiles, grouped by rarity descending
+    const tiles = [];
+    ['gold','red','purple','dark','blue'].forEach((r) => {
+        if ((packDef.odds[r] || 0) <= 0) return;
+        const pool = getPackPool(packDef, r);
+        if (!pool.length) return;
+        const totalWeight = pool.reduce((s, [, def]) => s + (def.weight || 1), 0);
+        pool.forEach(([id, def]) => {
+            const slice = ((def.weight || 1) / totalWeight) * (packDef.odds[r] / total) * 100;
+            const art = getRewardArtSvg(id, packDef.rewardType === 'skin' ? 'skin' : 'chip');
+            tiles.push(`
+                <div class="peek-tile r-${r}">
+                    <div class="peek-art">${art}</div>
+                    <div class="peek-name">${def.name}</div>
+                    <div class="peek-rate">${slice.toFixed(slice < 1 ? 2 : 1)}%</div>
+                </div>
+            `);
+        });
+    });
+    grid.innerHTML = tiles.join('');
+
+    overlay.classList.add('active');
+    playSfx('peekOpen', 0.9);
+    playHaptic('peek');
+};
+
+window.closePackPeek = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('peek-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
+
+// ─────────────────────────── DAILY OVERLAY (popup) ────────────
+window.openDailyOverlay = function() {
+    const overlay = document.getElementById('daily-overlay');
+    const grid = document.getElementById('daily-overlay-grid');
+    const status = document.getElementById('daily-overlay-status');
+    if (!overlay || !grid) return;
+    const cycleDay = Math.max(1, save.daily?.cycleDay || 1);
+    const claimedToday = save.daily?.lastClaimKey === getTodayKey();
+    if (status) status.textContent = claimedToday ? `Tag ${cycleDay} schon eingesammelt — komm morgen wieder.` : `Tag ${cycleDay} bereit. Reward: ${DAILY_LOGIN_REWARDS[cycleDay - 1]?.label || ''}`;
+    grid.innerHTML = DAILY_LOGIN_REWARDS.map((reward, index) => {
+        const day = index + 1;
+        const status = day < cycleDay ? 'claimed' : day === cycleDay ? (claimedToday ? 'claimed today' : 'today') : 'upcoming';
+        const statusText = day < cycleDay ? 'Done' : day === cycleDay ? (claimedToday ? 'Heute' : 'Jetzt') : 'Spaeter';
+        return `
+            <div class="daily-card ${status}">
+                <div class="daily-day">Tag ${day}</div>
+                <div class="daily-reward">${reward.label}</div>
+                <div class="daily-status">${statusText}</div>
+            </div>
+        `;
+    }).join('');
+    overlay.classList.add('active');
+    playSfx('peekOpen', 0.85);
+    playHaptic('peek');
+};
+window.closeDailyOverlay = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('daily-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
+
+// ─────────────────────────── CHALLENGES (popup) ───────────────
+const DAILY_CHALLENGES = [
+    { id: 'kill100',   title: 'Kill 100 enemies', reward: '120 Gold' },
+    { id: 'wave5',     title: 'Reach wave 5 in Endless', reward: '12 Gems' },
+    { id: 'evolve',    title: 'Evolve any ability twice in a run', reward: '1 Pack II' },
+    { id: 'noHit',     title: 'Clear a mission without losing a heart', reward: '20 Gems' }
+];
+window.openChallengesOverlay = function() {
+    const overlay = document.getElementById('challenges-overlay');
+    const list = document.getElementById('challenges-list');
+    if (!overlay || !list) return;
+    list.innerHTML = DAILY_CHALLENGES.map((c) => `
+        <div class="mission-card" style="padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <div>
+                <div class="card-title" style="font-size:12px; letter-spacing:1.2px;">${c.title}</div>
+                <div class="card-meta" style="margin-top:4px; font-size:10px;">Reward: ${c.reward}</div>
+            </div>
+            <span class="rarity-tag tier-rare">DAILY</span>
+        </div>
+    `).join('');
+    overlay.classList.add('active');
+    playSfx('peekOpen', 0.85);
+    playHaptic('peek');
+};
+window.closeChallengesOverlay = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('challenges-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
+
+// ─────────────────────────── LEADERBOARD ──────────────────────
+// Bots with realistic-looking names. The list is deterministic per session,
+// always seats the player at rank 4 (so the player only ever wins
+// 2nd/3rd-place rewards if they grind to overtake bots).
+const BOT_POOL = [
+    'NovaWraith', 'KaiZero', 'QuasarFox', 'NyxBlade', 'EmberLynx', 'Voidstep',
+    'IonRavn', 'AshHavoc', 'PhantomZ', 'CrimsonGale', 'SoraEclipse', 'ZephyrAce',
+    'StarlightK', 'Glitchcat', 'OmenDrift', 'SilkRider', 'PulseHart', 'AzureV',
+    'ThornTaki', 'BastionRei', 'MyrrhAce', 'CometX', 'SableVox', 'LumenZ'
+];
+function getLeaderboardBots() {
+    const seed = save.leaderboardSeed || 7;
+    const rng = mulberry32(seed);
+    const playerScore = computePlayerLeaderboardScore();
+    // Place player at rank 4: three bots above, at least 6 below
+    const above = [];
+    let s = playerScore;
+    for (let i = 0; i < 3; i++) {
+        s += Math.floor(120 + rng() * 240); // each bot above is +120..+360
+        above.push({ name: BOT_POOL[Math.floor(rng() * BOT_POOL.length)], score: s, isYou: false });
+    }
+    above.reverse(); // highest score first
+    const below = [];
+    let bs = playerScore;
+    for (let i = 0; i < 7; i++) {
+        bs -= Math.floor(80 + rng() * 220);
+        below.push({ name: BOT_POOL[Math.floor(rng() * BOT_POOL.length)], score: Math.max(0, bs), isYou: false });
+    }
+    const rows = [...above, { name: 'You', score: playerScore, isYou: true }, ...below];
+    // dedupe names (rare collisions)
+    const seen = new Set();
+    return rows.map((r) => {
+        let name = r.name;
+        let n = 1;
+        while (seen.has(name)) { n++; name = r.name + n; }
+        seen.add(name);
+        return { ...r, name };
+    });
+}
+function computePlayerLeaderboardScore() {
+    // Score grows with progression but caps so bots above always beat you a bit
+    const lvl = save.unlocked || 1;
+    const packs = (save.permanentBoosts?.packsOpened || 0);
+    const inventory = (save.inventory?.length || 0);
+    return Math.floor(lvl * 110 + packs * 18 + inventory * 4 + 320);
+}
+function mulberry32(a) {
+    return function() {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+function renderLeaderboard() {
+    const list = document.getElementById('leaderboard-list');
+    if (!list) return;
+    const rows = getLeaderboardBots();
+    list.innerHTML = rows.map((row, i) => {
+        const rank = i + 1;
+        return `
+            <div class="lb-row ${row.isYou ? 'you' : ''} rank-${rank}">
+                <span class="lb-rank">${rank}</span>
+                <span class="lb-name">${row.name}</span>
+                <span class="lb-score">${row.score.toLocaleString()}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// Sync rail button states
+function refreshMapRail() {
+    const dailyBtn = document.getElementById('rail-daily');
+    const dailyLabel = document.getElementById('rail-daily-label');
+    const dailyBadge = document.getElementById('rail-daily-badge');
+    const noAdsBtn = document.getElementById('rail-no-ads');
+    const noAdsLabel = document.getElementById('rail-no-ads-label');
+
+    if (dailyBtn) {
+        const claimedToday = save.daily?.lastClaimKey === getTodayKey();
+        dailyBtn.classList.toggle('claimed', claimedToday);
+        if (dailyLabel) dailyLabel.textContent = claimedToday ? 'Done' : 'Daily';
+        if (dailyBadge) dailyBadge.style.display = claimedToday ? 'none' : 'inline-flex';
+    }
+    if (noAdsBtn) {
+        const owned = !!save.premium?.noAds;
+        noAdsBtn.classList.toggle('owned', owned);
+        if (noAdsLabel) noAdsLabel.textContent = owned ? 'Active' : 'No Ads';
+    }
 }
 
 function renderStoreColumn(id, items) {
@@ -2063,16 +3107,29 @@ function renderStoreColumn(id, items) {
             (item.reward.neonTrail && save.premium.neonTrail)
         );
         const packDef = item.reward.packKey ? PACK_DEFINITIONS[item.reward.packKey] : null;
-        const card = document.createElement('div');
-        card.className = `shop-card ${packDef ? `pack-offer rarity-${packDef.rarity}` : ''}`.trim();
-        card.innerHTML = packDef ? getPackOfferMarkup(item, packDef, false) : `
-            <div class="card-icon">${item.icon}</div>
-            <div class="card-title">${item.name}</div>
-            <div class="mini-price ${item.currency === 'gems' ? 'price-gems' : 'price-gold'}">${item.cost} ${item.currency.toUpperCase()}</div>
-            <div class="card-copy">${item.bonus}</div>
-            <button class="inline-button" type="button" ${owned ? 'disabled' : ''}>${owned ? 'OWNED' : 'BUY'}</button>
-        `;
-        card.querySelector('button').onclick = () => buyShopItem(item.id);
+        const wrap = document.createElement('div');
+        wrap.innerHTML = packDef
+            ? getPackOfferMarkup(item, packDef, false)
+            : getShopItemMarkup(item, false);
+        const card = wrap.firstElementChild;
+        if (packDef) {
+            wirePackCardButtons(card, item, false);
+        } else {
+            const buyBtn = card.querySelector('[data-buy]');
+            if (buyBtn) {
+                if (owned) {
+                    buyBtn.disabled = true;
+                    buyBtn.innerHTML = 'OWNED';
+                } else {
+                    buyBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        playSfx('tapAccent', 0.85);
+                        playHaptic('tap');
+                        buyShopItem(item.id);
+                    };
+                }
+            }
+        }
         grid.appendChild(card);
     });
 }
@@ -2083,27 +3140,26 @@ function renderRealMoneyColumn() {
     grid.innerHTML = '';
 
     SHOP_SECTIONS.realMoney.filter((item) => !item.reward?.packKey).forEach((item) => {
-        const packDef = item.reward?.packKey ? PACK_DEFINITIONS[item.reward.packKey] : null;
-        const card = document.createElement('div');
-        card.className = `shop-card ${packDef ? `pack-offer rarity-${packDef.rarity}` : ''}`.trim();
-        card.innerHTML = packDef ? getPackOfferMarkup(item, packDef, true) : `
-            <div class="card-icon">${item.icon}</div>
-            <div class="card-title">${item.name}</div>
-            <div class="mini-price ${item.reward?.gold ? 'price-gold' : item.reward?.gems ? 'price-gems' : ''}">${item.price}</div>
-            <div class="card-copy">${item.bonus}</div>
-            <button class="money-button" type="button">Premium Offer</button>
-        `;
-        card.querySelector('button').onclick = () => {
-            if (item.reward?.packKey) {
-                buyPremiumPack(item.id);
-                return;
-            }
-            if (item.reward?.extraNormalSlots || item.reward?.extraLegendarySlots || item.id === 'no_ads') {
-                buyPremiumOffer(item.id);
-                return;
-            }
-            showToast(`Placeholder for ${item.name} checkout.`);
-        };
+        const wrap = document.createElement('div');
+        wrap.innerHTML = getShopItemMarkup(item, true);
+        const card = wrap.firstElementChild;
+        const buyBtn = card.querySelector('[data-buy]');
+        if (buyBtn) {
+            buyBtn.onclick = (e) => {
+                e.stopPropagation();
+                playSfx('tapAccent', 0.9);
+                playHaptic('tap');
+                if (item.reward?.packKey) {
+                    buyPremiumPack(item.id);
+                    return;
+                }
+                if (item.reward?.extraNormalSlots || item.reward?.extraLegendarySlots || item.id === 'no_ads') {
+                    buyPremiumOffer(item.id);
+                    return;
+                }
+                showToast(`Placeholder for ${item.name} checkout.`);
+            };
+        }
         grid.appendChild(card);
     });
 }
@@ -2142,31 +3198,37 @@ function renderInventory() {
     packEntries.forEach(([packKey, count]) => {
         const pack = PACK_DEFINITIONS[packKey];
         if (!pack) return;
+        const best = getBestDropForPack(packKey);
+        const heroSvg = best ? getRewardArtSvg(best.id, pack.rewardType === 'skin' ? 'skin' : 'chip') : '';
+        const minis = getMiniDropsForPack(packKey);
         const box = document.createElement('div');
-        box.className = `shop-card pack-offer rarity-${pack.rarity}`;
         box.innerHTML = `
-            <div class="pack-shell rarity-${pack.rarity}">
-                <div class="pack-shell-art">
-                    <div class="pack-case rarity-${pack.rarity}">
-                        <div class="pack-case-glow"></div>
-                        <div class="pack-case-weapon weapon-box">
-                            <span></span><span></span><span></span>
-                        </div>
-                        <div class="pack-top-badge">Stored</div>
-                    </div>
+            <div class="pack-card-v2 tier-${packKey}" data-pack="${packKey}">
+                <div class="pack-foil"></div>
+                <div class="pack-hero">
+                    <div class="pack-hero-tag">★ Stored ${count > 1 ? `× ${count}` : ''}</div>
+                    <div class="pack-tier-badge">${getRarityLabel(pack.rarity)}</div>
+                    <div class="pack-hero-icon">${heroSvg}</div>
                 </div>
-                <div class="pack-shell-body">
-                    <div class="card-title">${pack.name}${count > 1 ? ` x${count}` : ''}</div>
-                    <div class="card-copy odds-copy">${formatPackOdds(pack)}</div>
-                    <div class="pack-shell-footer">
-                        <div class="mini-price">${getRarityLabel(pack.rarity)}</div>
-                        <button class="inline-button" type="button">OPEN</button>
+                <div class="pack-mini-strip">
+                    ${minis.map((m) => `<div class="pack-mini-drop tier-${m.tier}" title="${m.name}">${getMiniArtSvgInline(m.id, pack.rewardType === 'skin' ? 'skin' : 'chip')}</div>`).join('')}
+                </div>
+                <div class="pack-body">
+                    <div class="pack-name">${pack.name}</div>
+                    <div class="pack-sub">${formatPackOdds(pack)}</div>
+                    <div class="pack-actions">
+                        <button class="pack-peek-btn" type="button" data-peek="${packKey}">PEEK</button>
+                        <button class="btn-glossy btn-gold" type="button" data-buy="1">OPEN</button>
                     </div>
                 </div>
             </div>
         `;
-        box.querySelector('button').onclick = () => openStoredPack(packKey);
-        grid.appendChild(box);
+        const card = box.firstElementChild;
+        const openBtn = card.querySelector('[data-buy]');
+        const peekBtn = card.querySelector('[data-peek]');
+        if (openBtn) openBtn.onclick = (e) => { e.stopPropagation(); playSfx('tapAccent', 1); playHaptic('tap'); openStoredPack(packKey); };
+        if (peekBtn) peekBtn.onclick = (e) => { e.stopPropagation(); playSfx('tap', 0.7); playHaptic('tap'); showPackPeek(packKey); };
+        grid.appendChild(card);
     });
 
     if (save.premium?.neonTrail) {
@@ -2283,6 +3345,7 @@ window.equipSkin = function(skinId) {
     saveSave();
     renderInventory();
     playSfx('upgrade', 0.9);
+    playHaptic('soft');
     showToast(`${SKIN_DEFINITIONS[skinId].name} equipped.`);
 };
 
@@ -2292,6 +3355,7 @@ window.toggleNeonTrail = function() {
     saveSave();
     renderInventory();
     playSfx('upgrade', 0.75);
+    playHaptic('soft');
     showToast(save.premium.neonTrailEnabled === false ? 'Neon Trail disabled.' : 'Neon Trail enabled.');
 };
 
@@ -2375,6 +3439,7 @@ window.equipCard = function(cardId) {
     renderLoadout();
     renderInventory();
     playSfx('upgrade', 0.75);
+    playHaptic('soft');
     showToast(`${INVENTORY_CARDS[cardId].name} equipped.`);
 };
 
@@ -2403,6 +3468,7 @@ window.sellInventoryCard = function(cardId) {
     renderLoadout();
     updateMetaHud();
     playSfx('pickup', 0.8);
+    playHaptic('soft');
     showToast(`${INVENTORY_CARDS[cardId].name} sold.`);
 };
 
@@ -2420,6 +3486,10 @@ window.showFight = function() {
     setActiveNav('nav-fight');
     buildRoadmap();
     updateMetaHud();
+    renderDailyLoginPanel();
+    refreshMapRail();
+    renderLeaderboard();
+    playHaptic('soft');
 };
 
 window.showHub = function() {
@@ -2427,6 +3497,7 @@ window.showHub = function() {
     setActiveNav('nav-hub');
     renderHub();
     updateMetaHud();
+    playHaptic('soft');
 };
 
 window.showShop = function() {
@@ -2434,6 +3505,7 @@ window.showShop = function() {
     setActiveNav('nav-shop');
     renderShop();
     updateMetaHud();
+    playHaptic('soft');
 };
 
 window.showInventory = function() {
@@ -2441,6 +3513,7 @@ window.showInventory = function() {
     setActiveNav('nav-inventory');
     renderInventory();
     updateMetaHud();
+    playHaptic('soft');
 };
 
 window.showLoadout = function() {
@@ -2448,6 +3521,7 @@ window.showLoadout = function() {
     setActiveNav('nav-loadout');
     renderLoadout();
     updateMetaHud();
+    playHaptic('soft');
 };
 
 function getPackPool(packDef, rarity) {
@@ -2547,11 +3621,11 @@ function createSkinPackMarkup(skinId) {
 
 function getPackRevealFeedback(rarity) {
     const feedback = {
-        blue: { sfx: 'caseOpen', intensity: 0.9, haptic: [12, 16], shake: 0.25, pulse: 0.2, color: '#2b96ff', burst: 22 },
-        dark: { sfx: 'caseOpen', intensity: 1.05, haptic: [12, 18, 16], shake: 0.35, pulse: 0.3, color: '#2452ff', burst: 28 },
-        purple: { sfx: 'caseRare', intensity: 1, haptic: [14, 18, 22], shake: 0.55, pulse: 0.45, color: '#bc13fe', burst: 36 },
-        red: { sfx: 'jackpot', intensity: 1.05, haptic: [18, 22, 24, 32], shake: 1.1, pulse: 0.7, color: '#ff375f', burst: 52 },
-        gold: { sfx: 'jackpot', intensity: 1.28, haptic: [24, 26, 36, 44], shake: 1.45, pulse: 0.95, color: '#ffd14d', burst: 66 }
+        blue:   { sfx: 'revealCommon',   intensity: 0.95, haptic: [24],                          shake: 0.25, pulse: 0.20, color: '#2b96ff', burst: 22, hapticName: 'revealCommon', tier: 'common',    fanfare: false, jackpot: false },
+        dark:   { sfx: 'revealRare',     intensity: 0.95, haptic: [40, 30, 40],                  shake: 0.35, pulse: 0.30, color: '#5566ff', burst: 28, hapticName: 'revealRare',   tier: 'rare',      fanfare: false, jackpot: false },
+        purple: { sfx: 'revealEpic',     intensity: 1.05, haptic: [70, 30, 70, 30, 70],          shake: 0.65, pulse: 0.50, color: '#bc13fe', burst: 40, hapticName: 'revealEpic',   tier: 'epic',      fanfare: false, jackpot: false },
+        red:    { sfx: 'revealLegendary',intensity: 1.10, haptic: [180, 60, 180, 60, 240],       shake: 1.10, pulse: 0.75, color: '#ff375f', burst: 56, hapticName: 'revealLegendary', tier: 'legendary', fanfare: true,  jackpot: true  },
+        gold:   { sfx: 'revealLegendary',intensity: 1.30, haptic: [220, 80, 220, 80, 220, 80, 360], shake: 1.50, pulse: 1.00, color: '#ffd14d', burst: 72, hapticName: 'revealLegendary', tier: 'legendary', fanfare: true,  jackpot: true  }
     };
     return feedback[rarity] || feedback.blue;
 }
@@ -2575,10 +3649,11 @@ function openPackSequence(packKey) {
 
     const overlay = document.getElementById('pack-overlay');
     const track = document.getElementById('pack-track');
+    const viewport = overlay ? overlay.querySelector('.pack-viewport') : null;
     const result = document.getElementById('pack-result');
     const claimButton = document.getElementById('pack-claim-button');
     const subtitle = document.getElementById('pack-subtitle');
-    if (!overlay || !track || !result || !claimButton || !subtitle) return;
+    if (!overlay || !track || !viewport || !result || !claimButton || !subtitle) return;
 
     packOpeningState = { winnerId, packKey, claimed: false, claimReady: false };
     subtitle.textContent = `${packDef.name} | ${formatPackOdds(packDef)}`;
@@ -2587,11 +3662,41 @@ function openPackSequence(packKey) {
     claimButton.disabled = true;
     track.style.transform = 'translateX(0px)';
     track.innerHTML = reel.map((rewardId) => packDef.rewardType === 'skin' ? createSkinPackMarkup(rewardId) : createPackCardMarkup(rewardId)).join('');
+
+    // tier-driven glow on the stage
+    const packContent = document.getElementById('pack-content');
+    if (packContent) {
+        packContent.dataset.tier = packDef.rarity;
+        packContent.classList.remove('jackpot');
+    }
+    // reset confetti
+    const confetti = document.getElementById('pack-confetti');
+    if (confetti) confetti.innerHTML = '';
+    // arm rip overlay (curtains close before reveal)
+    const rip = document.getElementById('pack-rip');
+    if (rip) {
+        rip.classList.remove('rip-active', 'hidden');
+    }
+
     overlay.classList.add('active');
 
+    // play the rip sound + haptic, then open the curtains and start build-up
+    playPackRip();
+    playHaptic('packRip');
+    setTimeout(() => {
+        if (rip) rip.classList.add('rip-active');
+    }, 280);
+    setTimeout(() => {
+        if (rip) rip.classList.add('hidden');
+    }, 1300);
+    // build-up audio that crescendos roughly to the reveal
+    playBuildUp(8.0);
+
     window.cancelAnimationFrame(packAnimationFrame);
-    const cardWidth = 122;
-    const targetOffset = (winnerIndex * cardWidth) - 226;
+    const items = [...track.children];
+    const viewportCenter = viewport.clientWidth * 0.5;
+    const itemCenters = items.map((item) => item.offsetLeft + (item.offsetWidth * 0.5));
+    const targetOffset = Math.max(0, itemCenters[winnerIndex] - viewportCenter);
     const duration = 8600;
     let startTime = 0;
     let lastIndex = -1;
@@ -2606,14 +3711,35 @@ function openPackSequence(packKey) {
         } else {
             save.inventory.push(winnerId);
         }
+        // Tiny permanent stat trickle for the player (small but feels good across many opens)
+        trickleBoostFromReward(wonReward.rarity);
         saveSave();
         renderInventory();
         const feedback = getPackRevealFeedback(wonReward.rarity);
         packOpeningState.claimReady = true;
         result.textContent = `Unlocked: ${wonReward.name} | ${getRarityLabel(wonReward.rarity)}`;
         result.className = `pack-result rarity-${wonReward.rarity} ${(wonReward.rarity === 'red' || wonReward.rarity === 'gold') ? 'pack-jackpot' : ''}`.trim();
+
+        // re-tint the stage glow to the WINNING rarity (more dopamine)
+        if (packContent) {
+            packContent.dataset.tier = wonReward.rarity;
+            if (feedback.jackpot) {
+                packContent.classList.add('jackpot');
+                setTimeout(() => packContent.classList.remove('jackpot'), 1700);
+            }
+        }
+
+        // primary reveal sound + haptic
         playSfx(feedback.sfx, feedback.intensity);
-        triggerHaptic(feedback.haptic);
+        playHaptic(feedback.hapticName);
+
+        // jackpot fanfare + confetti for legendary tier
+        if (feedback.fanfare) {
+            playJackpotFanfare();
+            spawnPackConfetti(feedback.color, wonReward.rarity === 'gold' ? 38 : 26);
+        }
+
+        // canvas screen shake + particle burst (still works in lobby because canvas exists)
         screenShake = Math.min(3.4, screenShake + feedback.shake);
         powerPulse = Math.min(2.6, powerPulse + feedback.pulse);
         addP(window.GW * 0.5, window.GH * 0.42, feedback.color, feedback.burst, 310, 0.95, 7);
@@ -2630,7 +3756,12 @@ function openPackSequence(packKey) {
         const offset = targetOffset * eased;
         track.style.transform = `translateX(-${offset}px)`;
 
-        const currentIndex = Math.floor((offset + 226) / cardWidth);
+        const currentCenter = offset + viewportCenter;
+        let currentIndex = lastIndex;
+        for (let i = Math.max(0, lastIndex + 1); i < itemCenters.length; i++) {
+            if (itemCenters[i] > currentCenter) break;
+            currentIndex = i;
+        }
         if (currentIndex > lastIndex) {
             const deltaOffset = Math.max(1, offset - lastOffset);
             const deltaTime = Math.max(1, timestamp - lastTickTime) / 1000;
@@ -2638,9 +3769,14 @@ function openPackSequence(packKey) {
             const intensity = Math.max(0.55, Math.min(1.18, speed / 850));
             for (let i = lastIndex + 1; i <= currentIndex; i++) {
                 playSfx('caseTick', intensity);
+                playHaptic('packTick');
             }
             lastIndex = currentIndex;
             lastTickTime = timestamp;
+        }
+
+        if (t >= 1) {
+            track.style.transform = `translateX(-${targetOffset}px)`;
         }
 
         lastOffset = offset;
@@ -2704,7 +3840,7 @@ window.buyUpgrade = function(id) {
     renderHub();
     updateMetaHud();
     playSfx('upgrade', 0.8);
-    triggerHaptic(10);
+    playHaptic(getUpgradeTierInfo(upgrade, level).isMajor ? 'hard' : 'medium');
     showToast(`${upgrade.name} upgraded.`);
 };
 
@@ -2726,6 +3862,7 @@ window.buyShopItem = function(id) {
         saveSave();
         renderInventory();
         updateMetaHud();
+        playHaptic('medium');
         showToast(`${PACK_DEFINITIONS[item.reward.packKey].name} stored in inventory.`);
         return;
     }
@@ -2746,7 +3883,7 @@ window.buyShopItem = function(id) {
     renderInventory();
     updateMetaHud();
     playSfx('upgrade', 0.7);
-    triggerHaptic(12);
+    playHaptic('medium');
     showToast(`${item.name} purchased.`);
 };
 
@@ -2758,6 +3895,7 @@ window.buyPremiumPack = function(id) {
     renderInventory();
     updateMetaHud();
     playSfx('upgrade', 0.9);
+    playHaptic('medium');
     showToast(`${PACK_DEFINITIONS[item.reward.packKey].name} added to inventory. Premium checkout simulated.`);
 };
 
@@ -2771,6 +3909,7 @@ window.buyPremiumOffer = function(id) {
         renderShop();
         updateMetaHud();
         playSfx('upgrade', 0.9);
+        playHaptic('medium');
         showToast(`${formatCompactNumber(item.reward.gold)} gold added. Premium checkout simulated.`);
         return;
     }
@@ -2781,6 +3920,7 @@ window.buyPremiumOffer = function(id) {
         renderShop();
         updateMetaHud();
         playSfx('upgrade', 0.9);
+        playHaptic('medium');
         showToast(`${item.reward.gems} gems added. Premium checkout simulated.`);
         return;
     }
@@ -2809,6 +3949,7 @@ window.buyPremiumOffer = function(id) {
     renderLoadout();
     renderShop();
     playSfx('upgrade', 0.9);
+    playHaptic('medium');
     showToast(`${item.name} applied. Premium checkout simulated.`);
 };
 
@@ -2853,12 +3994,11 @@ function createPlayer() {
     const inventory = getInventoryBonuses();
     const spawn = getArenaSpawnPoint();
     const milestone = getMilestoneBonuses(currentLevel || save.unlocked);
-    const earlyDamageBoost = currentLevel <= 10 ? 1.26 : currentLevel <= 20 ? 1.1 : 1;
-    const damageUpgrade = getUpgradeBonus(PLAYER_STATS.dmg, save.stats.dmg);
-    const fireRateUpgrade = getUpgradeBonus(PLAYER_STATS.atkSpd, save.stats.atkSpd);
-    const speedUpgrade = getUpgradeBonus(PLAYER_STATS.speed, save.stats.speed);
+    const earlyDamageBoost = currentLevel <= 10 ? 1.18 : currentLevel <= 20 ? 1.04 : 1;
+    const damageUpgrade = getUpgradeBonus(PLAYER_STATS.dmg, save.stats.dmg, 'dmg');
+    const fireRateUpgrade = getUpgradeBonus(PLAYER_STATS.atkSpd, save.stats.atkSpd, 'atkSpd');
     const baseDamage = (PLAYER_STATS.dmg.base + damageUpgrade) * Math.max(0.18, 1 + inventory.damageMultiplier + milestone.damageMultiplier) * earlyDamageBoost;
-    const speed = (PLAYER_STATS.speed.base + speedUpgrade) * (1 + inventory.speedMultiplier);
+    const speed = PLAYER_STATS.speed.base * (1 + inventory.speedMultiplier);
     const magnet = PLAYER_STATS.magnet.base + inventory.magnetFlat + milestone.magnet;
     const atkSpeedMult = Math.max(0.35, (PLAYER_STATS.atkSpd.base + fireRateUpgrade) * (1 + inventory.attackSpeedMultiplier + milestone.fireRateMultiplier));
 
@@ -2905,42 +4045,32 @@ function createPlayer() {
 }
 
 function getAbilityEvolutionText(id, rank) {
-    const nextRank = rank + 1;
-    switch (id) {
-        case 'damage_boost': return `Rank ${nextRank}: +22% total weapon damage`;
-        case 'rapid_fire': return `Rank ${nextRank}: +14% faster firing`;
-        case 'multi': return `Rank ${nextRank}: +1 projectile per volley`;
-        case 'pierce': return `Rank ${nextRank}: +1 extra pierce`;
-        case 'chain_lightning': return `Rank ${nextRank}: ${1 + (rank * 2)} chain targets, stronger arcs`;
-        case 'tornado_shot': return `Rank ${nextRank}: more tornado blades and impact`;
-        case 'echo_shot': return `Rank ${nextRank}: more frequent echo volleys`;
-        case 'ion_round': return `Rank ${nextRank}: heavier ion burst and chain power`;
-        case 'shock_nova': return `Rank ${nextRank}: nova triggers faster and hits harder`;
-        case 'heal_heart': return rank > 0 ? `Rank ${nextRank}: heal and gain a burst of power` : 'Restore one heart';
-        case 'orbiter': return `Rank ${nextRank}: add another orbit drone`;
-        case 'phoenix_drive': return `Rank ${nextRank}: stronger heart-loss explosion and shorter cooldown`;
-        case 'singularity': return `Rank ${nextRank}: stronger pull and wider singularity field`;
-        default: return '';
-    }
+    const ability = ABILITIES.find((a) => a.id === id);
+    if (!ability || !ability.tree) return '';
+    const nextIdx = Math.min(ability.tree.length - 1, rank);
+    const next = ability.tree[nextIdx];
+    return next ? next.desc : '';
 }
 
 function getAbilityIconMarkup(id, fallback) {
-    const icons = {
-        damage_boost: '<div class="ability-symbol fist"><span></span><span></span><span></span></div>',
-        rapid_fire: '<div class="ability-symbol barrage"><span></span><span></span><span></span></div>',
-        multi: '<div class="ability-symbol volley"><span></span><span></span><span></span></div>',
-        pierce: '<div class="ability-symbol pierce"><span></span><span></span></div>',
-        chain_lightning: '<div class="ability-symbol lightning"><span></span><span></span><span></span></div>',
-        tornado_shot: '<div class="ability-symbol tornado"><span></span><span></span><span></span></div>',
-        echo_shot: '<div class="ability-symbol echo"><span></span><span></span><span></span></div>',
-        ion_round: '<div class="ability-symbol ion"><span></span><span></span></div>',
-        shock_nova: '<div class="ability-symbol nova"><span></span><span></span><span></span></div>',
-        heal_heart: '<div class="ability-symbol heart"><span></span></div>',
-        orbiter: '<div class="ability-symbol orbit"><span></span><span></span><span></span></div>',
-        phoenix_drive: '<div class="ability-symbol nova"><span></span><span></span><span></span></div>',
-        singularity: '<div class="ability-symbol orbit"><span></span><span></span><span></span></div>'
+    const svgs = {
+        damage_boost: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 18 L13 5 L18 18"/><line x1="9.5" y1="14" x2="16.5" y2="14"/><line x1="13" y1="5" x2="13" y2="2"/><polyline points="10.5,4 13,2 15.5,4"/></svg>`,
+        rapid_fire: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="13" x2="20" y2="13"/><line x1="4" y1="18" x2="20" y2="18"/><polyline points="17,5.5 21,8 17,10.5" stroke-linejoin="round"/><polyline points="17,10.5 21,13 17,15.5" stroke-linejoin="round"/><polyline points="17,15.5 21,18 17,20.5" stroke-linejoin="round"/></svg>`,
+        multi: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="21" x2="13" y2="6"/><line x1="7" y1="21" x2="9" y2="6"/><line x1="19" y1="21" x2="17" y2="6"/><polyline points="11,8 13,6 15,8"/><polyline points="5.5,8.5 7.5,6.5 9.5,8.5"/><polyline points="16.5,8.5 18.5,6.5 20.5,8.5"/></svg>`,
+        pierce: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="3" y1="13" x2="23" y2="13"/><polyline points="18,9 23,13 18,17" stroke-linejoin="round"/><circle cx="8" cy="13" r="2.5"/><circle cx="15" cy="13" r="2.5"/></svg>`,
+        chain_lightning: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,2 9,13 13.5,13 10,24"/><line x1="4" y1="7" x2="8.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="22" y1="7" x2="17.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="4" y1="19" x2="9.5" y2="16.5" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="4" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="22" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="4" cy="19" r="1.8" fill="currentColor" stroke="none"/></svg>`,
+        tornado_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4,7 Q13,3.5 22,7" stroke-width="1.8"/><path d="M6.5,12 Q13,9.5 19.5,12" stroke-width="1.6"/><path d="M9,17 Q13,15 17,17" stroke-width="1.4"/><line x1="13" y1="17" x2="13" y2="22" stroke-width="1.6"/><path d="M11,22 Q13,24.5 15,22" stroke-width="1.3"/></svg>`,
+        echo_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3" stroke-width="1.8"/><circle cx="13" cy="13" r="6.5" stroke-width="1.2" stroke-dasharray="3 2"/><circle cx="13" cy="13" r="10" stroke-width="1" stroke-dasharray="2 3"/><line x1="13" y1="3" x2="13" y2="6.5" stroke-width="1.5"/><line x1="13" y1="19.5" x2="13" y2="23" stroke-width="1.5"/></svg>`,
+        ion_round: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="13" cy="13" rx="3.5" ry="10" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="2" fill="currentColor" stroke="none"/></svg>`,
+        shock_nova: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="5" stroke-width="1.8"/><line x1="13" y1="2" x2="13" y2="7" stroke-width="1.6"/><line x1="13" y1="19" x2="13" y2="24" stroke-width="1.6"/><line x1="2" y1="13" x2="7" y2="13" stroke-width="1.6"/><line x1="19" y1="13" x2="24" y2="13" stroke-width="1.6"/><line x1="5" y1="5" x2="8.2" y2="8.2" stroke-width="1.4"/><line x1="21" y1="5" x2="17.8" y2="8.2" stroke-width="1.4"/><line x1="5" y1="21" x2="8.2" y2="17.8" stroke-width="1.4"/><line x1="21" y1="21" x2="17.8" y2="17.8" stroke-width="1.4"/></svg>`,
+        heal_heart: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,21 C13,21 4,15 4,9 C4,6.2 6.2,4 9,4 C10.8,4 12.3,5 13,6.2 C13.7,5 15.2,4 17,4 C19.8,4 22,6.2 22,9 C22,15 13,21 13,21Z"/><line x1="13" y1="9" x2="13" y2="15"/><line x1="10" y1="12" x2="16" y2="12"/></svg>`,
+        orbiter: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="2.5" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(60 13 13)"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(120 13 13)"/></svg>`,
+        phoenix_drive: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,2 L15.5,9 L23,9 L17,14 L19.5,22 L13,17.5 L6.5,22 L9,14 L3,9 L10.5,9 Z"/></svg>`,
+        singularity: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="7" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="13" cy="13" r="10.5" stroke-width="1" stroke-dasharray="1 3"/><line x1="4" y1="4" x2="9" y2="9" stroke-width="1.3"/><line x1="22" y1="4" x2="17" y2="9" stroke-width="1.3"/><line x1="4" y1="22" x2="9" y2="17" stroke-width="1.3"/><line x1="22" y1="22" x2="17" y2="17" stroke-width="1.3"/></svg>`
     };
-    return icons[id] || fallback;
+    const wrap = svgs[id];
+    if (wrap) return `<div class="ability-icon ability-${id}">${wrap}</div>`;
+    return fallback;
 }
 
 function drawAbilityChoices() {
@@ -2958,7 +4088,7 @@ function drawAbilityChoices() {
         const card = document.createElement('div');
         card.className = 'shop-card ability-card';
         card.innerHTML = `
-            <div class="card-icon ability-icon ability-${ability.id}">${getAbilityIconMarkup(ability.id, ability.icon)}</div>
+            ${getAbilityIconMarkup(ability.id, ability.icon)}
             <div class="card-title">${ability.name}</div>
             <div class="card-meta">${rank > 0 ? `Owned Lv ${rank}` : `${ability.rarity.toUpperCase()} | Lv ${ability.unlockLevel || 1}`}</div>
             <div class="card-copy">${getAbilityEvolutionText(ability.id, rank)}</div>
@@ -3017,7 +4147,7 @@ function applyAbility(id) {
     playSfx('ability', ability?.rarity === 'epic' ? 1.25 : 1);
     powerPulse = Math.min(2.2, powerPulse + (ability?.rarity === 'epic' ? 0.58 : 0.32));
     screenShake = Math.min(2.7, screenShake + (ability?.rarity === 'epic' ? 0.42 : 0.18));
-    triggerHaptic(ability?.rarity === 'epic' ? [14, 18, 24] : 12);
+    playHaptic(ability?.rarity === 'epic' ? 'hard' : 'medium');
 }
 
 function update(dt) {
@@ -3199,7 +4329,7 @@ function damagePlayer(source) {
     addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.48, 22);
     screenShake = Math.min(2.5, screenShake + 0.5);
     playSfx('hit', source === 'boss' ? 1.15 : 1);
-    triggerHaptic(source === 'boss' ? [18, 20, 22] : 14);
+    playHaptic(source === 'boss' ? 'hard' : 'medium');
 
     if (player.phoenixDrive && player.phoenixCooldown <= 0) {
         player.phoenixCooldown = Math.max(4, 7 - getAbilityRank('phoenix_drive'));
@@ -3236,6 +4366,7 @@ window.showAbilities = function() {
     setActiveNav('nav-abilities');
     renderAbilityArchive();
     updateMetaHud();
+    playHaptic('soft');
 };
 
 function renderAbilityArchive() {
@@ -3256,19 +4387,142 @@ function renderAbilityArchive() {
     grid.innerHTML = '';
     ABILITIES.forEach((ability) => {
         const unlocked = (ability.unlockLevel || 1) <= save.unlocked;
-        const ownedRank = save.equippedCards ? 0 : 0;
-        const currentRank = player?.abilityRanks?.[ability.id] || 0;
+        const currentRank = (gameRunning && player?.abilityRanks?.[ability.id]) || 0;
+        const baseTier = (ability.rarity || 'common').toLowerCase();
+        const tree = ability.tree || [{ name: ability.name, tier: baseTier, desc: ability.desc }];
+        const treeMaxTier = tree[tree.length - 1].tier || baseTier;
         const card = document.createElement('div');
-        card.className = `shop-card ability-card ability-archive-card ${unlocked ? '' : 'locked'}`.trim();
+        card.className = `shop-card ability-card ability-archive-card rarity-tier-${treeMaxTier} ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
         card.innerHTML = `
-            <div class="card-icon ability-icon ability-${ability.id}">${getAbilityIconMarkup(ability.id, ability.icon)}</div>
+            ${getAbilityIconMarkup(ability.id, ability.icon)}
             <div class="card-title">${ability.name}</div>
-            <div class="card-meta ${unlocked ? '' : 'locked-meta'}">${unlocked ? `${ability.rarity.toUpperCase()} | ${currentRank > 0 ? `Owned Lv ${currentRank}` : 'Unlocked'}` : `LOCKED UNTIL LV ${ability.unlockLevel}`}</div>
-            <div class="card-copy">${unlocked ? ability.desc : 'Hidden until you reach the unlock level.'}</div>
-            ${unlocked ? `<div class="lock-badge">${currentRank > 0 ? `LV ${currentRank}` : 'READY'}</div>` : `<div class="lock-badge">LOCKED</div>`}
+            <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
+                ${unlocked ? `<span class="rarity-tag tier-${baseTier}">${baseTier}</span>Lv ${ability.unlockLevel}+` : `Freigeschaltet ab Lv ${ability.unlockLevel}`}
+            </div>
+            <div class="ability-tree-track" aria-label="skill tree">
+                ${tree.map((node, i) => `
+                    <span class="tree-node tier-${node.tier} ${i < currentRank ? 'owned' : i === currentRank ? 'next' : 'future'}" title="${node.name}: ${node.desc}"></span>
+                `).join('<span class="tree-link"></span>')}
+            </div>
+            <div class="card-copy">${unlocked ? (currentRank > 0 ? `Now: ${tree[currentRank - 1].name}` : tree[0].name + ' — ' + tree[0].desc) : 'Hidden until you reach the unlock level.'}</div>
+            ${unlocked ? `<div class="lock-badge">${currentRank > 0 ? `Owned · ${currentRank}/${tree.length}` : 'Available in run'}</div>` : `<div class="lock-badge">Ab Lv ${ability.unlockLevel}</div>`}
         `;
+        if (unlocked) {
+            card.onclick = () => showAbilityDetail(ability.id);
+        }
         grid.appendChild(card);
     });
+}
+
+function showAbilityDetail(abilityId) {
+    const ability = ABILITIES.find((a) => a.id === abilityId);
+    if (!ability) return;
+    const overlay = document.getElementById('ability-detail-overlay');
+    const content = document.getElementById('ability-detail-content');
+    const card = document.getElementById('ability-detail-card');
+    if (!overlay || !content || !card) return;
+
+    const tier = (ability.rarity || 'common').toLowerCase();
+    const tierLabels = { common: 'Gewoehnlich', rare: 'Selten', epic: 'Episch', legendary: 'Legendaer' };
+    const rarityLabel = tierLabels[tier] || tier;
+    const currentRank = player?.abilityRanks?.[ability.id] || 0;
+
+    // build inner SVG (uses currentColor, we let CSS theme it)
+    const iconWrap = getAbilityIconMarkup(ability.id, ability.icon);
+
+    // pull stats based on what the ability does (simple heuristic)
+    const statRow = buildAbilityDetailStats(ability, currentRank);
+
+    content.classList.remove('tier-common', 'tier-rare', 'tier-epic', 'tier-legendary');
+    content.classList.add(`tier-${tier}`);
+
+    card.innerHTML = `
+        <div class="ability-detail-title">${ability.name}</div>
+        <div class="ability-detail-icon-wrap">
+            <div class="detail-arc-container">
+                <svg class="detail-arc-svg" viewBox="0 0 220 220">
+                    <ellipse class="detail-arc-path"     cx="110" cy="110" rx="100" ry="40" transform="rotate(-20 110 110)"/>
+                    <ellipse class="detail-arc-path alt" cx="110" cy="110" rx="85"  ry="35" transform="rotate(40 110 110)"/>
+                </svg>
+            </div>
+            <div class="neon-svg">${iconWrap}</div>
+            <div class="detail-sparks" id="ability-detail-sparks"></div>
+        </div>
+        <div class="ability-detail-stats">${statRow}</div>
+        <div class="ability-detail-desc">${ability.desc}</div>
+        <div class="ability-detail-rarity">${rarityLabel}</div>
+    `;
+
+    // strip the outer .ability-icon wrapper so SVG fills the 200px container
+    const inner = card.querySelector('.neon-svg .ability-icon');
+    if (inner) {
+        const svg = inner.querySelector('svg');
+        if (svg) {
+            inner.parentElement.replaceChild(svg, inner);
+            svg.removeAttribute('width');
+            svg.removeAttribute('height');
+            svg.style.width = '100%';
+            svg.style.height = '100%';
+            // recolor to match rarity stroke
+            svg.querySelectorAll('[stroke]').forEach((el) => {
+                if (el.getAttribute('stroke') === 'currentColor') el.setAttribute('stroke', 'currentColor');
+            });
+            svg.style.color = 'var(--detail-stroke)';
+        }
+    }
+
+    // generate sparks
+    const sparksEl = document.getElementById('ability-detail-sparks');
+    if (sparksEl) {
+        sparksEl.innerHTML = '';
+        for (let i = 0; i < 14; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = 65 + Math.random() * 35;
+            const cx = 110, cy = 110;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+            const dx = (Math.cos(angle) * 18 + (Math.random() - 0.5) * 14).toFixed(1);
+            const dy = (Math.sin(angle) * 18 + (Math.random() - 0.5) * 14).toFixed(1);
+            const sp = document.createElement('div');
+            sp.className = 'detail-spark';
+            sp.style.cssText = `left:${x}px; top:${y}px; --sd:${1.5 + Math.random() * 2}s; --ss:${-Math.random() * 3}s; --sx:${dx}px; --sy:${dy}px;`;
+            sparksEl.appendChild(sp);
+        }
+    }
+
+    overlay.classList.add('active');
+    playHaptic && playHaptic('soft');
+}
+
+function buildAbilityDetailStats(ability, rank) {
+    const tier = (ability.rarity || 'common').toLowerCase();
+    const tierLevels = { common: 1, rare: 2, epic: 3, legendary: 4 };
+    const tierStars = '★'.repeat(tierLevels[tier] || 1) + '☆'.repeat(4 - (tierLevels[tier] || 1));
+    const rankLabel = rank > 0 ? `Lv ${rank}` : 'NEU';
+    const unlockLabel = `Lv ${ability.unlockLevel || 1}`;
+    return `
+        <div class="ability-detail-stat">
+            <span class="ability-detail-stat-label">Tier</span>
+            <span class="ability-detail-stat-value">${tierStars}</span>
+        </div>
+        <div class="ability-detail-stat-divider"></div>
+        <div class="ability-detail-stat">
+            <span class="ability-detail-stat-label">Status</span>
+            <span class="ability-detail-stat-value">${rankLabel}</span>
+        </div>
+        <div class="ability-detail-stat-divider"></div>
+        <div class="ability-detail-stat">
+            <span class="ability-detail-stat-label">Unlock</span>
+            <span class="ability-detail-stat-value">${unlockLabel}</span>
+        </div>
+    `;
+}
+
+function closeAbilityDetail(event) {
+    // when called from the overlay backdrop click, only close if the backdrop itself was clicked
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('ability-detail-overlay');
+    if (overlay) overlay.classList.remove('active');
 }
 
 function updateMetaHud() {
@@ -3291,6 +4545,8 @@ function updateMetaHud() {
     if (goldNode) goldNode.textContent = save.gold;
     if (gemsNode) gemsNode.textContent = save.gems;
     if (levelNode) levelNode.textContent = `LEVEL ${save.unlocked}`;
+    updateUpgradeNotifier();
+    renderDailyLoginPanel();
 
     if (waveNode) {
         if (gameRunning) {
@@ -3304,13 +4560,13 @@ function updateMetaHud() {
         }
     }
 
-    if (label) label.textContent = currentMode === 'endless' ? `Endless Lv ${save.unlocked}` : `Level ${save.unlocked}`;
+    if (label) label.textContent = currentMode === 'endless' ? `Endless · Wave ${currentWave + 1}` : `Level ${save.unlocked}`;
     if (desc) {
         const previewDrone = formatCompactNumber(getEnemyLevelStats('drone', save.unlocked).hp);
         const waves = getLevelWaves(save.unlocked).length;
         desc.textContent = currentMode === 'endless'
             ? `Infinite waves with almost no gold payout. Starts around Level ${save.unlocked}. Drone HP: ${previewDrone}.`
-            : `Level 1-10 flies by, then progression slows down. ${waves} waves. Drone HP: ${previewDrone}.${nextMilestone ? ` Next power spike: Lv ${nextMilestone.level}.` : ''}`;
+            : `Spikes werden jetzt deutlich haerter. ${waves} waves. Drone HP: ${previewDrone}.${nextMilestone ? ` Next power spike: Lv ${nextMilestone.level}.` : ''}`;
     }
     if (difficulty) {
         if (currentMode === 'endless') difficulty.textContent = 'Threat Endless';

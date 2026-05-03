@@ -1202,51 +1202,86 @@ function getCurrentNavIndex() {
     if (!active) return 2;
     return Math.max(0, NAV_ORDER.findIndex((n) => n.id === active.id));
 }
-function navigateRelative(delta) {
-    if (gameRunning) return; // don't switch tabs during a fight
+function navigateRelative(delta, opts = {}) {
+    if (gameRunning) return;
     const cur = getCurrentNavIndex();
     const next = cur + delta;
     if (next < 0 || next >= NAV_ORDER.length) return;
-    NAV_ORDER[next].open();
+    // Animate slide-out current, then load next + slide-in
+    const oldScreen = document.querySelector('.screen.active');
+    const dir = delta > 0 ? 1 : -1;
+    if (oldScreen && !opts.skipAnim) {
+        oldScreen.classList.remove('screen-slide-in-l', 'screen-slide-in-r');
+        oldScreen.classList.add(dir > 0 ? 'screen-slide-out-l' : 'screen-slide-out-r');
+        setTimeout(() => {
+            NAV_ORDER[next].open();
+            const newScreen = document.querySelector('.screen.active');
+            if (newScreen) {
+                newScreen.classList.remove('screen-slide-out-l', 'screen-slide-out-r');
+                newScreen.classList.add(dir > 0 ? 'screen-slide-in-r' : 'screen-slide-in-l');
+                setTimeout(() => newScreen.classList.remove('screen-slide-in-r', 'screen-slide-in-l'), 320);
+            }
+        }, 180);
+    } else {
+        NAV_ORDER[next].open();
+    }
     if (typeof playHaptic === 'function') playHaptic('tap');
 }
 
 function installSwipeNavigation() {
     let startX = 0, startY = 0, startT = 0, tracking = false;
-    const SCREEN_SEL = '.screen.active';
+    let committed = false; // once horizontal direction is locked we commit
     const root = document.body;
 
     function down(e) {
-        // Only when not in run, no overlay open
         if (gameRunning) return;
         const overlayOpen = !!document.querySelector('.modal-overlay.active');
         if (overlayOpen) return;
-        // Don't grab swipes that started inside the nav (so taps on nav still work)
-        if (e.target.closest('#global-nav, .map-rail, .left-rail, .right-rail, button, input, .pack-card-v2, .ability-pick-content')) return;
+        if (e.target.closest('#global-nav, .left-rail, .right-rail, button, input, select, textarea, .pack-card-v2, .ability-pick-content')) return;
         const t = e.touches ? e.touches[0] : e;
         startX = t.clientX;
         startY = t.clientY;
         startT = performance.now();
         tracking = true;
+        committed = false;
+    }
+    function move(e) {
+        // Once we know it's a horizontal swipe, prevent the page from cancelling
+        // (vertical scroll no longer eats horizontal). We don't preventDefault on
+        // touchmove (passive listener) but we set a flag so the up handler still
+        // dispatches navigation even after long vertical motion.
+        if (!tracking || committed) return;
+        const t = e.touches ? e.touches[0] : e;
+        const dx = Math.abs(t.clientX - startX);
+        const dy = Math.abs(t.clientY - startY);
+        if (dx > 16 && dx > dy * 1.2) committed = true;
     }
     function up(e) {
         if (!tracking) return;
         tracking = false;
-        const t = e.changedTouches ? e.changedTouches[0] : e;
+        const t = (e.changedTouches && e.changedTouches[0]) || e;
         const dx = t.clientX - startX;
         const dy = t.clientY - startY;
         const dt = performance.now() - startT;
         const horiz = Math.abs(dx);
         const vert = Math.abs(dy);
-        // Require: horizontal > 70px, dominant horizontal, fast enough
-        if (horiz < 70) return;
-        if (horiz < vert * 1.5) return;
-        if (dt > 700) return;
+        // Commit-flag relaxes the cancel: if we ever crossed the horizontal lock,
+        // we navigate even if the user wandered vertically afterwards.
+        if (committed) {
+            if (horiz < 60) return;
+        } else {
+            if (horiz < 80) return;
+            if (horiz < vert * 1.2) return;
+        }
+        if (dt > 1200) return;
         navigateRelative(dx < 0 ? 1 : -1);
     }
     root.addEventListener('touchstart', down, { passive: true });
-    root.addEventListener('touchend', up,   { passive: true });
+    root.addEventListener('touchmove',  move, { passive: true });
+    root.addEventListener('touchend',   up,   { passive: true });
+    root.addEventListener('touchcancel', up,  { passive: true });
     root.addEventListener('mousedown', down);
+    root.addEventListener('mousemove', move);
     root.addEventListener('mouseup', up);
 }
 
@@ -1258,7 +1293,8 @@ window.openSettings = function() {
     playHaptic('soft');
 };
 
-window.closeSettings = function() {
+window.closeSettings = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
     const overlay = document.getElementById('settings-overlay');
     if (overlay) overlay.classList.remove('active');
     playHaptic('soft');
@@ -3075,7 +3111,7 @@ function getRewardArtSvg(id, type) {
                 <circle cx="50" cy="50" r="7" fill="${s.core}"/>`;
         }
 
-        return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">${auraGrad}${body}</svg>`;
+        return `<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${auraGrad}${body}</svg>`;
     }
     if (type === 'chip') {
         const chip = INVENTORY_CARDS[id];
@@ -3099,7 +3135,7 @@ function getRewardArtSvg(id, type) {
         };
         const shape = shapeMap[id] || `<rect x="30" y="30" width="40" height="40" fill="none" stroke="${color}" stroke-width="3"/>`;
         return `
-            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <radialGradient id="cg-${id}" cx="50%" cy="50%" r="55%">
                         <stop offset="0%" stop-color="${color}" stop-opacity="0.45"/>
@@ -3526,17 +3562,17 @@ function renderInventory() {
     }
 
     skinEntries.forEach(([skinId, skin]) => {
-        const box = document.createElement('div');
-        box.className = `shop-card rarity-${skin.rarity}`;
         const equipped = save.equippedSkin === skinId;
-        box.innerHTML = `
-            ${getSkinVisualMarkup(skinId)}
-            <div class="card-title">${skin.name}</div>
-            <div class="card-meta">${getRarityLabel(skin.rarity).toUpperCase()} SKIN</div>
-            <div class="card-copy">${skin.sigil} | ${skin.desc}</div>
-            <button class="inline-button" type="button" ${equipped ? 'disabled' : ''}>${equipped ? 'EQUIPPED' : 'EQUIP SKIN'}</button>
-        `;
-        box.querySelector('button').onclick = () => equipSkin(skinId);
+        const box = renderFlipCard({
+            id: skinId,
+            type: 'skin',
+            def: skin,
+            count: 1,
+            extraMeta: equipped ? 'EQUIPPED' : 'OWNED',
+            cta: equipped ? 'EQUIPPED' : 'EQUIP SKIN',
+            ctaDisabled: equipped,
+            onCta: () => equipSkin(skinId)
+        });
         grid.appendChild(box);
     });
 
@@ -3564,33 +3600,16 @@ function renderInventory() {
         if (!card) return;
         const equippedCount = getEquippedCounts()[cardId] || 0;
         const sellable = Math.max(0, count - equippedCount);
-        const box = document.createElement('div');
-        box.className = `shop-card rarity-${card.rarity} inventory-card`;
-        box.innerHTML = `
-            <div class="inventory-card-inner">
-                <div class="inventory-card-face inventory-card-front">
-                    ${getCardVisualMarkup(cardId)}
-                    <div class="card-title">${card.name}${count > 1 ? ` x${count}` : ''}</div>
-                    <div class="card-meta">${getRarityLabel(card.rarity).toUpperCase()} - Tier ${card.tier}</div>
-                    <div class="card-copy">${card.sigil}</div>
-                    <button class="inline-button" type="button" ${sellable <= 0 ? 'disabled' : ''}>${sellable <= 0 ? 'LOCKED IN LOADOUT' : `SELL ${getCardSellValue(cardId)} GOLD`}</button>
-                </div>
-                <div class="inventory-card-face inventory-card-back">
-                    <div class="card-meta">CARD INFO</div>
-                    <div class="card-title">${card.name}</div>
-                    <div class="card-copy">${card.desc}</div>
-                    <div class="card-meta">Tap again to flip back</div>
-                </div>
-            </div>
-        `;
-        box.onclick = (event) => {
-            if (event.target.closest('button')) return;
-            box.classList.toggle('flipped');
-        };
-        box.querySelector('button').onclick = (event) => {
-            event.stopPropagation();
-            sellInventoryCard(cardId);
-        };
+        const box = renderFlipCard({
+            id: cardId,
+            type: 'chip',
+            def: card,
+            count,
+            extraMeta: `Tier ${card.tier} · Free ${sellable}`,
+            cta: sellable <= 0 ? 'LOCKED' : `SELL ${getCardSellValue(cardId)}G`,
+            ctaDisabled: sellable <= 0,
+            onCta: () => sellInventoryCard(cardId)
+        });
         grid.appendChild(box);
     });
 }
@@ -3647,18 +3666,79 @@ function renderLoadout() {
         if (!card) return;
         const freeCopies = count - (equippedCounts[cardId] || 0);
         const canEquip = freeCopies > 0 && canEquipCard(cardId);
-        const box = document.createElement('div');
-        box.className = `shop-card rarity-${card.rarity}`;
-        box.innerHTML = `
-            ${getCardVisualMarkup(cardId)}
-            <div class="card-title">${card.name}${count > 1 ? ` x${count}` : ''}</div>
-            <div class="card-meta">${getRarityLabel(card.rarity).toUpperCase()} | Free ${Math.max(0, freeCopies)}</div>
-            <div class="card-copy">${card.sigil}</div>
-            <button class="inline-button" type="button" ${canEquip ? '' : 'disabled'}>${canEquip ? 'EQUIP' : 'NO SLOT'}</button>
-        `;
-        box.querySelector('button').onclick = () => equipCard(cardId);
+        const box = renderFlipCard({
+            id: cardId,
+            type: 'chip',
+            def: card,
+            count,
+            extraMeta: `Free ${Math.max(0, freeCopies)}`,
+            cta: canEquip ? 'EQUIP' : 'NO SLOT',
+            ctaDisabled: !canEquip,
+            onCta: () => equipCard(cardId)
+        });
         cardsGrid.appendChild(box);
     });
+}
+
+// Generic flippable card used in Loadout + Inventory.
+// Front = peek-style hero art + name + tier; Back = stats + CTA + sigil.
+function renderFlipCard({ id, type, def, count, extraMeta, cta, ctaDisabled, onCta }) {
+    const wrap = document.createElement('div');
+    const tier = (def.rarity || 'blue').toLowerCase();
+    wrap.className = `flip-card rarity-${tier}`;
+    const heroSvg = getRewardArtSvg(id, type);
+    const tierLabel = getRarityLabel(tier);
+    const statsHtml = describeCardEffect(type, def);
+    wrap.innerHTML = `
+        <div class="flip-card-inner">
+            <div class="flip-card-face flip-front">
+                <div class="flip-hero">
+                    <div class="flip-tier-badge tier-${tier}">${tierLabel}</div>
+                    ${count > 1 ? `<div class="flip-count">×${count}</div>` : ''}
+                    <div class="flip-art">${heroSvg}</div>
+                </div>
+                <div class="flip-name">${def.name}</div>
+                <div class="flip-meta">${extraMeta || ''}</div>
+                <div class="flip-flip-hint">tap to flip</div>
+            </div>
+            <div class="flip-card-face flip-back">
+                <div class="flip-back-title">${def.name}</div>
+                <div class="flip-back-tier tier-${tier}">${tierLabel}${def.sigil ? ' · ' + def.sigil : ''}</div>
+                <div class="flip-back-effect">${statsHtml}</div>
+                ${cta ? `<button class="flip-back-cta ${ctaDisabled ? 'disabled' : ''}" type="button" ${ctaDisabled ? 'disabled' : ''}>${cta}</button>` : ''}
+                <div class="flip-flip-hint">tap to flip</div>
+            </div>
+        </div>
+    `;
+    // Click anywhere flips the card; CTA button is excluded
+    wrap.addEventListener('click', (e) => {
+        if (e.target.closest('.flip-back-cta')) return;
+        wrap.classList.toggle('flipped');
+        playSfx && playSfx('tap', 0.6);
+        playHaptic && playHaptic('tap');
+    });
+    const ctaBtn = wrap.querySelector('.flip-back-cta');
+    if (ctaBtn && onCta && !ctaDisabled) {
+        ctaBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onCta();
+        });
+    }
+    return wrap;
+}
+
+function describeCardEffect(type, def) {
+    if (type === 'chip' && def.effect) {
+        const parts = [];
+        if (def.effect.damageMultiplier)      parts.push(`<div class="fx-stat">DMG <strong>${(def.effect.damageMultiplier > 0 ? '+' : '')}${(def.effect.damageMultiplier * 100).toFixed(0)}%</strong></div>`);
+        if (def.effect.attackSpeedMultiplier) parts.push(`<div class="fx-stat">RPM <strong>${(def.effect.attackSpeedMultiplier > 0 ? '+' : '')}${(def.effect.attackSpeedMultiplier * 100).toFixed(0)}%</strong></div>`);
+        if (def.effect.magnetFlat)            parts.push(`<div class="fx-stat">MAG <strong>+${def.effect.magnetFlat}</strong></div>`);
+        return parts.join('') + (def.desc ? `<div class="fx-desc">${def.desc}</div>` : '');
+    }
+    if (type === 'skin') {
+        return `<div class="fx-desc">${def.desc || ''}</div>`;
+    }
+    return def.desc || '';
 }
 
 function buildSlotMarkup(type, total, equipped) {
@@ -3756,29 +3836,46 @@ function renderLevelRoadmap() {
     const host = document.getElementById('level-roadmap');
     if (!host) return;
     const cur = Math.max(1, save.unlocked || 1);
-    // Layout: 2 future, current, 2 past (reading top → bottom)
-    const items = [
-        { lvl: cur + 3, state: 'future', chest: true  },
-        { lvl: cur + 2, state: 'future', chest: false },
-        { lvl: cur + 1, state: 'future-soon', chest: true },
-        { lvl: cur,     state: 'current', chest: false },
-        { lvl: cur - 1, state: 'locked', chest: false },
-    ].filter((it) => it.lvl >= 1);
+    // Show 8 future levels + current + 1 past (reading top → bottom).
+    // Container is scrollable so player can scroll up to peek at later levels.
+    const items = [];
+    for (let i = 8; i >= -1; i--) {
+        const lvl = cur + i;
+        if (lvl < 1) continue;
+        let state = 'future';
+        if (lvl === cur) state = 'current';
+        else if (lvl === cur + 1) state = 'future-soon';
+        else if (lvl < cur) state = 'locked';
+        // Chest icon every 3 levels above current as a reward teaser
+        const chest = lvl > cur && (lvl - cur) % 3 === 0;
+        items.push({ lvl, state, chest });
+    }
 
     const chestSvg = `<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18"/><path d="M9 8c0-2 6-2 6 0"/></svg>`;
 
     let html = '';
     items.forEach((it, i) => {
-        html += `<div class="lr-node ${it.state}">
+        html += `<div class="lr-node ${it.state}" data-lvl="${it.lvl}">
             ${it.lvl}
             ${it.chest ? `<div class="lr-chest">${chestSvg}</div>` : ''}
         </div>`;
         if (i < items.length - 1) {
-            const lineActive = it.state === 'current' ? 'line-active' : '';
+            // Line is "active" (green) when both endpoints are at-or-below current
+            const lineActive = (items[i + 1].state === 'current' || items[i + 1].state === 'locked') ? 'line-active' : '';
             html += `<div class="lr-line ${lineActive}"></div>`;
         }
     });
     host.innerHTML = html;
+
+    // Scroll so the CURRENT node sits in the lower-middle of the viewport
+    // (so the user sees both their level and the next 2-3 levels above)
+    requestAnimationFrame(() => {
+        const currentEl = host.querySelector('.lr-node.current');
+        if (currentEl) {
+            const target = currentEl.offsetTop - host.clientHeight * 0.6;
+            host.scrollTop = Math.max(0, target);
+        }
+    });
 }
 
 function refreshLevelCta() {

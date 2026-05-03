@@ -174,23 +174,19 @@
     </div>
 
     <div id="daily-overlay" class="modal-overlay" onclick="closeDailyOverlay(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="modal-topline">
-                <h2 class="modal-title">Daily Login</h2>
-                <button class="mini-action" type="button" onclick="closeDailyOverlay()">Close</button>
-            </div>
-            <p class="screen-subtitle" id="daily-overlay-status">Tag 1 bereit</p>
+        <div class="modal-content lb-style-modal" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeDailyOverlay()">×</button>
+            <div class="lb-style-header"><h2>DAILY LOGIN</h2></div>
+            <p class="screen-subtitle" id="daily-overlay-status" style="text-align:center; margin-bottom:8px">Tag 1 bereit</p>
             <div id="daily-overlay-grid" class="daily-grid" style="margin-top:14px"></div>
         </div>
     </div>
 
     <div id="challenges-overlay" class="modal-overlay" onclick="closeChallengesOverlay(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="modal-topline">
-                <h2 class="modal-title">Daily Challenges</h2>
-                <button class="mini-action" type="button" onclick="closeChallengesOverlay()">Close</button>
-            </div>
-            <p class="screen-subtitle">Complete to climb the weekly leaderboard.</p>
+        <div class="modal-content lb-style-modal" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeChallengesOverlay()">×</button>
+            <div class="lb-style-header"><h2>AUFGABEN</h2></div>
+            <p class="screen-subtitle" style="text-align:center; margin-bottom:8px">Erledige sie und steige in der Liga auf.</p>
             <div id="challenges-list" style="display:flex; flex-direction:column; gap:8px; margin-top:14px"></div>
         </div>
     </div>
@@ -334,38 +330,54 @@
         </div>
     </div>
 
-    <div id="settings-overlay" class="modal-overlay">
-        <div class="modal-content settings-content">
-            <div class="modal-topline">
-                <h2 class="modal-title">Settings</h2>
-                <button class="mini-action" type="button" onclick="closeSettings()">Close</button>
-            </div>
-            <div class="settings-list">
-                <label class="settings-row" for="settings-sfx">
-                    <div>
-                        <div class="settings-label">SFX Volume</div>
-                        <div class="settings-copy">Shots, hits, pickups and ability sounds.</div>
+    <div id="settings-overlay" class="modal-overlay" onclick="closeSettings(event)">
+        <div class="modal-content lb-style-modal settings-content" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeSettings()">×</button>
+            <div class="lb-style-header"><h2>EINSTELLUNGEN</h2></div>
+            <div class="settings-list-v2">
+                <div class="setting-row-v2">
+                    <div class="setting-row-head">
+                        <div class="setting-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19 6a9 9 0 0 1 0 12"/></svg>
+                        </div>
+                        <div class="setting-info">
+                            <div class="setting-label">SFX Volume</div>
+                            <div class="setting-copy">Schüsse, Hits und Pack-Sounds.</div>
+                        </div>
+                        <span class="setting-value" id="settings-sfx-value">70%</span>
                     </div>
-                    <span class="settings-value" id="settings-sfx-value">70%</span>
-                </label>
-                <input id="settings-sfx" class="settings-range" type="range" min="0" max="100" step="5" oninput="updateSfxSetting(this.value)">
+                    <input id="settings-sfx" class="setting-slider" type="range" min="0" max="100" step="1" oninput="updateSfxSetting(this.value)">
+                </div>
 
-                <label class="settings-row" for="settings-music">
-                    <div>
-                        <div class="settings-label">Music Volume</div>
-                        <div class="settings-copy">Ambient background mix.</div>
+                <div class="setting-row-v2">
+                    <div class="setting-row-head">
+                        <div class="setting-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                        </div>
+                        <div class="setting-info">
+                            <div class="setting-label">Musik Volume</div>
+                            <div class="setting-copy">Hintergrundmusik im Lobby + Spiel.</div>
+                        </div>
+                        <span class="setting-value" id="settings-music-value">35%</span>
                     </div>
-                    <span class="settings-value" id="settings-music-value">35%</span>
-                </label>
-                <input id="settings-music" class="settings-range" type="range" min="0" max="100" step="5" oninput="updateMusicSetting(this.value)">
+                    <input id="settings-music" class="setting-slider" type="range" min="0" max="100" step="1" oninput="updateMusicSetting(this.value)">
+                </div>
 
-                <label class="settings-toggle">
-                    <div>
-                        <div class="settings-label">Haptics</div>
-                        <div class="settings-copy">Short vibration on hits and reward moments.</div>
+                <div class="setting-toggle-v2">
+                    <div class="setting-row-head">
+                        <div class="setting-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
+                        </div>
+                        <div class="setting-info">
+                            <div class="setting-label">Haptik</div>
+                            <div class="setting-copy">Vibration bei Hits und Belohnungen.</div>
+                        </div>
                     </div>
-                    <input id="settings-haptics" type="checkbox" onchange="toggleHaptics(this.checked)">
-                </label>
+                    <label class="toggle-switch">
+                        <input id="settings-haptics" type="checkbox" onchange="toggleHaptics(this.checked)">
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    </label>
+                </div>
             </div>
         </div>
     </div>

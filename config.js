@@ -4,7 +4,8 @@ const PLAYER_STATS = {
     hearts: { base: 3 },
     // Bigger early-level payoff (minorBase up), then tighter growth so late upgrades feel small.
     // Major spikes still pop but their growth is curbed past mid-game.
-    dmg:     { name: 'Damage',    base: 3,   progression: { minorBase: 0.22, minorGrowth: 1.045, majorBase: 1.10, majorGrowth: 1.10 } },
+    // Higher base damage + stronger per-level scaling so player keeps pace.
+    dmg:     { name: 'Damage',    base: 5,   progression: { minorBase: 0.32, minorGrowth: 1.06, majorBase: 1.40, majorGrowth: 1.12 } },
     atkSpd:  { name: 'Fire Rate', base: 1,   progression: { minorBase: 0.075, minorGrowth: 1.030, majorBase: 0.24, majorGrowth: 1.07 } },
     economy: { name: 'Income',    base: 1,   progression: { minorBase: 0.12, minorGrowth: 1.035, majorBase: 0.42, majorGrowth: 1.08 } },
     range:   { name: 'Range',     base: 420, inc: 24 },
@@ -185,16 +186,20 @@ const ENEMY_TYPES = {
 
 function getEnemyLevelStats(typeKey, level) {
     const base = ENEMY_TYPES[typeKey];
-    let scale = 2 + ((Math.max(1, level) - 1) * 1.8);
+    // SMOOTHED scaling — was too brutal (12x in 15 levels = 1k HP drones at lvl 20).
+    // New: gentle exponential that lets player upgrades keep pace.
+    let scale = 2 + ((Math.max(1, level) - 1) * 1.4);
 
     if (level > 10 && level <= 25) {
         const t = (level - 10) / 15;
-        scale = 18 * Math.pow(12, t);
+        // 4x growth across 15 levels (not 12x). At lvl 20 ≈ 16, at lvl 25 ≈ 60.
+        scale = 16 * Math.pow(4, t);
     } else if (level > 25 && level <= 50) {
         const t = (level - 25) / 25;
-        scale = 216 * Math.pow(100, t);
+        // Moderate ramp 60 → 600 across 25 levels (not 100x in same span).
+        scale = 60 * Math.pow(10, t);
     } else if (level > 50) {
-        scale = 21600 * Math.pow(1.16, level - 50);
+        scale = 600 * Math.pow(1.10, level - 50);
     }
 
     return {

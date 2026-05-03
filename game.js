@@ -64,7 +64,9 @@ let musicBassFreqs = null;
 let musicPluckGain = null;
 let musicPluckFilter = null;
 let musicPluckFreqs = null;
+let musicProgression = null;
 let musicStep = 0;
+let musicBar = 0;
 let musicSchedulerInterval = null;
 let packOpeningState = null;
 let packTickTimer = null;
@@ -265,7 +267,8 @@ function hasAffordableUpgrade() {
 function updateUpgradeNotifier() {
     const dot = document.getElementById('upgrade-nav-dot');
     if (!dot) return;
-    dot.classList.toggle('visible', hasAffordableUpgrade());
+    const show = hasAffordableUpgrade();
+    dot.classList.toggle('visible', show);
 }
 
 function getEconomyMultiplier() {
@@ -379,89 +382,119 @@ function ensureMusicEngine() {
 
     // ── BASS layer (deep sine with rhythm) ──────────────────────
     const bassGain = audioContext.createGain();
-    bassGain.gain.value = 0.28;
+    bassGain.gain.value = 0.32;
     bassGain.connect(comp);
     musicBassGain = bassGain;
-    musicBassFreqs = [55, 55, 55, 49, 55, 55, 65.4, 55]; // A1, A1, A1, G1, A1, A1, C2, A1
 
     // ── PLUCK arpeggio (light, 8th notes) ───────────────────────
     const pluckGain = audioContext.createGain();
-    pluckGain.gain.value = 0.22;
+    pluckGain.gain.value = 0.20;
     const pluckFilter = audioContext.createBiquadFilter();
     pluckFilter.type = 'lowpass';
     pluckFilter.frequency.value = 2400;
     pluckGain.connect(comp);
     musicPluckGain = pluckGain;
     musicPluckFilter = pluckFilter;
-    // A minor pentatonic over two octaves: A3 C4 D4 E4 G4 A4 C5 E5
-    musicPluckFreqs = [220.00, 261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 659.25];
 
-    // ── Tempo clock (96 BPM → 16th = 0.156s) ────────────────────
-    const bpm = 96;
-    const sixteenth = 60 / bpm / 4; // 0.156s
+    // Chord progression Am → F → C → G (vi-IV-I-V) — the classic uplifting loop
+    // 4 bars × 32 sixteenths = 128 step loop
+    musicProgression = [
+        // Am (root A2=55, 5th E3=82.4, 7th G3=98)
+        { bassRoots: [55, 55, 41.2, 55], plucks: [220.00, 261.63, 329.63, 392.00, 440.00, 392.00, 329.63, 261.63] },
+        // F  (root F2=43.65, 3rd A2, 5th C3)
+        { bassRoots: [43.65, 43.65, 32.7, 43.65], plucks: [174.61, 220.00, 261.63, 349.23, 440.00, 349.23, 261.63, 220.00] },
+        // C  (root C2=32.7, 3rd E2, 5th G2)
+        { bassRoots: [32.7, 32.7, 49.0, 32.7], plucks: [261.63, 329.63, 392.00, 523.25, 659.25, 523.25, 392.00, 329.63] },
+        // G  (root G2=49.0, 3rd B2, 5th D3)
+        { bassRoots: [49.0, 49.0, 36.7, 49.0], plucks: [196.00, 246.94, 293.66, 392.00, 493.88, 392.00, 293.66, 246.94] }
+    ];
+
+    // ── Tempo clock (88 BPM = chiller) ──────────────────────────
+    const bpm = 88;
+    const sixteenth = 60 / bpm / 4;
     musicStep = 0;
+    musicBar = 0;
     musicSchedulerInterval = window.setInterval(() => {
         if (!audioContext) return;
         const now = audioContext.currentTime;
-        // schedule next 8 sixteenths
         for (let i = 0; i < 8; i++) {
             const stepTime = now + i * sixteenth;
-            const step = (musicStep + i) % 32;
-            scheduleBeat(step, stepTime, sixteenth);
+            const step = (musicStep + i) % 16;
+            const bar = (musicBar + Math.floor((musicStep + i) / 16)) % 4;
+            scheduleBeat(step, stepTime, sixteenth, bar);
         }
-        musicStep = (musicStep + 8) % 32;
+        const advance = musicStep + 8;
+        musicBar = (musicBar + Math.floor(advance / 16)) % 4;
+        musicStep = advance % 16;
     }, sixteenth * 8 * 1000 * 0.9);
 
     musicNodesStarted = true;
     syncMusicVolume();
 }
 
-function scheduleBeat(step, when, dur) {
+function scheduleBeat(step, when, dur, bar = 0) {
     if (!audioContext) return;
+    const chord = musicProgression && musicProgression[bar];
+    if (!chord) return;
 
-    // Bass plays on every quarter (steps 0, 4, 8, 12, 16, 20, 24, 28)
+    // Bass plays on each quarter beat (4 per bar). Pattern: root, root, octave-down, root.
     if (step % 4 === 0) {
-        const idx = (step / 4) % musicBassFreqs.length;
-        const freq = musicBassFreqs[idx];
+        const idx = (step / 4) % chord.bassRoots.length;
+        const freq = chord.bassRoots[idx];
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
         o.type = 'sine';
         o.frequency.value = freq;
-        // sub layer
         const o2 = audioContext.createOscillator();
         o2.type = 'triangle';
         o2.frequency.value = freq * 0.5;
         const g2 = audioContext.createGain();
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.45, when + 0.012);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.4);
+        g.gain.exponentialRampToValueAtTime(0.5, when + 0.014);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.6);
         g2.gain.setValueAtTime(0.0001, when);
-        g2.gain.exponentialRampToValueAtTime(0.18, when + 0.02);
-        g2.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.6);
+        g2.gain.exponentialRampToValueAtTime(0.22, when + 0.022);
+        g2.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.8);
         o.connect(g); o2.connect(g2);
         g.connect(musicBassGain); g2.connect(musicBassGain);
         o.start(when); o2.start(when);
         o.stop(when + dur * 4); o2.stop(when + dur * 4);
+
+        // Soft kick on beat 1 of each bar
+        if (step === 0) {
+            const noise = createNoiseSource(audioContext, dur);
+            if (noise) {
+                const f = audioContext.createBiquadFilter();
+                f.type = 'lowpass'; f.frequency.value = 180;
+                const kg = audioContext.createGain();
+                kg.gain.setValueAtTime(0.0001, when);
+                kg.gain.exponentialRampToValueAtTime(0.18, when + 0.005);
+                kg.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
+                noise.connect(f); f.connect(kg); kg.connect(musicBassGain);
+            }
+        }
     }
 
-    // Pluck arpeggio plays on every 8th (steps where step % 2 === 0), accent off-beats
+    // Pluck arpeggio on every 8th note, follows the current chord's pluck pattern
     if (step % 2 === 0) {
-        const idx = (step / 2) % musicPluckFreqs.length;
-        const freq = musicPluckFreqs[idx];
+        const idx = (step / 2) % chord.plucks.length;
+        const freq = chord.plucks[idx];
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
         o.type = 'triangle';
         o.frequency.value = freq;
-        const accent = (step % 8 === 4) ? 1.4 : 1.0;
+        // detune slightly between bars for organic feel
+        o.detune.value = (bar % 2 ? 4 : -3);
+        const accent = (step === 0 || step === 8) ? 1.5 : (step === 4 ? 1.2 : 0.85);
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.32 * accent, when + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 2.2);
+        g.gain.exponentialRampToValueAtTime(0.30 * accent, when + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 2.4);
         o.connect(g); g.connect(musicPluckFilter);
         musicPluckFilter.connect(musicPluckGain);
-        o.start(when); o.stop(when + dur * 2.4);
+        o.start(when); o.stop(when + dur * 2.6);
     }
 
-    // Soft hi-hat tick on the off (step % 4 === 2)
+    // Hi-hat tick on the off-beats (steps 2, 6, 10, 14)
     if (step % 4 === 2) {
         const noise = createNoiseSource(audioContext, dur * 1.5);
         if (!noise) return;
@@ -469,8 +502,21 @@ function scheduleBeat(step, when, dur) {
         f.type = 'highpass'; f.frequency.value = 6800;
         const g = audioContext.createGain();
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.06, when + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.07, when + 0.003);
         g.gain.exponentialRampToValueAtTime(0.0001, when + 0.06);
+        noise.connect(f); f.connect(g); g.connect(musicBassGain);
+    }
+
+    // Snare-ish noise hit on step 8 (backbeat)
+    if (step === 8) {
+        const noise = createNoiseSource(audioContext, dur * 2);
+        if (!noise) return;
+        const f = audioContext.createBiquadFilter();
+        f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.6;
+        const g = audioContext.createGain();
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(0.10, when + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.10);
         noise.connect(f); f.connect(g); g.connect(musicBassGain);
     }
 }
@@ -782,6 +828,33 @@ function playJackpotFanfare() {
     });
     // shimmer tail
     setTimeout(() => playSfx('revealLegendary', 1.1), 280);
+}
+
+// 1-HP danger flair driver. Pulses strong red when entering danger,
+// keeps a faint pulse while at 1 HP, fades out when HP recovers or run ends.
+let _hpDangerActive = false;
+let _hpDangerPulseTimer = null;
+function syncHpDangerFlair() {
+    const inDanger = !!(gameRunning && player && player.alive !== false && player.hp === 1);
+    if (inDanger && !_hpDangerActive) {
+        _hpDangerActive = true;
+        document.body.classList.add('danger-hp', 'danger-pulse');
+        if (_hpDangerPulseTimer) clearTimeout(_hpDangerPulseTimer);
+        // Pulse class is one-shot; remove after the burst so dangerBreath takes over alone
+        _hpDangerPulseTimer = setTimeout(() => {
+            document.body.classList.remove('danger-pulse');
+            _hpDangerPulseTimer = null;
+        }, 900);
+    } else if (!inDanger && _hpDangerActive) {
+        _hpDangerActive = false;
+        document.body.classList.remove('danger-hp', 'danger-pulse');
+        if (_hpDangerPulseTimer) { clearTimeout(_hpDangerPulseTimer); _hpDangerPulseTimer = null; }
+    }
+}
+function clearHpDangerFlair() {
+    _hpDangerActive = false;
+    document.body.classList.remove('danger-hp', 'danger-pulse');
+    if (_hpDangerPulseTimer) { clearTimeout(_hpDangerPulseTimer); _hpDangerPulseTimer = null; }
 }
 
 // Confetti DOM rays burst from center of #pack-confetti
@@ -1109,9 +1182,72 @@ function updateMetaHud() {
 }
 
 function setActiveNav(id) {
-    document.querySelectorAll('.nav-btn').forEach((button) => button.classList.remove('active'));
+    // Support both legacy .nav-btn and new .nav-tab
+    document.querySelectorAll('.nav-btn, .nav-tab').forEach((button) => button.classList.remove('active'));
     const button = document.getElementById(id);
     if (button) button.classList.add('active');
+}
+
+// ─────────────────────── SWIPE NAVIGATION ──────────────────
+// Swipe horizontally on the active screen to switch to neighbouring tab.
+const NAV_ORDER = [
+    { id: 'nav-shop',      open: () => window.showShop && window.showShop() },
+    { id: 'nav-loadout',   open: () => window.showLoadout && window.showLoadout() },
+    { id: 'nav-fight',     open: () => window.showFight && window.showFight() },
+    { id: 'nav-hub',       open: () => window.showHub && window.showHub() },
+    { id: 'nav-inventory', open: () => window.showInventory && window.showInventory() }
+];
+function getCurrentNavIndex() {
+    const active = document.querySelector('.nav-tab.active, .nav-btn.active');
+    if (!active) return 2;
+    return Math.max(0, NAV_ORDER.findIndex((n) => n.id === active.id));
+}
+function navigateRelative(delta) {
+    if (gameRunning) return; // don't switch tabs during a fight
+    const cur = getCurrentNavIndex();
+    const next = cur + delta;
+    if (next < 0 || next >= NAV_ORDER.length) return;
+    NAV_ORDER[next].open();
+    if (typeof playHaptic === 'function') playHaptic('tap');
+}
+
+function installSwipeNavigation() {
+    let startX = 0, startY = 0, startT = 0, tracking = false;
+    const SCREEN_SEL = '.screen.active';
+    const root = document.body;
+
+    function down(e) {
+        // Only when not in run, no overlay open
+        if (gameRunning) return;
+        const overlayOpen = !!document.querySelector('.modal-overlay.active');
+        if (overlayOpen) return;
+        // Don't grab swipes that started inside the nav (so taps on nav still work)
+        if (e.target.closest('#global-nav, .map-rail, .left-rail, .right-rail, button, input, .pack-card-v2, .ability-pick-content')) return;
+        const t = e.touches ? e.touches[0] : e;
+        startX = t.clientX;
+        startY = t.clientY;
+        startT = performance.now();
+        tracking = true;
+    }
+    function up(e) {
+        if (!tracking) return;
+        tracking = false;
+        const t = e.changedTouches ? e.changedTouches[0] : e;
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        const dt = performance.now() - startT;
+        const horiz = Math.abs(dx);
+        const vert = Math.abs(dy);
+        // Require: horizontal > 70px, dominant horizontal, fast enough
+        if (horiz < 70) return;
+        if (horiz < vert * 1.5) return;
+        if (dt > 700) return;
+        navigateRelative(dx < 0 ? 1 : -1);
+    }
+    root.addEventListener('touchstart', down, { passive: true });
+    root.addEventListener('touchend', up,   { passive: true });
+    root.addEventListener('mousedown', down);
+    root.addEventListener('mouseup', up);
 }
 
 window.openSettings = function() {
@@ -1156,12 +1292,14 @@ function showScreen(id) {
     if (window.canvas) {
         window.canvas.style.display = id === 'game-canvas' ? 'block' : 'none';
     }
-    // Map rail + leaderboard only visible on the fight (map) screen
+    // New side rails + cta + cosmic bg only visible on the fight screen
     const onFight = id === 'fight-screen';
-    const rail = document.getElementById('map-rail');
-    const lb = document.getElementById('leaderboard-panel');
-    if (rail) rail.style.display = onFight ? 'flex' : 'none';
-    if (lb) lb.style.display = onFight ? 'flex' : 'none';
+    const showOnFight = ['left-rail', 'right-rail', 'primary-cta', 'cosmic-bg', 'level-roadmap'];
+    showOnFight.forEach((cls) => {
+        document.querySelectorAll('.' + cls + ', #' + cls).forEach((el) => {
+            el.style.display = onFight ? '' : 'none';
+        });
+    });
 }
 
 window.buildRoadmap = function() {
@@ -1265,6 +1403,7 @@ function startLevel() {
     projectiles = [];
     pickups = [];
     particles = [];
+    clearHpDangerFlair();
     hazards = [];
     fxTexts = [];
     lightningBolts = [];
@@ -2084,6 +2223,9 @@ function getAbilityIconMarkup(id, fallback) {
     return fallback;
 }
 
+// Track which pick is currently focused (for the feature panel + take button)
+let _abilityPickFocusIdx = 0;
+
 function drawAbilityChoices() {
     const cards = document.getElementById('ability-cards');
     if (!cards) {
@@ -2092,7 +2234,6 @@ function drawAbilityChoices() {
     }
 
     cards.innerHTML = '';
-    // Filter pool by what the player can still rank up
     const pool = ABILITIES.filter((a) => {
         const r = getAbilityRank(a.id);
         return r < (a.tree?.length || 1);
@@ -2100,37 +2241,93 @@ function drawAbilityChoices() {
     const source = pool.length >= 3 ? pool : ABILITIES;
     activeAbilityChoices = [...source].sort(() => Math.random() - 0.5).slice(0, 3);
 
-    activeAbilityChoices.forEach((ability) => {
+    activeAbilityChoices.forEach((ability, idx) => {
         const rank = getAbilityRank(ability.id);
         const isEvolve = rank > 0;
-        // The card shows the NEXT rank descriptor (what you'd get if you pick it)
         const nextIdx = Math.min((ability.tree?.length || 1) - 1, rank);
         const nextDef = ability.tree ? ability.tree[nextIdx] : { name: ability.name, tier: ability.rarity, desc: ability.desc };
-        const tier = nextDef.tier || ability.rarity || 'common';
+        const tier = (nextDef.tier || ability.rarity || 'common').toLowerCase();
+
+        // Pull the inner SVG out of the wrapped icon markup so we can place it inside the diamond
+        const wrap = document.createElement('div');
+        wrap.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
+        const innerSvgHtml = (wrap.querySelector('svg') && wrap.querySelector('svg').outerHTML) || `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>`;
 
         const card = document.createElement('div');
-        card.className = `shop-card ability-card ability-pick rarity-tier-${tier} ${isEvolve ? 'pick-evolve' : ''}`.trim();
+        card.className = `pick-diamond tier-${tier} ${isEvolve ? 'evolve' : ''} ${idx === _abilityPickFocusIdx ? 'selected' : ''}`.trim();
+        card.dataset.idx = String(idx);
+        card.dataset.id = ability.id;
         card.innerHTML = `
-            <div class="pick-tag">${isEvolve ? `EVOLVE → Lv ${rank + 1}` : `NEW · ${tier.toUpperCase()}`}</div>
-            <div class="pick-icon-wrap">${getAbilityIconMarkup(ability.id, ability.icon)}</div>
-            <div class="card-title">${nextDef.name}</div>
-            <div class="card-meta">
-                <span class="rarity-tag tier-${tier}">${tier}</span>
-                ${isEvolve ? `from ${ability.tree[nextIdx - 1]?.name || ability.name}` : ability.name}
+            ${isEvolve ? `<div class="pd-evolved-tag">EVOLVE +${rank + 1}</div>` : ''}
+            <div class="diamond-frame">
+                <div class="diamond-icon">${innerSvgHtml}</div>
             </div>
-            <div class="card-copy">${nextDef.desc}</div>
-            <button class="btn-glossy ${tier === 'legendary' ? 'btn-gold' : tier === 'epic' ? 'btn-purple' : tier === 'rare' ? '' : ''}" type="button">${isEvolve ? 'EVOLVE' : 'TAKE'}</button>
+            <div class="pd-label">${nextDef.name}</div>
+            <div class="pd-rank" title="Rank ${rank + 1}"></div>
         `;
-        card.querySelector('button').onclick = () => {
-            applyAbility(ability.id);
-            abilityPicking = false;
-            const overlay = document.getElementById('ability-overlay');
-            if (overlay) overlay.classList.remove('active');
+        card.onclick = () => {
+            _abilityPickFocusIdx = idx;
+            // Update selected state across all cards
+            cards.querySelectorAll('.pick-diamond').forEach((el) => el.classList.toggle('selected', Number(el.dataset.idx) === idx));
+            updateAbilityPickFeature();
+            playSfx('tap', 0.7);
+            playHaptic('tap');
         };
         cards.appendChild(card);
     });
+
+    // default focus to first card
+    _abilityPickFocusIdx = 0;
+    updateAbilityPickFeature();
     updateMetaHud();
 }
+
+// Update the featured info card + tree based on current focus
+function updateAbilityPickFeature() {
+    const ability = activeAbilityChoices[_abilityPickFocusIdx];
+    const featureEl = document.getElementById('ability-pick-feature');
+    const titleEl = document.getElementById('feature-title');
+    const effectEl = document.getElementById('feature-effect');
+    const treeEl = document.getElementById('feature-tree');
+    if (!ability || !featureEl || !titleEl || !effectEl || !treeEl) return;
+
+    const rank = getAbilityRank(ability.id);
+    const tree = ability.tree || [{ name: ability.name, tier: ability.rarity, desc: ability.desc }];
+    const nextIdx = Math.min(tree.length - 1, rank);
+    const nextDef = tree[nextIdx];
+    const tier = (nextDef.tier || ability.rarity || 'common').toLowerCase();
+
+    featureEl.classList.remove('tier-common','tier-rare','tier-epic','tier-legendary');
+    featureEl.classList.add(`tier-${tier}`);
+
+    titleEl.innerHTML = `${nextDef.name.toUpperCase()}`;
+    // Pull a delta phrase out of the desc (anything after a "+" or "x")
+    effectEl.innerHTML = nextDef.desc;
+
+    // Build the vertical tree of diamonds
+    const wrap = document.createElement('div');
+    wrap.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
+    const innerSvgHtml = (wrap.querySelector('svg') && wrap.querySelector('svg').outerHTML) || '';
+
+    let html = '';
+    tree.forEach((node, i) => {
+        const nodeTier = (node.tier || tier).toLowerCase();
+        const state = i < rank ? 'owned' : i === rank ? 'current' : 'future';
+        html += `<div class="ft-node tier-${nodeTier} ${state}" title="${node.name}">${innerSvgHtml}</div>`;
+        if (i < tree.length - 1) html += `<div class="ft-link ${i >= rank ? 'future' : ''}"></div>`;
+    });
+    treeEl.innerHTML = html;
+}
+
+// "TAKE" button at the bottom — applies the focused ability
+window.confirmAbilityPick = function() {
+    const ability = activeAbilityChoices[_abilityPickFocusIdx];
+    if (!ability) return;
+    applyAbility(ability.id);
+    abilityPicking = false;
+    const overlay = document.getElementById('ability-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
 
 function applyAbility(id) {
     player.abilityRanks[id] = (player.abilityRanks[id] || 0) + 1;
@@ -2218,6 +2415,7 @@ function applyAbility(id) {
             if (rank >= 2) { player.maxHp += 1; player.hp = Math.min(player.maxHp, player.hp + 1); }
             if (rank >= 3) { player.maxHp += 1; player.healPerKills = 25; }
             if (rank >= 4) { player.firstLethalBlock = true; }
+            syncHpDangerFlair();
             break;
         case 'orbiter':
             // rank 1 = 1 drone, 2 = +1 (total 2), 3 = +2 (total 4), 4 = +2 (total 6)
@@ -2272,6 +2470,7 @@ function damagePlayer(source) {
     screenShake = Math.min(2.5, screenShake + 0.5);
     playSfx('hit', source === 'boss' ? 1.15 : 1);
     playHaptic(source === 'boss' ? 'hard' : 'medium');
+    syncHpDangerFlair();
 
     if (player.hp > 0) return;
 
@@ -2301,6 +2500,7 @@ function damagePlayer(source) {
 function closeMission() {
     gameRunning = false;
     abilityPicking = false;
+    clearHpDangerFlair();
     const overlay = document.getElementById('ability-overlay');
     if (overlay) overlay.classList.remove('active');
     if (window.canvas) window.canvas.style.display = 'none';
@@ -2316,8 +2516,9 @@ function hideResultOverlay() {
     if (overlay) overlay.classList.remove('active');
 }
 
-function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, secondaryLabel, onPrimary, onSecondary }) {
+function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, secondaryLabel, onPrimary, onSecondary, stars = 0 }) {
     const overlay = document.getElementById('result-overlay');
+    const content = overlay ? overlay.querySelector('.result-content') : null;
     const badge = document.getElementById('result-badge');
     const titleNode = document.getElementById('result-title');
     const copyNode = document.getElementById('result-copy');
@@ -2326,11 +2527,31 @@ function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, sec
     const secondary = document.getElementById('result-secondary');
     if (!overlay || !badge || !titleNode || !copyNode || !statsNode || !primary || !secondary) return;
 
-    badge.textContent = loss ? 'Defeat' : 'Victory';
+    if (content) {
+        content.classList.toggle('loss', loss);
+        content.classList.toggle('win', !loss);
+        // Re-trigger the pop animation
+        content.style.animation = 'none';
+        // eslint-disable-next-line no-unused-expressions
+        content.offsetHeight;
+        content.style.animation = '';
+    }
+
+    badge.textContent = loss ? 'DEFEATED' : 'VICTORY';
     badge.classList.toggle('loss', loss);
     titleNode.textContent = title;
     copyNode.textContent = copy;
-    statsNode.innerHTML = stats.map((entry) => `<div class="result-line"><span>${entry.label}</span><strong>${entry.value}</strong></div>`).join('');
+
+    // Optional star rating for victory
+    let starsHtml = '';
+    if (!loss && stars >= 0) {
+        const lit = Math.max(0, Math.min(3, stars));
+        starsHtml = `<div class="result-stars">
+            ${[0,1,2].map((i) => `<span class="result-star ${i < lit ? 'lit' : ''}" style="--star-delay:${(i*0.15+0.2).toFixed(2)}s">★</span>`).join('')}
+        </div>`;
+    }
+
+    statsNode.innerHTML = starsHtml + stats.map((entry) => `<div class="result-line"><span>${entry.label}</span><strong>${entry.value}</strong></div>`).join('');
     primary.textContent = primaryLabel;
     secondary.textContent = secondaryLabel;
     resultPrimaryAction = onPrimary;
@@ -2401,9 +2622,12 @@ function victory() {
     closeMission();
     playSfx('win', 1);
     playHaptic('success');
+    // Star rating: 1 (cleared), 2 (cleared with HP > half), 3 (cleared full HP)
+    const stars = player && player.maxHp ? (player.hp >= player.maxHp ? 3 : (player.hp > player.maxHp / 2 ? 2 : 1)) : 1;
     showResultOverlay({
         title: `Level ${currentLevel} Clear`,
         copy: 'Rewards paid out. The next mission is live.',
+        stars,
         stats: [
             { label: 'Gold Earned', value: `+${formatCompactNumber(goldReward)}` },
             { label: 'Gems Earned', value: `+${gemReward}` },
@@ -2425,21 +2649,50 @@ function updateHubVisualization(focusId) {
     if (!holder || !readout) return;
 
     holder.innerHTML = '';
-    const sizes = [300, 220, 150];
+    const radii = [150, 110, 75]; // matching .ring-outer/-mid/-inner
+    // Build a single inline SVG that contains 3 progress arcs — one per upgrade —
+    // each driven by stroke-dasharray (so it actually GROWS as level rises,
+    // it doesn't just rotate around).
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '-160 -160 320 320');
+    svg.setAttribute('class', 'hub-progress-svg');
+    svg.style.position = 'absolute';
+    svg.style.inset = '50% auto auto 50%';
+    svg.style.transform = 'translate(-50%, -50%)';
+    svg.style.width = '320px';
+    svg.style.height = '320px';
+    svg.style.pointerEvents = 'none';
+
     UPGRADES.forEach((upgrade, index) => {
         const level = save.stats[upgrade.id] || 0;
-        const ratio = level / upgrade.max;
-        const scaledSize = sizes[index] + (ratio * (34 - (index * 6)));
-        const arc = document.createElement('div');
-        arc.className = 'ring-progress';
-        arc.style.width = `${scaledSize}px`;
-        arc.style.height = `${scaledSize}px`;
-        arc.style.borderWidth = `${5 + Math.round(ratio * 6)}px`;
-        arc.style.opacity = `${0.4 + (ratio * 0.6)}`;
-        arc.style.setProperty('--ring-color', upgrade.color);
-        arc.style.transform = `translate(-50%, -50%) rotate(${(-90 + ratio * 300)}deg)`;
-        holder.appendChild(arc);
+        const ratio = Math.min(1, level / upgrade.max);
+        const r = radii[index];
+        const circ = 2 * Math.PI * r;
+        // background track (subtle)
+        const track = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        track.setAttribute('cx', '0'); track.setAttribute('cy', '0');
+        track.setAttribute('r', String(r));
+        track.setAttribute('fill', 'none');
+        track.setAttribute('stroke', 'rgba(255,255,255,0.07)');
+        track.setAttribute('stroke-width', '4');
+        svg.appendChild(track);
+        // active arc — starts at top (12 o'clock), grows clockwise
+        const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        arc.setAttribute('cx', '0'); arc.setAttribute('cy', '0');
+        arc.setAttribute('r', String(r));
+        arc.setAttribute('fill', 'none');
+        arc.setAttribute('stroke', upgrade.color);
+        arc.setAttribute('stroke-width', String(5 + Math.round(ratio * 5)));
+        arc.setAttribute('stroke-linecap', 'round');
+        arc.setAttribute('stroke-dasharray', `${(circ * ratio).toFixed(1)} ${circ.toFixed(1)}`);
+        arc.setAttribute('stroke-dashoffset', '0');
+        arc.setAttribute('transform', 'rotate(-90)');
+        arc.style.filter = `drop-shadow(0 0 6px ${upgrade.color}) drop-shadow(0 0 14px ${upgrade.color}66)`;
+        arc.style.transition = 'stroke-dasharray .35s ease, stroke-width .25s ease';
+        svg.appendChild(arc);
     });
+
+    holder.appendChild(svg);
 
     const focused = UPGRADES.find((entry) => entry.id === (focusId || lastUpgradeId)) || UPGRADES[0];
     const current = getUpgradePreviewValue(focused.id, save.stats[focused.id] || 0);
@@ -2600,11 +2853,11 @@ function getPackOfferMarkup(item, packDef, premium = false) {
         return getShopItemMarkup(item, premium);
     }
     const title = packDef.name;
-    const price = premium ? item.price : `${item.cost} ${item.currency.toUpperCase()}`;
+    // Compact price: drop the currency word, use a short symbol prefix
+    const priceCompact = premium ? item.price : (item.currency === 'gems' ? `◆ ${item.cost}` : `${item.cost}G`);
     const priceClass = premium ? 'money' : (item.currency === 'gems' ? 'gems' : 'gold');
     const tierKey = item.reward?.packKey || 'supply_pack_i';
     const buttonClass = premium ? 'btn-glossy btn-gold' : (packDef.rarity === 'gold' || packDef.rarity === 'red' ? 'btn-glossy btn-purple' : 'btn-glossy');
-    const buttonLabel = premium ? 'Premium' : 'Buy Pack';
 
     const best = getBestDropForPack(item.reward.packKey);
     const heroSvg = best ? getRewardArtSvg(best.id, packDef.rewardType === 'skin' ? 'skin' : 'chip') : '';
@@ -2616,7 +2869,7 @@ function getPackOfferMarkup(item, packDef, premium = false) {
         <div class="pack-card-v2 tier-${tierKey}" data-pack="${tierKey}" onclick="playSfx('tap',0.7); playHaptic('tap');">
             <div class="pack-foil"></div>
             <div class="pack-hero">
-                <div class="pack-hero-tag">★ Top Drop · ${bestName}</div>
+                <div class="pack-hero-tag">★ ${bestName}</div>
                 <div class="pack-tier-badge">${tierLabel}</div>
                 <div class="pack-hero-icon">${heroSvg}</div>
             </div>
@@ -2628,8 +2881,8 @@ function getPackOfferMarkup(item, packDef, premium = false) {
                 <div class="pack-sub">${item.bonus || formatPackOdds(packDef)}</div>
                 <div class="pack-actions">
                     <button class="pack-peek-btn" type="button" data-peek="${item.reward.packKey}">PEEK</button>
-                    <button class="${buttonClass}" type="button" data-buy="1">
-                        ${buttonLabel} <span class="pack-price-chip ${priceClass}">${price}</span>
+                    <button class="${buttonClass} pack-buy-btn" type="button" data-buy="1">
+                        <span class="pack-price-chip ${priceClass}">${priceCompact}</span>
                     </button>
                 </div>
             </div>
@@ -3073,6 +3326,9 @@ function renderLeaderboard() {
             </div>
         `;
     }).join('');
+    const myRow = rows.findIndex((r) => r.isYou);
+    const mine = document.getElementById('lb-rank-mine');
+    if (mine) mine.textContent = `#${myRow + 1}`;
 }
 
 // Sync rail button states
@@ -3489,7 +3745,109 @@ window.showFight = function() {
     renderDailyLoginPanel();
     refreshMapRail();
     renderLeaderboard();
+    renderLevelRoadmap();
+    refreshLevelCta();
     playHaptic('soft');
+};
+
+// Build the vertical level path: current node centered, 1-2 nodes below (past),
+// 2-3 nodes above (future), with chest icons next to the future ones.
+function renderLevelRoadmap() {
+    const host = document.getElementById('level-roadmap');
+    if (!host) return;
+    const cur = Math.max(1, save.unlocked || 1);
+    // Layout: 2 future, current, 2 past (reading top → bottom)
+    const items = [
+        { lvl: cur + 3, state: 'future', chest: true  },
+        { lvl: cur + 2, state: 'future', chest: false },
+        { lvl: cur + 1, state: 'future-soon', chest: true },
+        { lvl: cur,     state: 'current', chest: false },
+        { lvl: cur - 1, state: 'locked', chest: false },
+    ].filter((it) => it.lvl >= 1);
+
+    const chestSvg = `<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18"/><path d="M9 8c0-2 6-2 6 0"/></svg>`;
+
+    let html = '';
+    items.forEach((it, i) => {
+        html += `<div class="lr-node ${it.state}">
+            ${it.lvl}
+            ${it.chest ? `<div class="lr-chest">${chestSvg}</div>` : ''}
+        </div>`;
+        if (i < items.length - 1) {
+            const lineActive = it.state === 'current' ? 'line-active' : '';
+            html += `<div class="lr-line ${lineActive}"></div>`;
+        }
+    });
+    host.innerHTML = html;
+}
+
+function refreshLevelCta() {
+    const label = document.getElementById('primary-cta-label');
+    const btn = document.getElementById('battle-button');
+    if (label) label.textContent = `EBENE ${save.unlocked || 1}`;
+    if (btn) btn.setAttribute('aria-label', `Start level ${save.unlocked || 1}`);
+}
+
+// Leaderboard overlay (right rail Rangliste button) — new design with flags
+const LB_FLAGS = ['🇩🇪','🇮🇹','🇪🇸','🇫🇷','🇬🇧','🇺🇸','🇯🇵','🇧🇷','🇸🇪','🇰🇷','🇨🇦','🇲🇽'];
+function _flagFor(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return LB_FLAGS[h % LB_FLAGS.length];
+}
+const TROPHY_SVG = '<svg viewBox="0 0 24 24"><polygon points="6,4 18,4 17,9 12,11 7,9"/><path d="M12 11v5"/><polygon points="9,16 15,16 14,21 10,21"/></svg>';
+
+window.openLeaderboardOverlay = function() {
+    const overlay = document.getElementById('leaderboard-overlay');
+    const list = document.getElementById('lb-rows-modal');
+    if (!overlay || !list) return;
+    const rows = getLeaderboardBots();
+    const meIdx = rows.findIndex((r) => r.isYou);
+    let html = '';
+    rows.forEach((row, i) => {
+        const rank = i + 1;
+        // Insert "Aktionszone" divider just BEFORE the player's row, but not at top of list
+        if (i === meIdx && meIdx > 3) {
+            html += `<div class="lb-action-divider">
+                <span class="lb-action-arrow"><svg viewBox="0 0 24 24"><polyline points="6,15 12,9 18,15"/></svg></span>
+                Aktionszone
+                <span class="lb-action-arrow"><svg viewBox="0 0 24 24"><polyline points="6,15 12,9 18,15"/></svg></span>
+            </div>`;
+        }
+        const flag = row.isYou ? '🇩🇪' : _flagFor(row.name);
+        const display = row.isYou ? `Player_${(save.leaderboardSeed || 7).toString().slice(-4)}` : row.name;
+        html += `
+            <div class="lb-row-v2 ${row.isYou ? 'you' : ''}">
+                <span class="lb-r-rank">${rank}</span>
+                <span class="lb-r-name">${display}</span>
+                <span class="lb-r-flag">${flag}</span>
+                <span class="lb-r-score">${row.score.toLocaleString()} ${TROPHY_SVG}</span>
+            </div>
+        `;
+    });
+    list.innerHTML = html;
+
+    // Update countdown timer to next reset (just a friendly "1D HH" estimate)
+    const timer = document.getElementById('lb-timer');
+    if (timer) {
+        const now = new Date();
+        const sundayMidnight = new Date(now);
+        sundayMidnight.setHours(24, 0, 0, 0);
+        sundayMidnight.setDate(sundayMidnight.getDate() + ((7 - sundayMidnight.getDay()) % 7));
+        const diff = sundayMidnight - now;
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        timer.textContent = `${days}D:${String(hours).padStart(2, '0')}H`;
+    }
+
+    overlay.classList.add('active');
+    playSfx('peekOpen', 0.85);
+    playHaptic('peek');
+};
+window.closeLeaderboardOverlay = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('leaderboard-overlay');
+    if (overlay) overlay.classList.remove('active');
 };
 
 window.showHub = function() {
@@ -4073,82 +4431,9 @@ function getAbilityIconMarkup(id, fallback) {
     return fallback;
 }
 
-function drawAbilityChoices() {
-    const cards = document.getElementById('ability-cards');
-    if (!cards) {
-        abilityPicking = false;
-        return;
-    }
-
-    const unlocked = getUnlockedAbilities(save.unlocked);
-    cards.innerHTML = '';
-    activeAbilityChoices = [...unlocked].sort(() => Math.random() - 0.5).slice(0, Math.min(3, unlocked.length));
-    activeAbilityChoices.forEach((ability) => {
-        const rank = getAbilityRank(ability.id);
-        const card = document.createElement('div');
-        card.className = 'shop-card ability-card';
-        card.innerHTML = `
-            ${getAbilityIconMarkup(ability.id, ability.icon)}
-            <div class="card-title">${ability.name}</div>
-            <div class="card-meta">${rank > 0 ? `Owned Lv ${rank}` : `${ability.rarity.toUpperCase()} | Lv ${ability.unlockLevel || 1}`}</div>
-            <div class="card-copy">${getAbilityEvolutionText(ability.id, rank)}</div>
-            <button class="inline-button" type="button">${rank > 0 ? 'Evolve' : 'Select'}</button>
-        `;
-        card.querySelector('button').onclick = () => {
-            applyAbility(ability.id);
-            abilityPicking = false;
-            const overlay = document.getElementById('ability-overlay');
-            if (overlay) overlay.classList.remove('active');
-        };
-        cards.appendChild(card);
-    });
-    updateMetaHud();
-}
-
-function applyAbility(id) {
-    player.abilityRanks[id] = (player.abilityRanks[id] || 0) + 1;
-    const rank = player.abilityRanks[id];
-    const ability = ABILITIES.find((entry) => entry.id === id);
-
-    switch (id) {
-        case 'damage_boost': player.damageMultiplier *= 1.22; break;
-        case 'rapid_fire': player.atkCooldown *= 0.86; break;
-        case 'multi': player.multishot += 1; break;
-        case 'pierce': player.pierce += 1; break;
-        case 'chain_lightning': player.chainLightning = true; break;
-        case 'tornado_shot': player.tornadoShot = true; break;
-        case 'echo_shot': player.echoShot = true; break;
-        case 'ion_round': player.ionRound = true; break;
-        case 'shock_nova': player.shockNova = true; break;
-        case 'phoenix_drive': player.phoenixDrive = true; break;
-        case 'singularity': player.singularity = true; break;
-        case 'heal_heart':
-            player.hp = Math.min(player.maxHp, player.hp + 1);
-            if (rank > 1) {
-                player.damageMultiplier *= 1.08;
-                player.atkCooldown *= 0.95;
-            }
-            break;
-        case 'orbiter':
-            player.orbiters.push({
-                id: nextOrbiterId++,
-                angle: Math.random() * Math.PI * 2,
-                distance: 50 + player.orbiters.length * 12,
-                r: 7,
-                damage: 18,
-                x: player.x,
-                y: player.y
-            });
-            break;
-        default:
-            break;
-    }
-
-    playSfx('ability', ability?.rarity === 'epic' ? 1.25 : 1);
-    powerPulse = Math.min(2.2, powerPulse + (ability?.rarity === 'epic' ? 0.58 : 0.32));
-    screenShake = Math.min(2.7, screenShake + (ability?.rarity === 'epic' ? 0.42 : 0.18));
-    playHaptic(ability?.rarity === 'epic' ? 'hard' : 'medium');
-}
+// (Removed duplicate drawAbilityChoices + applyAbility — earlier definitions
+// at lines ~2117 and ~2165 are now the active versions, with the colored
+// rarity-tier picker and the rank-tier-aware effect logic.)
 
 function update(dt) {
     updatePlayerMovement(dt);
@@ -4330,6 +4615,7 @@ function damagePlayer(source) {
     screenShake = Math.min(2.5, screenShake + 0.5);
     playSfx('hit', source === 'boss' ? 1.15 : 1);
     playHaptic(source === 'boss' ? 'hard' : 'medium');
+    syncHpDangerFlair();
 
     if (player.phoenixDrive && player.phoenixCooldown <= 0) {
         player.phoenixCooldown = Math.max(4, 7 - getAbilityRank('phoenix_drive'));
@@ -4387,118 +4673,121 @@ function renderAbilityArchive() {
     grid.innerHTML = '';
     ABILITIES.forEach((ability) => {
         const unlocked = (ability.unlockLevel || 1) <= save.unlocked;
-        const currentRank = (gameRunning && player?.abilityRanks?.[ability.id]) || 0;
         const baseTier = (ability.rarity || 'common').toLowerCase();
-        const tree = ability.tree || [{ name: ability.name, tier: baseTier, desc: ability.desc }];
-        const treeMaxTier = tree[tree.length - 1].tier || baseTier;
         const card = document.createElement('div');
-        card.className = `shop-card ability-card ability-archive-card rarity-tier-${treeMaxTier} ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
+        // Old-style clean card: icon + title + meta line + 1-line desc + button.
+        // No tree dots in archive (those clutter and the user dislikes them).
+        card.className = `shop-card ability-card ability-archive-card rarity-tier-${baseTier} ability-${ability.id} ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
         card.innerHTML = `
             ${getAbilityIconMarkup(ability.id, ability.icon)}
             <div class="card-title">${ability.name}</div>
             <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
-                ${unlocked ? `<span class="rarity-tag tier-${baseTier}">${baseTier}</span>Lv ${ability.unlockLevel}+` : `Freigeschaltet ab Lv ${ability.unlockLevel}`}
+                ${baseTier.toUpperCase()} | Freigeschaltet ab Lv ${ability.unlockLevel}
             </div>
-            <div class="ability-tree-track" aria-label="skill tree">
-                ${tree.map((node, i) => `
-                    <span class="tree-node tier-${node.tier} ${i < currentRank ? 'owned' : i === currentRank ? 'next' : 'future'}" title="${node.name}: ${node.desc}"></span>
-                `).join('<span class="tree-link"></span>')}
-            </div>
-            <div class="card-copy">${unlocked ? (currentRank > 0 ? `Now: ${tree[currentRank - 1].name}` : tree[0].name + ' — ' + tree[0].desc) : 'Hidden until you reach the unlock level.'}</div>
-            ${unlocked ? `<div class="lock-badge">${currentRank > 0 ? `Owned · ${currentRank}/${tree.length}` : 'Available in run'}</div>` : `<div class="lock-badge">Ab Lv ${ability.unlockLevel}</div>`}
+            <div class="card-copy">${ability.desc}</div>
+            <button class="archive-cta" type="button" ${unlocked ? '' : 'disabled'}>
+                ${unlocked ? 'JETZT VERFUEGBAR' : `AB LV ${ability.unlockLevel}`}
+            </button>
         `;
         if (unlocked) {
-            card.onclick = () => showAbilityDetail(ability.id);
+            // Click anywhere on the card opens the full detail (with tree visualization)
+            card.onclick = (ev) => {
+                ev.stopPropagation();
+                showAbilityDetail(ability.id);
+            };
         }
         grid.appendChild(card);
     });
 }
 
 function showAbilityDetail(abilityId) {
-    const ability = ABILITIES.find((a) => a.id === abilityId);
-    if (!ability) return;
-    const overlay = document.getElementById('ability-detail-overlay');
-    const content = document.getElementById('ability-detail-content');
-    const card = document.getElementById('ability-detail-card');
-    if (!overlay || !content || !card) return;
+    try {
+        const ability = ABILITIES.find((a) => a.id === abilityId);
+        if (!ability) return;
+        const overlay = document.getElementById('ability-detail-overlay');
+        const content = document.getElementById('ability-detail-content');
+        const card = document.getElementById('ability-detail-card');
+        if (!overlay || !content || !card) return;
 
-    const tier = (ability.rarity || 'common').toLowerCase();
-    const tierLabels = { common: 'Gewoehnlich', rare: 'Selten', epic: 'Episch', legendary: 'Legendaer' };
-    const rarityLabel = tierLabels[tier] || tier;
-    const currentRank = player?.abilityRanks?.[ability.id] || 0;
+        const tier = (ability.rarity || 'common').toLowerCase();
+        const tierLabels = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+        const rarityLabel = tierLabels[tier] || tier;
+        const currentRank = (gameRunning && player?.abilityRanks?.[ability.id]) || 0;
+        const tree = ability.tree || [{ name: ability.name, tier, desc: ability.desc }];
 
-    // build inner SVG (uses currentColor, we let CSS theme it)
-    const iconWrap = getAbilityIconMarkup(ability.id, ability.icon);
+        // Inline SVG icon directly (no DOM gymnastics — that was the crash source)
+        const iconHtml = getAbilityIconMarkup(ability.id, ability.icon) || '';
 
-    // pull stats based on what the ability does (simple heuristic)
-    const statRow = buildAbilityDetailStats(ability, currentRank);
+        const statRow = buildAbilityDetailStats(ability, currentRank);
 
-    content.classList.remove('tier-common', 'tier-rare', 'tier-epic', 'tier-legendary');
-    content.classList.add(`tier-${tier}`);
+        // Tree rows: each rank gets a colored row with name + tier pill + desc
+        const treeRows = tree.map((node, i) => {
+            const state = i < currentRank ? 'owned' : i === currentRank ? 'next' : 'future';
+            const nodeTier = (node.tier || tier).toLowerCase();
+            return `
+                <div class="ability-tree-row state-${state} tier-${nodeTier}">
+                    <div class="tree-row-bullet"></div>
+                    <div class="tree-row-body">
+                        <div class="tree-row-head">
+                            <span class="tree-row-name">${node.name}</span>
+                            <span class="rarity-tag tier-${nodeTier}">${nodeTier}</span>
+                        </div>
+                        <div class="tree-row-desc">${node.desc}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
 
-    card.innerHTML = `
-        <div class="ability-detail-title">${ability.name}</div>
-        <div class="ability-detail-icon-wrap">
-            <div class="detail-arc-container">
-                <svg class="detail-arc-svg" viewBox="0 0 220 220">
-                    <ellipse class="detail-arc-path"     cx="110" cy="110" rx="100" ry="40" transform="rotate(-20 110 110)"/>
-                    <ellipse class="detail-arc-path alt" cx="110" cy="110" rx="85"  ry="35" transform="rotate(40 110 110)"/>
-                </svg>
+        content.classList.remove('tier-common', 'tier-rare', 'tier-epic', 'tier-legendary');
+        content.classList.add(`tier-${tier}`);
+
+        // Single innerHTML write — SVG sizing handled via CSS, no replaceChild
+        card.innerHTML = `
+            <div class="ability-detail-title">${ability.name}</div>
+            <div class="ability-detail-icon-wrap">
+                <div class="detail-arc-container">
+                    <svg class="detail-arc-svg" viewBox="0 0 220 220">
+                        <ellipse class="detail-arc-path"     cx="110" cy="110" rx="100" ry="40" transform="rotate(-20 110 110)"/>
+                        <ellipse class="detail-arc-path alt" cx="110" cy="110" rx="85"  ry="35" transform="rotate(40 110 110)"/>
+                    </svg>
+                </div>
+                <div class="neon-svg">${iconHtml}</div>
             </div>
-            <div class="neon-svg">${iconWrap}</div>
-            <div class="detail-sparks" id="ability-detail-sparks"></div>
-        </div>
-        <div class="ability-detail-stats">${statRow}</div>
-        <div class="ability-detail-desc">${ability.desc}</div>
-        <div class="ability-detail-rarity">${rarityLabel}</div>
-    `;
+            <div class="ability-detail-stats">${statRow}</div>
+            <div class="ability-detail-desc">${ability.desc}</div>
+            <div class="ability-detail-tree-block">
+                <div class="ability-detail-tree-title">Skill Tree · ${currentRank}/${tree.length}</div>
+                <div class="ability-detail-tree-list">${treeRows}</div>
+            </div>
+            <div class="ability-detail-rarity">${rarityLabel}</div>
+        `;
 
-    // strip the outer .ability-icon wrapper so SVG fills the 200px container
-    const inner = card.querySelector('.neon-svg .ability-icon');
-    if (inner) {
-        const svg = inner.querySelector('svg');
-        if (svg) {
-            inner.parentElement.replaceChild(svg, inner);
-            svg.removeAttribute('width');
-            svg.removeAttribute('height');
-            svg.style.width = '100%';
-            svg.style.height = '100%';
-            // recolor to match rarity stroke
-            svg.querySelectorAll('[stroke]').forEach((el) => {
-                if (el.getAttribute('stroke') === 'currentColor') el.setAttribute('stroke', 'currentColor');
-            });
-            svg.style.color = 'var(--detail-stroke)';
+        // Apply rarity color to the inline SVG via CSS variable on the icon wrapper
+        const innerWrap = card.querySelector('.neon-svg .ability-icon');
+        if (innerWrap) {
+            innerWrap.style.color = 'var(--detail-stroke)';
+            const innerSvg = innerWrap.querySelector('svg');
+            if (innerSvg) {
+                innerSvg.style.width = '100%';
+                innerSvg.style.height = '100%';
+                innerSvg.removeAttribute('width');
+                innerSvg.removeAttribute('height');
+            }
         }
-    }
 
-    // generate sparks
-    const sparksEl = document.getElementById('ability-detail-sparks');
-    if (sparksEl) {
-        sparksEl.innerHTML = '';
-        for (let i = 0; i < 14; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const r = 65 + Math.random() * 35;
-            const cx = 110, cy = 110;
-            const x = cx + Math.cos(angle) * r;
-            const y = cy + Math.sin(angle) * r;
-            const dx = (Math.cos(angle) * 18 + (Math.random() - 0.5) * 14).toFixed(1);
-            const dy = (Math.sin(angle) * 18 + (Math.random() - 0.5) * 14).toFixed(1);
-            const sp = document.createElement('div');
-            sp.className = 'detail-spark';
-            sp.style.cssText = `left:${x}px; top:${y}px; --sd:${1.5 + Math.random() * 2}s; --ss:${-Math.random() * 3}s; --sx:${dx}px; --sy:${dy}px;`;
-            sparksEl.appendChild(sp);
-        }
+        overlay.classList.add('active');
+        if (typeof playHaptic === 'function') playHaptic('peek');
+    } catch (err) {
+        console.warn('showAbilityDetail failed:', err);
     }
-
-    overlay.classList.add('active');
-    playHaptic && playHaptic('soft');
 }
 
 function buildAbilityDetailStats(ability, rank) {
     const tier = (ability.rarity || 'common').toLowerCase();
     const tierLevels = { common: 1, rare: 2, epic: 3, legendary: 4 };
     const tierStars = '★'.repeat(tierLevels[tier] || 1) + '☆'.repeat(4 - (tierLevels[tier] || 1));
-    const rankLabel = rank > 0 ? `Lv ${rank}` : 'NEU';
+    const treeLen = ability.tree?.length || 1;
+    const rankLabel = rank > 0 ? `Lv ${rank}/${treeLen}` : 'NEW';
     const unlockLabel = `Lv ${ability.unlockLevel || 1}`;
     return `
         <div class="ability-detail-stat">
@@ -4598,6 +4887,7 @@ window.addEventListener('load', () => {
     loadSave();
     buildRoadmap();
     showFight();
+    installSwipeNavigation();
     document.addEventListener('pointerdown', ensureMusicEngine, { once: true });
     window.addEventListener('resize', resizeCanvas);
 });

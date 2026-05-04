@@ -2715,13 +2715,29 @@ function findNearestEnemy(range) {
 
 function damagePlayer(source) {
     if (player.invulnerable > 0) return;
+    const hpBefore = player.hp;
     player.hp -= 1;
     player.invulnerable = 0.9;
-    addP(player.x, player.y, source === 'boss' ? '#ff375f' : '#ffffff', 16, 160, 0.35, 3);
-    addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.48, 22);
-    screenShake = Math.min(2.5, screenShake + 0.5);
-    playSfx('hit', source === 'boss' ? 1.15 : 1);
-    playHaptic(source === 'boss' ? 'hard' : 'medium');
+
+    // STRONGER heart-loss feedback: red full-screen flash, harder shake, particle burst,
+    // HUD-heart shake animation flag, big -1 text, body class for CSS pulse.
+    addP(player.x, player.y, source === 'boss' ? '#ff375f' : '#ffffff', 28, 220, 0.45, 4);
+    addP(player.x, player.y, '#ff375f', 12, 320, 0.35, 5); // extra red splash
+    addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.7, 30);
+    screenShake = Math.min(3.6, screenShake + (source === 'boss' ? 1.4 : 0.95));
+    powerPulse = Math.min(2.6, powerPulse + 0.4);
+    playSfx('hit', source === 'boss' ? 1.25 : 1.1);
+    playSfx('death', 0.4); // small ominous low note layered on every -1
+    playHaptic(source === 'boss' ? 'hard' : 'hard');
+
+    // Trigger HUD heart shake/lost animation
+    window.__heartDamageTime = performance.now();
+    window.__heartLostIdx = hpBefore - 1; // the heart that just got depleted
+    // Body class for CSS-driven full-screen flash
+    document.body.classList.add('hp-flash');
+    if (window.__hpFlashTimer) clearTimeout(window.__hpFlashTimer);
+    window.__hpFlashTimer = setTimeout(() => document.body.classList.remove('hp-flash'), 400);
+
     syncHpDangerFlair();
 
     if (player.hp > 0) return;
@@ -4948,13 +4964,29 @@ function updateHazards(dt) {
 
 function damagePlayer(source) {
     if (player.invulnerable > 0) return;
+    const hpBefore = player.hp;
     player.hp -= 1;
     player.invulnerable = 0.9;
-    addP(player.x, player.y, source === 'boss' ? '#ff375f' : '#ffffff', 16, 160, 0.35, 3);
-    addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.48, 22);
-    screenShake = Math.min(2.5, screenShake + 0.5);
-    playSfx('hit', source === 'boss' ? 1.15 : 1);
-    playHaptic(source === 'boss' ? 'hard' : 'medium');
+
+    // STRONGER heart-loss feedback: red full-screen flash, harder shake, particle burst,
+    // HUD-heart shake animation flag, big -1 text, body class for CSS pulse.
+    addP(player.x, player.y, source === 'boss' ? '#ff375f' : '#ffffff', 28, 220, 0.45, 4);
+    addP(player.x, player.y, '#ff375f', 12, 320, 0.35, 5); // extra red splash
+    addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.7, 30);
+    screenShake = Math.min(3.6, screenShake + (source === 'boss' ? 1.4 : 0.95));
+    powerPulse = Math.min(2.6, powerPulse + 0.4);
+    playSfx('hit', source === 'boss' ? 1.25 : 1.1);
+    playSfx('death', 0.4); // small ominous low note layered on every -1
+    playHaptic(source === 'boss' ? 'hard' : 'hard');
+
+    // Trigger HUD heart shake/lost animation
+    window.__heartDamageTime = performance.now();
+    window.__heartLostIdx = hpBefore - 1; // the heart that just got depleted
+    // Body class for CSS-driven full-screen flash
+    document.body.classList.add('hp-flash');
+    if (window.__hpFlashTimer) clearTimeout(window.__hpFlashTimer);
+    window.__hpFlashTimer = setTimeout(() => document.body.classList.remove('hp-flash'), 400);
+
     syncHpDangerFlair();
 
     if (player.phoenixDrive && player.phoenixCooldown <= 0) {
@@ -5011,7 +5043,19 @@ function renderAbilityArchive() {
     `).join('');
 
     grid.innerHTML = '';
-    ABILITIES.forEach((ability) => {
+    // Sort by unlockLevel ASC so e.g. lvl 6 skill sits near top, not buried at the bottom
+    const sortedAbilities = [...ABILITIES].sort((a, b) => {
+        const ua = a.unlockLevel || 1;
+        const ub = b.unlockLevel || 1;
+        if (ua !== ub) return ua - ub;
+        // Tiebreaker: rarity order (common first), then name
+        const order = { common: 0, rare: 1, epic: 2, legendary: 3 };
+        const ra = order[a.rarity] ?? 0;
+        const rb = order[b.rarity] ?? 0;
+        if (ra !== rb) return ra - rb;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+    sortedAbilities.forEach((ability) => {
         const unlocked = (ability.unlockLevel || 1) <= save.unlocked;
         const baseTier = (ability.rarity || 'common').toLowerCase();
         const card = document.createElement('div');

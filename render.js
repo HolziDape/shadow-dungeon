@@ -476,11 +476,43 @@ function drawOffscreenEnemyIndicators(width, height) {
 
 function drawHearts(x, y, hp) {
     const fullHearts = Math.max(0, Math.floor(hp));
+    // Compute damage-flash factor (0 = idle, 1 = just damaged, decays in 0.6s)
+    const damageT = (typeof window.__heartDamageTime === 'number')
+        ? Math.max(0, 1 - (performance.now() - window.__heartDamageTime) / 600)
+        : 0;
+    // Lost-heart index: which heart got depleted? Animate it shaking out
+    const lostHeartIdx = (typeof window.__heartLostIdx === 'number') ? window.__heartLostIdx : -1;
+
     for (let i = 0; i < 3; i++) {
         ctx.save();
-        ctx.translate(x + i * 34, y);
-        ctx.scale(1.2, 1.2);
-        drawHeartShape(i < fullHearts ? '#ff375f' : 'rgba(255,255,255,0.12)');
+        // Default position
+        let cx = x + i * 34;
+        let cy = y;
+        let scale = 1.2;
+        let color = i < fullHearts ? '#ff375f' : 'rgba(255,255,255,0.12)';
+        let glow = 0;
+
+        // Lost heart: shake + fade out
+        if (i === lostHeartIdx && damageT > 0) {
+            cx += Math.sin(damageT * 22) * 4 * damageT;
+            cy += Math.cos(damageT * 18) * 3 * damageT;
+            scale = 1.2 * (1 + damageT * 0.6); // grow as it "explodes"
+            color = `rgba(255, ${Math.floor(55 + damageT * 200)}, ${Math.floor(95 + damageT * 80)}, ${(1 - damageT * 0.6).toFixed(2)})`;
+            glow = damageT * 18;
+        }
+        // Remaining hearts pulse briefly when damage hits
+        else if (i < fullHearts && damageT > 0) {
+            scale = 1.2 * (1 + damageT * 0.18);
+            glow = damageT * 12;
+        }
+
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        if (glow > 0) {
+            ctx.shadowColor = '#ff375f';
+            ctx.shadowBlur = glow;
+        }
+        drawHeartShape(color);
         ctx.restore();
     }
 }

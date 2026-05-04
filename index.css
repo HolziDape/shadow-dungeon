@@ -3285,13 +3285,13 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   position: relative;
   z-index: 2;
   margin: 18px auto 12px;
-  width: min(220px, 60%);
+  width: min(260px, 70%);
   /* Scrollable vertical viewport so user can peek at upcoming levels */
   max-height: calc(100vh - 360px);
   overflow-y: auto;
   scrollbar-width: none;
   display: flex; flex-direction: column; align-items: center;
-  gap: 0;
+  gap: 4px;
   padding: 14px 0 24px;
   scroll-behavior: smooth;
   /* Soft fade on edges so the scroll feels natural */
@@ -3314,13 +3314,21 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   font-size: 22px; font-weight: 900;
   color: rgba(255,255,255,0.4);
   box-shadow: inset 0 0 16px rgba(0,0,0,0.6);
+  /* Zigzag offset — every other node pushed slightly off-center */
+  transition: transform .25s ease;
 }
 .lr-line {
   width: 3px;
-  height: 60px;
+  height: 56px;
   background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0.08));
   border-radius: 999px;
 }
+/* Zigzag pattern — alternating left/right offset for organic path feel */
+.level-roadmap .lr-node:nth-of-type(odd):not(.current)  { transform: translateX(-16px); }
+.level-roadmap .lr-node:nth-of-type(even):not(.current) { transform: translateX( 16px); }
+/* Connecting lines slant slightly to follow the zigzag */
+.level-roadmap .lr-line:nth-of-type(odd)  { transform: rotate( 8deg) translateY(-2px); }
+.level-roadmap .lr-line:nth-of-type(even) { transform: rotate(-8deg) translateY(-2px); }
 .lr-line.line-active {
   background: linear-gradient(180deg, rgba(0,255,160,0.9), rgba(0,255,160,0.4));
   box-shadow: 0 0 10px rgba(0,255,160,0.6);
@@ -4240,6 +4248,27 @@ body.danger-pulse #hp-flair {
 }
 /* When the body has neither flag, the flair fades out */
 body:not(.danger-hp):not(.danger-pulse) #hp-flair { opacity: 0; }
+
+/* ── HP loss screen flash ────────────────────────────────────── */
+body.hp-flash::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, transparent 30%, rgba(255,55,95,0.55) 95%),
+    radial-gradient(ellipse 80% 30% at 50% 0%, rgba(255,55,95,0.45), transparent 70%),
+    radial-gradient(ellipse 80% 30% at 50% 100%, rgba(255,55,95,0.45), transparent 70%);
+  animation: hpFlashAnim .4s ease-out forwards;
+  mix-blend-mode: screen;
+}
+@keyframes hpFlashAnim {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  60%  { opacity: 0.45; }
+  100% { opacity: 0; }
+}
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width:560px) {

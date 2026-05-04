@@ -167,6 +167,269 @@ const ABILITIES = [
             { name: 'Void Implosion',  tier: 'legendary', desc: 'After pull, field implodes for huge damage.' },
             { name: 'Event Horizon',   tier: 'legendary', desc: 'Permanent micro-singularity around your ship.' }
         ]
+    },
+    // ──────────────────────────────────────────────────────────
+    // 25+ NEW ABILITIES (Nuclear-Throne / Gungeon-inspired)
+    // ──────────────────────────────────────────────────────────
+    {
+        id: 'cluster_bomb', name: 'Kleine Bombe', icon: 'BMB', rarity: 'common', unlockLevel: 2,
+        desc: 'Jeder 10. Schuss feuert eine kleine Bombe (300% Schaden).',
+        tree: [
+            { name: 'Kleine Bombe',     tier: 'common',    desc: 'Jeder 10. Schuss = kleine Bombe (300% ATK).' },
+            { name: 'Doppelbombe',      tier: 'rare',      desc: 'Bombe alle 7 Schuss + 50% groesserer Radius.' },
+            { name: 'Streubombe',       tier: 'epic',      desc: 'Bombe splittert in 5 Sub-Bomben beim Aufprall.' },
+            { name: 'Cluster-Explosion',tier: 'legendary', desc: 'Bombe spaltet sich 2x. Massive Kettenexplosion.' }
+        ]
+    },
+    {
+        id: 'ricochet', name: 'Ricochet Round', icon: 'RIC', rarity: 'rare', unlockLevel: 4,
+        desc: 'Schuesse prallen einmal von Waenden ab.',
+        tree: [
+            { name: 'Ricochet Round',   tier: 'rare',      desc: 'Schuesse prallen 1x ab.' },
+            { name: 'Twin Ricochet',    tier: 'rare',      desc: 'Schuesse prallen 2x ab und +20% Schaden je Bounce.' },
+            { name: 'Pinball Master',   tier: 'epic',      desc: 'Schuesse prallen 4x ab und suchen Gegner.' },
+            { name: 'Infinite Bounce',  tier: 'legendary', desc: 'Schuesse prallen unendlich bis sie treffen.' }
+        ]
+    },
+    {
+        id: 'vampire', name: 'Vampir-Round', icon: 'VAM', rarity: 'rare', unlockLevel: 6,
+        desc: 'Heilt 2% des verursachten Schadens.',
+        tree: [
+            { name: 'Vampir-Round',     tier: 'rare',      desc: 'Heilt 2% Lifesteal pro Treffer.' },
+            { name: 'Blut-Magnet',      tier: 'rare',      desc: 'Heilt 4% Lifesteal + Pickup-Range +20%.' },
+            { name: 'Lebens-Sauger',    tier: 'epic',      desc: 'Heilt 8% Lifesteal + chance auf Heart-Drop bei Kill.' },
+            { name: 'Eternal Bloodlust',tier: 'legendary', desc: 'Heilt 15% Lifesteal + jeder Boss heilt voll.' }
+        ]
+    },
+    {
+        id: 'frost_shot', name: 'Frost-Geschoss', icon: 'FRZ', rarity: 'rare', unlockLevel: 8,
+        desc: 'Treffer verlangsamen Gegner um 25%.',
+        tree: [
+            { name: 'Frost-Geschoss',   tier: 'rare',      desc: 'Treffer verlangsamen Gegner um 25% fuer 1.5s.' },
+            { name: 'Eis-Splitter',     tier: 'rare',      desc: 'Slow 40% + 5% Frostbiss-Tick (DoT).' },
+            { name: 'Tiefkuehl',        tier: 'epic',      desc: 'Slow 60% + 15% chance Gegner einzufrieren (Stun).' },
+            { name: 'Absoluter Nullpunkt',tier: 'legendary', desc: 'Eingefrorene Gegner zerschmettern explosiv.' }
+        ]
+    },
+    {
+        id: 'poison_dart', name: 'Gift-Pfeil', icon: 'PSN', rarity: 'common', unlockLevel: 3,
+        desc: 'Treffer vergiften Gegner (Schaden ueber Zeit).',
+        tree: [
+            { name: 'Gift-Pfeil',       tier: 'common',    desc: 'Treffer = 8% ATK Schaden ueber 3s.' },
+            { name: 'Toxin',            tier: 'rare',      desc: 'Gift tickt 12% ueber 4s + verbreitet sich.' },
+            { name: 'Saeure-Wolke',     tier: 'epic',      desc: 'Vergiftete Gegner explodieren bei Tod in Saeure.' },
+            { name: 'Plague Carrier',   tier: 'legendary', desc: 'Gift jumps zwischen Gegnern wie ein Virus.' }
+        ]
+    },
+    {
+        id: 'bullet_storm', name: 'Frenzy Mode', icon: 'FRN', rarity: 'rare', unlockLevel: 10,
+        desc: 'Feuerrate steigt mit jedem Kill (max +30%).',
+        tree: [
+            { name: 'Frenzy Mode',      tier: 'rare',      desc: 'Feuerrate +3% pro Kill, max +30%, faellt wenn 2s ohne Kill.' },
+            { name: 'Killing Spree',    tier: 'rare',      desc: 'Stack max +50% + auch +10% Damage.' },
+            { name: 'Berserker',        tier: 'epic',      desc: 'Stack max +80% + immun gegen Slow.' },
+            { name: 'Eternal Storm',    tier: 'legendary', desc: 'Stacks faellen nicht mehr ab. Permanenter Frenzy.' }
+        ]
+    },
+    {
+        id: 'lucky_seven', name: 'Glueckszahl', icon: 'L7', rarity: 'common', unlockLevel: 5,
+        desc: 'Jeder 7. Schuss verursacht 5x Schaden.',
+        tree: [
+            { name: 'Glueckszahl',      tier: 'common',    desc: 'Jeder 7. Schuss = x5 Damage.' },
+            { name: 'Sieben Sterne',    tier: 'rare',      desc: 'Jeder 7. Schuss = x8 + Glanzeffekt.' },
+            { name: 'Jackpot',          tier: 'epic',      desc: 'Jeder 5. Schuss = x10 + heilt 1 HP bei Kill.' },
+            { name: 'Royal Flush',      tier: 'legendary', desc: 'Jeder 4. Schuss = x15 + chance auf Mega-Crit x30.' }
+        ]
+    },
+    {
+        id: 'crit_chance', name: 'Praezisionskern', icon: 'CRT', rarity: 'common', unlockLevel: 4,
+        desc: 'Schuesse haben 15% Chance auf Crit (x2).',
+        tree: [
+            { name: 'Praezisionskern',  tier: 'common',    desc: '15% Crit-Chance fuer x2 Damage.' },
+            { name: 'Headhunter',       tier: 'rare',      desc: '25% Crit-Chance fuer x2.5 Damage.' },
+            { name: 'Lethal Edge',      tier: 'epic',      desc: '40% Crit-Chance, Crits durchschlagen Pierce +1.' },
+            { name: 'Deadeye',          tier: 'legendary', desc: '60% Crit-Chance, Crits = x4 Damage.' }
+        ]
+    },
+    {
+        id: 'glass_cannon', name: 'Glaskanone', icon: 'GLC', rarity: 'rare', unlockLevel: 12,
+        desc: '+60% Damage, aber -1 max HP.',
+        tree: [
+            { name: 'Glaskanone',       tier: 'rare',      desc: '+60% Damage, -1 max HP.' },
+            { name: 'Brittle Edge',     tier: 'rare',      desc: '+90% Damage, -1 max HP, +30% Feuerrate.' },
+            { name: 'Last Stand',       tier: 'epic',      desc: '+150% Damage bei 1 HP. Ueberlebt 1 toedlichen Treffer.' },
+            { name: 'Suicide Pact',     tier: 'legendary', desc: 'x3 Damage, 2 HP nur. Halbe Kosten fuer alle Heals.' }
+        ]
+    },
+    {
+        id: 'lich_bullets', name: 'Lich-Auge', icon: 'LCH', rarity: 'epic', unlockLevel: 18,
+        desc: 'Schuesse splittern in 3 nach 0.4s Flugzeit.',
+        tree: [
+            { name: 'Lich-Auge',        tier: 'epic',      desc: 'Schuesse splittern nach 0.4s in 3 Sub-Schuesse.' },
+            { name: 'Doppel-Lich',      tier: 'epic',      desc: 'Splitter splittern nochmal in 2 (3->6).' },
+            { name: 'Hex-Multiplier',   tier: 'legendary', desc: 'Drei-fach-Split + jede Sub-Bullet hat 30% Crit.' },
+            { name: 'Auge des Toten',   tier: 'legendary', desc: 'Alle Bullets bekommen jede Synergy gleichzeitig.' }
+        ]
+    },
+    {
+        id: 'platinum_rounds', name: 'Platin-Kugeln', icon: 'PLT', rarity: 'rare', unlockLevel: 14,
+        desc: '+0.05% permanenter Damage pro Treffer (max +30%).',
+        tree: [
+            { name: 'Platin-Kugeln',    tier: 'rare',      desc: '+0.05% permanenter Damage pro Treffer (cap +30%).' },
+            { name: 'Goldsplitter',     tier: 'rare',      desc: '+0.08% pro Hit, cap +50%, +5% Feuerrate cap.' },
+            { name: 'Iridium-Kern',     tier: 'epic',      desc: '+0.12% Damage + 0.05% Feuerrate pro Hit, cap +80%.' },
+            { name: 'Singulaerer Hit',  tier: 'legendary', desc: 'Jeder 100. Hit gibt permanent +1% Damage. Kein Cap.' }
+        ]
+    },
+    {
+        id: 'blank_burst', name: 'Platzpatronen', icon: 'BLK', rarity: 'rare', unlockLevel: 16,
+        desc: '5% Chance pro Schuss, Gegner-Kugeln zu loeschen.',
+        tree: [
+            { name: 'Platzpatronen',    tier: 'rare',      desc: '5% Chance pro Schuss = clear nearby enemy bullets.' },
+            { name: 'Static Wave',      tier: 'rare',      desc: '10% Blank-Chance + Pulse stoppt 0.3s Gegner-Schuss.' },
+            { name: 'Bullet Eraser',    tier: 'epic',      desc: '20% Blank-Chance, blank radius x2, drops gold.' },
+            { name: 'Nullification',    tier: 'legendary', desc: 'Permanente Blank-Aura. Gegner-Schuesse loeschen sich.' }
+        ]
+    },
+    {
+        id: 'strong_spirit', name: 'Starker Geist', icon: 'SPR', rarity: 'epic', unlockLevel: 22,
+        desc: 'Toedlicher Schaden laesst dich mit 1 HP ueberleben (1x pro Run).',
+        tree: [
+            { name: 'Starker Geist',    tier: 'epic',      desc: 'Survive 1 toedlichen Treffer mit 1 HP. 2s Invul.' },
+            { name: 'Phoenix-Geist',    tier: 'epic',      desc: 'Reset bei Vollheilung. 3s Invul + Burst.' },
+            { name: 'Eternal Spirit',   tier: 'legendary', desc: 'Reset alle 60s. 5s Invul + heilt 2 HP.' },
+            { name: 'Goettlicher Schild',tier: 'legendary',desc: '1 freier Schild pro Welle. Permanent.' }
+        ]
+    },
+    {
+        id: 'bloodlust', name: 'Blutrausch', icon: 'BLD', rarity: 'rare', unlockLevel: 9,
+        desc: 'Kills haben 25% Chance, dich um 1 HP zu heilen.',
+        tree: [
+            { name: 'Blutrausch',       tier: 'rare',      desc: '25% Heal-Chance pro Kill (max HP).' },
+            { name: 'Carnage',          tier: 'rare',      desc: '40% Heal-Chance + Kills geben +5% kurz Damage.' },
+            { name: 'Massaker',         tier: 'epic',      desc: '60% Chance, +1 HP per 5 kills garantiert.' },
+            { name: 'Apex Slaughter',   tier: 'legendary', desc: 'Jeder Kill = +0.5 HP (rundet, garantiert).' }
+        ]
+    },
+    {
+        id: 'trigger_fingers', name: 'Trigger Fingers', icon: 'TFG', rarity: 'common', unlockLevel: 7,
+        desc: 'Jeder Kill reduziert ATK-Cooldown um 0.5%.',
+        tree: [
+            { name: 'Trigger Fingers',  tier: 'common',    desc: 'Kills geben kurz +0.5% Feuerrate (cap +20%).' },
+            { name: 'Quick Hands',      tier: 'rare',      desc: 'Kills +1% (cap +35%) + 5% Damage Bonus.' },
+            { name: 'Fast Forward',     tier: 'epic',      desc: 'Kills +2% (cap +60%). Boss-Kill = Vollreset cap.' },
+            { name: 'Time Warp',        tier: 'legendary', desc: 'Cap entfaellt. Kills geben permanent +0.1%.' }
+        ]
+    },
+    {
+        id: 'scarier_face', name: 'Gruselige Fratze', icon: 'SCR', rarity: 'epic', unlockLevel: 20,
+        desc: 'Alle Gegner haben -20% max HP.',
+        tree: [
+            { name: 'Gruselige Fratze', tier: 'epic',      desc: 'Gegner spawnen mit -20% max HP.' },
+            { name: 'Nightmare Fuel',   tier: 'epic',      desc: 'Gegner -30% HP + 10% chance dass sie fliehen.' },
+            { name: 'Total Eclipse',    tier: 'legendary', desc: 'Gegner -45% HP + Bosse -25%.' },
+            { name: 'Grim Reaper',      tier: 'legendary', desc: 'Gegner unter 30% HP sterben sofort.' }
+        ]
+    },
+    {
+        id: 'saw_blade', name: 'Saege-Klinge', icon: 'SAW', rarity: 'rare', unlockLevel: 11,
+        desc: 'Eine rotierende Saege orbitiert um dein Schiff.',
+        tree: [
+            { name: 'Saege-Klinge',     tier: 'rare',      desc: 'Saege rotiert um dich (Damage on contact).' },
+            { name: 'Doppelsaege',      tier: 'rare',      desc: '2 Saegen + 30% schneller + groesser.' },
+            { name: 'Buzz-Saw',         tier: 'epic',      desc: '3 Saegen, schicken Mini-Wellen aus.' },
+            { name: 'Death Saws',       tier: 'legendary', desc: '4 Riesensaegen + ziehen Gegner an.' }
+        ]
+    },
+    {
+        id: 'boomerang', name: 'Bumerang', icon: 'BMR', rarity: 'rare', unlockLevel: 8,
+        desc: 'Jeder 5. Schuss kommt zurueck und macht den Schaden nochmal.',
+        tree: [
+            { name: 'Bumerang',         tier: 'rare',      desc: 'Jeder 5. Schuss returns mit 100% Damage.' },
+            { name: 'Twin Boomer',      tier: 'rare',      desc: 'Jeder 4. Schuss returns + spawnt Klon.' },
+            { name: 'Returning Storm',  tier: 'epic',      desc: 'Jeder 3. Schuss returns 3x mit +50% Damage.' },
+            { name: 'Eternal Return',   tier: 'legendary', desc: 'Alle Schuesse returns. Schuesse pendeln 5x.' }
+        ]
+    },
+    {
+        id: 'spread_volley', name: 'Streufeuer', icon: 'SPR', rarity: 'common', unlockLevel: 3,
+        desc: 'Volleys feuern in einem 15° Bogen.',
+        tree: [
+            { name: 'Streufeuer',       tier: 'common',    desc: 'Volleys mit 15° Spread-Winkel.' },
+            { name: 'Schrotflinte',     tier: 'rare',      desc: '30° Spread, +1 Projektil.' },
+            { name: 'Buckshot',         tier: 'epic',      desc: '50° Spread, Schuesse machen 30% mehr Damage close-range.' },
+            { name: 'Death Cone',       tier: 'legendary', desc: '90° Spread, +3 Projektile, point-blank x4 dmg.' }
+        ]
+    },
+    {
+        id: 'crit_bomb', name: 'Crit-Explosion', icon: 'CXB', rarity: 'epic', unlockLevel: 24,
+        desc: 'Crits explodieren in einem kleinen AOE.',
+        tree: [
+            { name: 'Crit-Explosion',   tier: 'epic',      desc: 'Crits = kleine AOE-Explosion (60% Damage Splash).' },
+            { name: 'Cluster Crit',     tier: 'epic',      desc: 'Crits splittern + 80% Splash + bigger radius.' },
+            { name: 'Nuclear Crit',     tier: 'legendary', desc: 'Crits = 1.5x Damage Splash + Stunwave.' },
+            { name: 'Atom Smash',       tier: 'legendary', desc: 'Crits killen alle Gegner in 100px Radius.' }
+        ]
+    },
+    {
+        id: 'phantom_shield', name: 'Phantom-Schild', icon: 'SHD', rarity: 'rare', unlockLevel: 13,
+        desc: 'Alle 8s blockst du den naechsten Treffer kostenlos.',
+        tree: [
+            { name: 'Phantom-Schild',   tier: 'rare',      desc: 'Block 1 Hit alle 8s (visual ring).' },
+            { name: 'Doppel-Schild',    tier: 'rare',      desc: 'Block alle 6s + 1 extra Charge bei Wave-Start.' },
+            { name: 'Aegis Shield',     tier: 'epic',      desc: 'Block alle 4s + reflect Schuss bei Block.' },
+            { name: 'Goettliche Aura',  tier: 'legendary', desc: 'Block alle 2s + heilt bei Block.' }
+        ]
+    },
+    {
+        id: 'arc_pulse', name: 'Arc-Puls', icon: 'ARC', rarity: 'epic', unlockLevel: 17,
+        desc: 'Jeder 6. Treffer entfacht einen Energie-Puls auf 3 Gegner.',
+        tree: [
+            { name: 'Arc-Puls',         tier: 'epic',      desc: 'Jeder 6. Treffer = Puls auf 3 nahe Gegner.' },
+            { name: 'Static Field',     tier: 'epic',      desc: 'Puls jeder 4. Treffer + paralyzed nearby briefly.' },
+            { name: 'Magnetic Storm',   tier: 'legendary', desc: 'Puls jeder 2. Treffer + 6 Gegner.' },
+            { name: 'Particle Cascade', tier: 'legendary', desc: 'Jeder Treffer pulst auf 8 Gegner.' }
+        ]
+    },
+    {
+        id: 'heat_seeker', name: 'Heatseeker', icon: 'HMG', rarity: 'rare', unlockLevel: 7,
+        desc: 'Schuesse haben schwaches Homing.',
+        tree: [
+            { name: 'Heatseeker',       tier: 'rare',      desc: 'Schuesse curven leicht zum naechsten Gegner.' },
+            { name: 'Lock-On',          tier: 'rare',      desc: 'Stronger Homing + 15% Damage gegen markierte Ziele.' },
+            { name: 'Heat Vector',      tier: 'epic',      desc: 'Hard homing + Schuesse koennen 90° drehen.' },
+            { name: 'Smart Munition',   tier: 'legendary', desc: 'Schuesse warten bis sie ein Ziel haben (8s).' }
+        ]
+    },
+    {
+        id: 'glass_shards', name: 'Glas-Splitter', icon: 'GLS', rarity: 'common', unlockLevel: 6,
+        desc: 'Treffer hinterlassen Glassplitter, die nahe Gegner verletzen.',
+        tree: [
+            { name: 'Glas-Splitter',    tier: 'common',    desc: 'Treffer = 3 Splitter (50% Damage) im 30px Radius.' },
+            { name: 'Diamant-Schaerfe', tier: 'rare',      desc: '5 Splitter + 70% Damage + bleeding stack.' },
+            { name: 'Crystalline Storm',tier: 'epic',      desc: '10 Splitter + Splitter prallen 1x ab.' },
+            { name: 'Glass Apocalypse', tier: 'legendary', desc: 'Splitter explodieren in 5 weitere kleine Splitter.' }
+        ]
+    },
+    {
+        id: 'combo_multiplier', name: 'Combo-Streak', icon: 'CMB', rarity: 'common', unlockLevel: 4,
+        desc: '+5% Damage pro aktuellem Killstreak (cap +50%).',
+        tree: [
+            { name: 'Combo-Streak',     tier: 'common',    desc: '+5% Damage pro Kill in Folge (cap +50%).' },
+            { name: 'Kill Chain',       tier: 'rare',      desc: '+8% pro Kill (cap +80%) + faellt langsamer.' },
+            { name: 'Streak Master',    tier: 'epic',      desc: '+12% pro Kill (cap +150%) + 1s extra Combo-Time.' },
+            { name: 'God Mode',         tier: 'legendary', desc: '+15% pro Kill, kein Cap. Streak verfaellt nie.' }
+        ]
+    },
+    {
+        id: 'fortune_coin', name: 'Glueckstaler', icon: 'CON', rarity: 'common', unlockLevel: 5,
+        desc: 'Kills geben +50% mehr Gold.',
+        tree: [
+            { name: 'Glueckstaler',     tier: 'common',    desc: 'Kills geben +50% Gold.' },
+            { name: 'Goldener Touch',   tier: 'rare',      desc: '+100% Gold + 5% chance auf Doppel-Drop.' },
+            { name: 'Midas',            tier: 'epic',      desc: '+200% Gold + Bosse droppen ein Pack-Token.' },
+            { name: 'Wealth Generator', tier: 'legendary', desc: '+400% Gold + jede Welle = +20 Gold passiv.' }
+        ]
     }
 ];
 

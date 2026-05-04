@@ -2469,6 +2469,222 @@ function applyAbility(id) {
             }
             if (rank >= 4) player.sentinelHalo = true;
             break;
+        // ────────────── 25+ NEW ABILITIES (effect logic) ──────────
+        case 'cluster_bomb': {
+            player.clusterBomb = true;
+            player.clusterEvery = [10, 7, 5, 4][rank - 1] || 10;
+            player.clusterDmgMult = [3.0, 4.5, 6.0, 9.0][rank - 1] || 3.0;
+            if (rank >= 3) player.clusterSplit = true;
+            if (rank >= 4) player.clusterChain = true;
+            break;
+        }
+        case 'ricochet': {
+            player.bulletsRicochet = true;
+            player.ricochetCount = [1, 2, 4, 99][rank - 1] || 1;
+            if (rank >= 2) player.ricochetDmgPerBounce = (player.ricochetDmgPerBounce || 0) + 0.20;
+            if (rank >= 3) player.ricochetSeek = true;
+            break;
+        }
+        case 'vampire': {
+            player.lifesteal = [0.02, 0.04, 0.08, 0.15][rank - 1] || 0.02;
+            if (rank >= 2) player.magnetFlat = (player.magnetFlat || 0) + 20;
+            if (rank >= 3) player.heartDropOnKill = 0.05;
+            if (rank >= 4) player.bossFullHeal = true;
+            break;
+        }
+        case 'frost_shot': {
+            player.frostOnHit = true;
+            player.frostStrength = [0.25, 0.40, 0.60, 0.60][rank - 1] || 0.25;
+            if (rank >= 2) player.frostDoT = true;
+            if (rank >= 3) player.freezeChance = 0.15;
+            if (rank >= 4) player.frozenShatter = true;
+            break;
+        }
+        case 'poison_dart': {
+            player.poisonOnHit = true;
+            player.poisonPct = [0.08, 0.12, 0.12, 0.12][rank - 1] || 0.08;
+            player.poisonDuration = [3, 4, 5, 6][rank - 1] || 3;
+            if (rank >= 2) player.poisonSpread = true;
+            if (rank >= 3) player.poisonExplodeOnDeath = true;
+            if (rank >= 4) player.poisonJump = true;
+            // Add baseline damage so it's tangible even if DoT engine isn't deep
+            player.damageMultiplier *= [1.05, 1.10, 1.20, 1.35][rank - 1] || 1.05;
+            break;
+        }
+        case 'bullet_storm': {
+            player.frenzyOnKill = true;
+            player.frenzyCap = [0.30, 0.50, 0.80, 99][rank - 1] || 0.30;
+            if (rank >= 2) player.damageMultiplier *= 1.10;
+            if (rank >= 3) player.slowImmune = true;
+            if (rank >= 4) player.frenzyPermanent = true;
+            break;
+        }
+        case 'lucky_seven': {
+            player.luckyEvery = [7, 7, 5, 4][rank - 1] || 7;
+            player.luckyMult = [5, 8, 10, 15][rank - 1] || 5;
+            if (rank >= 3) player.luckyHeals = 1;
+            if (rank >= 4) player.megaCritChance = 0.15;
+            break;
+        }
+        case 'crit_chance': {
+            player.critChance = Math.max(player.critChance || 0, [0.15, 0.25, 0.40, 0.60][rank - 1] || 0.15);
+            player.critMultiplier = [2.0, 2.5, 2.5, 4.0][rank - 1] || 2.0;
+            if (rank >= 3) player.pierce = (player.pierce || 0) + 1;
+            break;
+        }
+        case 'glass_cannon': {
+            const dmgMult = [1.6, 1.9, 2.5, 3.0][rank - 1] || 1.6;
+            player.damageMultiplier *= dmgMult;
+            player.maxHp = Math.max(1, player.maxHp - (rank === 4 ? 0 : 1));
+            player.hp = Math.min(player.hp, player.maxHp);
+            if (rank === 2) player.atkCooldown *= 0.77;
+            if (rank >= 3) player.firstLethalBlock = true;
+            if (rank >= 4) player.maxHp = 2;
+            break;
+        }
+        case 'lich_bullets': {
+            player.bulletFork = true;
+            player.bulletForkCount = [3, 6, 6, 6][rank - 1] || 3;
+            if (rank >= 3) player.forkCritChance = 0.30;
+            if (rank >= 4) player.lichEye = true;
+            break;
+        }
+        case 'platinum_rounds': {
+            player.platinumStack = true;
+            player.platinumPerHit = [0.0005, 0.0008, 0.0012, 0.01][rank - 1] || 0.0005;
+            player.platinumCap = [0.30, 0.50, 0.80, 99][rank - 1] || 0.30;
+            if (rank >= 2) player.platinumFireRate = 0.0005;
+            break;
+        }
+        case 'blank_burst': {
+            player.blankChance = [0.05, 0.10, 0.20, 1.0][rank - 1] || 0.05;
+            if (rank >= 2) player.blankPulse = true;
+            if (rank >= 3) player.blankRadius = 2;
+            if (rank >= 4) player.permanentBlankAura = true;
+            break;
+        }
+        case 'strong_spirit': {
+            player.firstLethalBlock = true;
+            player.spiritInvul = [2, 3, 5, 5][rank - 1] || 2;
+            if (rank >= 2) player.spiritResetOnFullHeal = true;
+            if (rank >= 3) player.spiritEvery = 60;
+            if (rank >= 4) player.shieldEachWave = true;
+            break;
+        }
+        case 'bloodlust': {
+            player.healOnKillChance = [0.25, 0.40, 0.60, 1.0][rank - 1] || 0.25;
+            if (rank >= 2) player.killDamageBuff = 0.05;
+            if (rank >= 3) player.healPerKills = 5;
+            if (rank >= 4) player.everyKillHeal = 0.5;
+            break;
+        }
+        case 'trigger_fingers': {
+            player.killSpeedBoost = true;
+            player.killSpeedPct = [0.005, 0.01, 0.02, 0.001][rank - 1] || 0.005;
+            player.killSpeedCap = [0.20, 0.35, 0.60, 99][rank - 1] || 0.20;
+            if (rank >= 2) player.killDamageBoost = 0.05;
+            if (rank >= 3) player.bossResetCap = true;
+            break;
+        }
+        case 'scarier_face': {
+            // Apply enemy HP reduction to all current and future enemies
+            const reduction = [0.20, 0.30, 0.45, 0.45][rank - 1] || 0.20;
+            player.enemyHpMult = (player.enemyHpMult || 1) * (1 - reduction);
+            // Retroactively apply to alive enemies
+            if (typeof enemies !== 'undefined') {
+                enemies.forEach((e) => { if (e.alive) e.hp *= (1 - reduction); });
+            }
+            if (rank >= 2) player.enemyFleeChance = 0.10;
+            if (rank >= 3) player.bossHpMult = 0.75;
+            if (rank >= 4) player.executeThreshold = 0.30;
+            break;
+        }
+        case 'saw_blade': {
+            const sawCount = [1, 2, 3, 4][rank - 1] || 1;
+            for (let n = 0; n < sawCount; n++) {
+                player.orbiters.push({
+                    id: nextOrbiterId++,
+                    angle: (n / sawCount) * Math.PI * 2,
+                    distance: 60 + (rank * 4),
+                    r: 8 + rank * 1.5,
+                    damage: 22 + rank * 6,
+                    x: player.x,
+                    y: player.y,
+                    isSaw: true
+                });
+            }
+            if (rank >= 3) player.sawWaves = true;
+            if (rank >= 4) player.sawPull = true;
+            break;
+        }
+        case 'boomerang': {
+            player.boomerangShot = true;
+            player.boomerangEvery = [5, 4, 3, 1][rank - 1] || 5;
+            if (rank >= 2) player.boomerangSpawnsClone = true;
+            if (rank >= 3) player.boomerangCount = 3;
+            if (rank >= 4) player.boomerangPendulum = 5;
+            break;
+        }
+        case 'spread_volley': {
+            player.multiSpread = (player.multiSpread || 0) + [0.15, 0.30, 0.50, 0.90][rank - 1];
+            if (rank >= 2) player.multishot = (player.multishot || 1) + 1;
+            if (rank >= 3) player.closeRangeBonus = 0.30;
+            if (rank >= 4) { player.multishot += 3; player.pointBlankMult = 4; }
+            break;
+        }
+        case 'crit_bomb': {
+            player.critExplode = true;
+            player.critExplodeRadius = [40, 55, 70, 100][rank - 1] || 40;
+            player.critExplodeMult = [0.6, 0.8, 1.5, 99][rank - 1] || 0.6;
+            if (rank >= 3) player.critStunWave = true;
+            if (rank >= 4) player.critOneShot = true;
+            break;
+        }
+        case 'phantom_shield': {
+            player.shieldEvery = [8, 6, 4, 2][rank - 1] || 8;
+            player.shieldCharges = [1, 2, 1, 1][rank - 1] || 1;
+            if (rank >= 3) player.shieldReflect = true;
+            if (rank >= 4) player.shieldHeals = true;
+            break;
+        }
+        case 'arc_pulse': {
+            player.arcOnHit = true;
+            player.arcEvery = [6, 4, 2, 1][rank - 1] || 6;
+            player.arcTargets = [3, 3, 6, 8][rank - 1] || 3;
+            if (rank >= 2) player.arcParalyze = true;
+            break;
+        }
+        case 'heat_seeker': {
+            player.bulletsHome = [0.3, 0.5, 0.8, 1.0][rank - 1] || 0.3;
+            if (rank >= 2) player.markedDmg = 0.15;
+            if (rank >= 3) player.bulletsHardHome = true;
+            if (rank >= 4) player.bulletsSmartWait = true;
+            break;
+        }
+        case 'glass_shards': {
+            player.shardsOnHit = true;
+            player.shardCount = [3, 5, 10, 10][rank - 1] || 3;
+            player.shardDmgMult = [0.5, 0.7, 0.7, 0.7][rank - 1] || 0.5;
+            if (rank >= 2) player.shardBleed = true;
+            if (rank >= 3) player.shardsBounce = true;
+            if (rank >= 4) player.shardsExplode = true;
+            break;
+        }
+        case 'combo_multiplier': {
+            player.comboBuff = true;
+            player.comboPct = [0.05, 0.08, 0.12, 0.15][rank - 1] || 0.05;
+            player.comboCap = [0.50, 0.80, 1.50, 99][rank - 1] || 0.50;
+            if (rank >= 3) player.comboTimeBonus = 1;
+            if (rank >= 4) player.comboPermanent = true;
+            break;
+        }
+        case 'fortune_coin': {
+            player.goldBonus = [0.50, 1.0, 2.0, 4.0][rank - 1] || 0.50;
+            if (rank >= 2) player.doubleDropChance = 0.05;
+            if (rank >= 3) player.bossPackToken = true;
+            if (rank >= 4) player.passiveGold = 20;
+            break;
+        }
         default:
             break;
     }
@@ -4521,7 +4737,34 @@ function getAbilityIconMarkup(id, fallback) {
         heal_heart: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,21 C13,21 4,15 4,9 C4,6.2 6.2,4 9,4 C10.8,4 12.3,5 13,6.2 C13.7,5 15.2,4 17,4 C19.8,4 22,6.2 22,9 C22,15 13,21 13,21Z"/><line x1="13" y1="9" x2="13" y2="15"/><line x1="10" y1="12" x2="16" y2="12"/></svg>`,
         orbiter: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="2.5" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(60 13 13)"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(120 13 13)"/></svg>`,
         phoenix_drive: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,2 L15.5,9 L23,9 L17,14 L19.5,22 L13,17.5 L6.5,22 L9,14 L3,9 L10.5,9 Z"/></svg>`,
-        singularity: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="7" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="13" cy="13" r="10.5" stroke-width="1" stroke-dasharray="1 3"/><line x1="4" y1="4" x2="9" y2="9" stroke-width="1.3"/><line x1="22" y1="4" x2="17" y2="9" stroke-width="1.3"/><line x1="4" y1="22" x2="9" y2="17" stroke-width="1.3"/><line x1="22" y1="22" x2="17" y2="17" stroke-width="1.3"/></svg>`
+        singularity: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="7" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="13" cy="13" r="10.5" stroke-width="1" stroke-dasharray="1 3"/><line x1="4" y1="4" x2="9" y2="9" stroke-width="1.3"/><line x1="22" y1="4" x2="17" y2="9" stroke-width="1.3"/><line x1="4" y1="22" x2="9" y2="17" stroke-width="1.3"/><line x1="22" y1="22" x2="17" y2="17" stroke-width="1.3"/></svg>`,
+        // ── 25+ NEW ABILITY ICONS ─────────────────────────────────
+        cluster_bomb:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="13" cy="14" rx="5.5" ry="6.5"/><line x1="13" y1="2" x2="13" y2="7"/><line x1="13" y1="11" x2="13" y2="14"/><line x1="11" y1="13" x2="15" y2="13"/><circle cx="6" cy="22" r="1.5"/><circle cx="20" cy="22" r="1.5"/></svg>`,
+        ricochet:         `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,5 11,12 3,19 11,15 19,22 23,17 19,11 23,5"/><circle cx="3" cy="5" r="1" fill="currentColor"/><circle cx="23" cy="17" r="1" fill="currentColor"/></svg>`,
+        vampire:          `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,21 C13,21 4,15 4,9 C4,6.2 6.2,4 9,4 C10.8,4 12.3,5 13,6.2 C13.7,5 15.2,4 17,4 C19.8,4 22,6.2 22,9 C22,15 13,21 13,21Z"/><polyline points="10,9 11,12 13,11"/><polyline points="13,11 15,14 16,9"/></svg>`,
+        frost_shot:       `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="3" x2="13" y2="23"/><line x1="3" y1="13" x2="23" y2="13"/><line x1="6" y1="6" x2="20" y2="20"/><line x1="20" y1="6" x2="6" y2="20"/><circle cx="13" cy="13" r="2"/></svg>`,
+        poison_dart:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,22 13,4 22,22"/><line x1="13" y1="11" x2="13" y2="18"/><circle cx="13" cy="14" r="1" fill="currentColor"/><circle cx="9" cy="20" r="1" fill="currentColor"/><circle cx="17" cy="20" r="1" fill="currentColor"/></svg>`,
+        bullet_storm:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 8 Q13 3 23 8" stroke-width="2"/><path d="M3 13 Q13 8 23 13" stroke-width="1.6"/><path d="M3 18 Q13 13 23 18" stroke-width="1.4"/><path d="M3 23 Q13 18 23 23" stroke-width="1.2"/></svg>`,
+        lucky_seven:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,5 20,5 12,22"/><circle cx="13" cy="13" r="11" stroke-width="1" stroke-dasharray="2 2"/></svg>`,
+        crit_chance:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="9"/><circle cx="13" cy="13" r="5"/><circle cx="13" cy="13" r="1.5" fill="currentColor"/><line x1="13" y1="2" x2="13" y2="6"/><line x1="13" y1="20" x2="13" y2="24"/><line x1="2" y1="13" x2="6" y2="13"/><line x1="20" y1="13" x2="24" y2="13"/></svg>`,
+        glass_cannon:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="6,4 20,4 18,22 8,22"/><line x1="9" y1="9" x2="11" y2="20"/><line x1="13" y1="6" x2="13" y2="22"/><line x1="17" y1="9" x2="15" y2="20"/></svg>`,
+        lich_bullets:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="9" r="5"/><circle cx="13" cy="9" r="2" fill="currentColor"/><polyline points="13,14 8,22"/><polyline points="13,14 13,22"/><polyline points="13,14 18,22"/></svg>`,
+        platinum_rounds:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="9"/><polygon points="13,7 16,11 13,15 10,11"/><line x1="13" y1="15" x2="13" y2="19"/></svg>`,
+        blank_burst:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="4"/><circle cx="13" cy="13" r="8" stroke-dasharray="2 3"/><line x1="5" y1="5" x2="21" y2="21"/></svg>`,
+        strong_spirit:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 22s-9-6-9-13a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 13-9 13z"/><ellipse cx="13" cy="6" rx="6" ry="2.5" stroke-dasharray="2 2"/></svg>`,
+        bloodlust:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="9" r="5"/><polyline points="9,15 13,22 17,15"/><circle cx="13" cy="9" r="2" fill="currentColor"/></svg>`,
+        trigger_fingers:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,18 10,12 14,16 22,6"/><polyline points="17,6 22,6 22,11"/></svg>`,
+        scarier_face:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9 C 5 4, 21 4, 21 9 C 21 18, 5 18, 5 9z"/><circle cx="9.5" cy="11" r="1.5" fill="currentColor"/><circle cx="16.5" cy="11" r="1.5" fill="currentColor"/><polyline points="9,18 11,21 13,18 15,21 17,18"/></svg>`,
+        saw_blade:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="6"/><line x1="13" y1="2" x2="13" y2="6"/><line x1="13" y1="20" x2="13" y2="24"/><line x1="2" y1="13" x2="6" y2="13"/><line x1="20" y1="13" x2="24" y2="13"/><line x1="5" y1="5" x2="8" y2="8"/><line x1="21" y1="5" x2="18" y2="8"/><line x1="5" y1="21" x2="8" y2="18"/><line x1="21" y1="21" x2="18" y2="18"/></svg>`,
+        boomerang:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22 Q4 4, 22 4 Q4 22, 4 22z"/><circle cx="9" cy="9" r="1" fill="currentColor"/></svg>`,
+        spread_volley:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="22" x2="6" y2="4"/><line x1="13" y1="22" x2="13" y2="3"/><line x1="13" y1="22" x2="20" y2="4"/><polyline points="4,7 6,4 8.5,7"/><polyline points="11,5 13,3 15,5"/><polyline points="18,7 20,4 22,7"/></svg>`,
+        crit_bomb:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 17,11 25,12 19,17 21,25 13,21 5,25 7,17 1,12 9,11"/><circle cx="13" cy="14" r="2" fill="currentColor"/></svg>`,
+        phantom_shield:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 L22 7 V14 C22 18, 18 22, 13 23 C8 22, 4 18, 4 14 V7 Z"/><polyline points="9,13 12,16 17,10"/></svg>`,
+        arc_pulse:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="3"/><path d="M7 7 Q13 4 19 7"/><path d="M19 19 Q13 22 7 19"/><line x1="2" y1="13" x2="6" y2="13"/><line x1="20" y1="13" x2="24" y2="13"/></svg>`,
+        heat_seeker:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="5"/><circle cx="13" cy="13" r="9" stroke-dasharray="3 3"/><line x1="13" y1="13" x2="22" y2="4"/><polyline points="18,4 22,4 22,8"/></svg>`,
+        glass_shards:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 16,9 13,11 10,9"/><polygon points="4,12 10,11 7,17"/><polygon points="22,12 19,17 16,11"/><polygon points="13,15 17,20 13,23 9,20"/></svg>`,
+        combo_multiplier: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,18 8,11 13,15 18,5 22,9"/><polyline points="20,5 22,5 22,7"/><line x1="3" y1="22" x2="22" y2="22"/></svg>`,
+        fortune_coin:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="9"/><polyline points="10,10 16,10 13,16 16,16"/><line x1="13" y1="6" x2="13" y2="20"/></svg>`
     };
     const wrap = svgs[id];
     if (wrap) return `<div class="ability-icon ability-${id}">${wrap}</div>`;

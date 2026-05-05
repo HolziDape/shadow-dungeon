@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Wings - Striker Edition</title>
+    <title>Shadow Dungeon - Striker Edition</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
 </head>
@@ -12,8 +12,8 @@
 
     <div class="hud-bar" id="main-hud">
         <div class="hud-left">
-            <div class="currency-badge" id="hud-level">LEVEL 1</div>
-            <div class="currency-badge" id="hud-wave">WAVE 0/0</div>
+            <div class="currency-badge" id="hud-level" data-i18n="hud.level">LEVEL 1</div>
+            <div class="currency-badge" id="hud-wave" data-i18n="hud.wave">WAVE 0/0</div>
         </div>
         <div class="hud-right">
             <div class="currency-badge currency-gold">GOLD <span id="hud-gold">0</span></div>
@@ -45,14 +45,14 @@
                 <div class="tile-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L4 7 V17 L12 22 L20 17 V7 Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
-                <div class="tile-tag" id="left-skill-tag">NEW SKILL</div>
-                <div class="tile-label" id="left-skill-label">Skills</div>
+                <div class="tile-tag" id="left-skill-tag" data-i18n="rail.newSkill">NEW SKILL</div>
+                <div class="tile-label" id="left-skill-label" data-i18n="rail.skills">Skills</div>
             </button>
             <button class="rail-tile rail-no-ads" type="button" id="left-no-ads" onclick="buyPremiumOffer('no_ads')">
                 <div class="tile-icon ad-no">
                     <span>AD</span>
                 </div>
-                <div class="tile-label" id="left-no-ads-label">Keine Werbung</div>
+                <div class="tile-label" id="left-no-ads-label" data-i18n="rail.noAds">No Ads</div>
             </button>
         </aside>
 
@@ -62,35 +62,41 @@
                 <div class="tile-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V4z"/><path d="M6 4H3v3a3 3 0 0 0 3 3"/><path d="M18 4h3v3a3 3 0 0 1-3 3"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="14" x2="12" y2="20"/></svg>
                 </div>
-                <div class="tile-label">Rangliste</div>
+                <div class="tile-label" data-i18n="rail.leaderboard">Leaderboard</div>
             </button>
             <button class="rail-tile rail-quests" type="button" onclick="openChallengesOverlay()">
                 <div class="tile-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4v-1h6v1"/><polyline points="8,11 11,14 16,9"/></svg>
                 </div>
-                <div class="tile-label">Aufgaben</div>
-                <span class="tile-badge">!</span>
+                <div class="tile-label" data-i18n="rail.quests">Quests</div>
+                <span class="tile-badge" id="quests-badge" style="display:none">!</span>
             </button>
             <button class="rail-tile rail-rewards" type="button" onclick="openDailyOverlay()">
                 <div class="tile-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M3 12h18"/><path d="M12 8v13"/><path d="M12 8c-2-3-5-3-5-1s2 1 5 1zM12 8c2-3 5-3 5-1s-2 1-5 1z"/></svg>
                 </div>
-                <div class="tile-label" id="right-rewards-label">Prämien</div>
+                <div class="tile-label" id="right-rewards-label" data-i18n="rail.dailyLogin">Daily Login</div>
                 <span class="tile-badge" id="rewards-badge" style="display:none">!</span>
+            </button>
+            <button class="rail-tile rail-test" type="button" onclick="openTestArena()">
+                <div class="tile-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v5l-2 3 2 3v7H9v-7l2-3-2-3z"/><line x1="9" y1="3" x2="15" y2="3"/><line x1="11" y1="14" x2="13" y2="14"/></svg>
+                </div>
+                <div class="tile-label" data-i18n="rail.test">Test</div>
             </button>
         </aside>
 
         <!-- Big primary CTA at bottom -->
         <div class="primary-cta">
             <button class="btn-level" id="battle-button" onclick="startCurrentLevel()" type="button">
-                <span id="primary-cta-label">EBENE 1</span>
+                <span id="primary-cta-label">LEVEL 1</span>
             </button>
-            <button class="btn-endless-pill" id="endless-button" onclick="startEndlessMode()" type="button">ENDLESS</button>
+            <button class="btn-endless-pill" id="endless-button" onclick="startEndlessMode()" type="button" data-i18n="cta.endless">ENDLESS</button>
         </div>
 
         <!-- Hidden legacy nodes still referenced by JS -->
         <section class="daily-panel mission-card legacy-hidden">
-            <h2 id="daily-login-title">Tag 1 bereit</h2>
+            <h2 id="daily-login-title">Day 1 ready</h2>
             <div class="meta-pill" id="daily-login-streak">Streak 0</div>
             <p class="daily-copy" id="daily-login-copy"></p>
             <div id="daily-login-grid" class="daily-grid"></div>
@@ -115,6 +121,15 @@
     </div>
 
     <!-- Leaderboard popup (league + podium + flag list) -->
+    <div id="run-summary-overlay" class="modal-overlay" onclick="closeRunSummary(event)">
+        <div class="modal-content lb-style-modal" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeRunSummary()">×</button>
+            <div class="lb-style-header"><h2 data-i18n="runSummary.title">SKILLS USED</h2></div>
+            <p class="screen-subtitle" id="run-summary-sub" style="text-align:center; margin-bottom:8px" data-i18n="runSummary.sub">Abilities you leveraged this run.</p>
+            <div id="run-summary-list" class="run-summary-list"></div>
+        </div>
+    </div>
+
     <div id="leaderboard-overlay" class="modal-overlay" onclick="closeLeaderboardOverlay(event)">
         <div class="modal-content lb-modal" onclick="event.stopPropagation()">
             <button class="lb-close" type="button" onclick="closeLeaderboardOverlay()">×</button>
@@ -166,7 +181,7 @@
                 </div>
             </div>
 
-            <p class="lb-subline">Erreiche <strong>Top 3</strong> und gewinne tolle Preise!</p>
+            <p class="lb-subline" data-i18n="leaderboard.subline">Reach <strong>Top 3</strong> and win great prizes!</p>
 
             <!-- Ranked list with flags -->
             <div class="lb-rows" id="lb-rows-modal"></div>
@@ -176,8 +191,8 @@
     <div id="daily-overlay" class="modal-overlay" onclick="closeDailyOverlay(event)">
         <div class="modal-content lb-style-modal" onclick="event.stopPropagation()">
             <button class="lb-style-close" type="button" onclick="closeDailyOverlay()">×</button>
-            <div class="lb-style-header"><h2>DAILY LOGIN</h2></div>
-            <p class="screen-subtitle" id="daily-overlay-status" style="text-align:center; margin-bottom:8px">Tag 1 bereit</p>
+            <div class="lb-style-header"><h2 data-i18n="daily.title">DAILY LOGIN</h2></div>
+            <p class="screen-subtitle" id="daily-overlay-status" style="text-align:center; margin-bottom:8px" data-i18n="daily.status">Day 1 ready</p>
             <div id="daily-overlay-grid" class="daily-grid" style="margin-top:14px"></div>
         </div>
     </div>
@@ -185,16 +200,16 @@
     <div id="challenges-overlay" class="modal-overlay" onclick="closeChallengesOverlay(event)">
         <div class="modal-content lb-style-modal" onclick="event.stopPropagation()">
             <button class="lb-style-close" type="button" onclick="closeChallengesOverlay()">×</button>
-            <div class="lb-style-header"><h2>AUFGABEN</h2></div>
-            <p class="screen-subtitle" style="text-align:center; margin-bottom:8px">Erledige sie und steige in der Liga auf.</p>
+            <div class="lb-style-header"><h2 data-i18n="quests.title">QUESTS</h2></div>
+            <p class="screen-subtitle" style="text-align:center; margin-bottom:8px" data-i18n="quests.sub">Complete them and climb the league.</p>
             <div id="challenges-list" style="display:flex; flex-direction:column; gap:8px; margin-top:14px"></div>
         </div>
     </div>
 
     <div id="hub-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title">STRIKER-X</h1>
-            <p class="screen-subtitle">Upgrade rings animate around the ship like the reference layout.</p>
+            <h1 class="screen-title" data-i18n="hub.title">STRIKER-X</h1>
+            <p class="screen-subtitle" data-i18n="hub.sub">Upgrade rings animate around the ship like the reference layout.</p>
             <div class="striker-hub">
                 <div class="hub-stage">
                     <div class="hub-ring ring-outer"></div>
@@ -212,36 +227,36 @@
     <div id="shop-screen" class="screen">
         <div class="shop-bg-aura"></div>
         <div class="screen-shell">
-            <h1 class="screen-title accent-orange">MARKET</h1>
-            <p class="screen-subtitle">Card packs up top, utility below, premium on its own cleaner shelf.</p>
+            <h1 class="screen-title accent-orange" data-i18n="shop.title">MARKET</h1>
+            <p class="screen-subtitle" data-i18n="shop.sub">Card packs up top, utility below, premium on its own cleaner shelf.</p>
             <div id="shop-feature-banner-mount"></div>
             <div class="market-columns market-stack">
                 <section class="market-feature">
                     <div class="market-header card-market">
-                        <h2>Card Shop</h2>
-                        <span>Gold Packs</span>
+                        <h2 data-i18n="shop.cardShop">Card Shop</h2>
+                        <span data-i18n="shop.goldPacks">Gold Packs</span>
                     </div>
                     <div id="shop-gold" class="shop-grid pack-shop-grid"></div>
                 </section>
                 <section class="market-feature">
                     <div class="market-header premium">
-                        <h2>Skin Packs</h2>
-                        <span>Gold, Gems, Premium</span>
+                        <h2 data-i18n="shop.skinPacks">Skin Packs</h2>
+                        <span data-i18n="shop.skinPacksTags">Gold, Gems, Premium</span>
                     </div>
                     <div id="shop-skins" class="shop-grid pack-shop-grid"></div>
                 </section>
                 <div class="shop-lower-grid">
                     <section>
                         <div class="market-header premium">
-                            <h2>Gem Lab</h2>
-                            <span>Utility</span>
+                            <h2 data-i18n="shop.gemLab">Gem Lab</h2>
+                            <span data-i18n="shop.utility">Utility</span>
                         </div>
                         <div id="shop-gems" class="shop-grid single-column premium-column"></div>
                     </section>
                     <section>
                         <div class="market-header premium real-money">
-                            <h2>Premium Vault</h2>
-                            <span>Real Money</span>
+                            <h2 data-i18n="shop.premiumVault">Premium Vault</h2>
+                            <span data-i18n="shop.realMoney">Real Money</span>
                         </div>
                         <div id="shop-real" class="shop-grid single-column premium-column"></div>
                     </section>
@@ -252,16 +267,16 @@
 
     <div id="inventory-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title">INVENTORY</h1>
-            <p class="screen-subtitle">Open stored packs here and sell spare cards for gold.</p>
+            <h1 class="screen-title" data-i18n="inventory.title">INVENTORY</h1>
+            <p class="screen-subtitle" data-i18n="inventory.sub">Open stored packs here and sell spare cards for gold.</p>
             <div id="inventory-grid" class="shop-grid"></div>
         </div>
     </div>
 
     <div id="loadout-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title">LOADOUT</h1>
-            <p class="screen-subtitle" id="loadout-subtitle">Equip account cards. More slots unlock with level progress.</p>
+            <h1 class="screen-title" data-i18n="equipment.title">EQUIPMENT</h1>
+            <p class="screen-subtitle" id="loadout-subtitle" data-i18n="equipment.sub">Equip account cards. More slots unlock with level progress.</p>
             <div id="loadout-summary" class="mission-card"></div>
             <div id="loadout-normal" class="loadout-section"></div>
             <div id="loadout-legendary" class="loadout-section"></div>
@@ -271,7 +286,7 @@
 
     <div id="abilities-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title">ABILITY ARCHIVE</h1>
+            <h1 class="screen-title" data-i18n="abilities.title">ABILITY ARCHIVE</h1>
             <p class="screen-subtitle" id="ability-archive-status">0/0 unlocked</p>
             <div id="ability-milestones" class="ability-milestones"></div>
             <div id="ability-archive-grid" class="shop-grid ability-archive-grid"></div>
@@ -333,16 +348,32 @@
     <div id="settings-overlay" class="modal-overlay" onclick="closeSettings(event)">
         <div class="modal-content lb-style-modal settings-content" onclick="event.stopPropagation()">
             <button class="lb-style-close" type="button" onclick="closeSettings()">×</button>
-            <div class="lb-style-header"><h2>EINSTELLUNGEN</h2></div>
+            <div class="lb-style-header"><h2 data-i18n="settings.title">SETTINGS</h2></div>
             <div class="settings-list-v2">
+                <div class="setting-row-v2 setting-language">
+                    <div class="setting-row-head">
+                        <div class="setting-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20"/><path d="M12 2a15 15 0 0 0 0 20"/></svg>
+                        </div>
+                        <div class="setting-info">
+                            <div class="setting-label" data-i18n="settings.language">Language</div>
+                            <div class="setting-copy" data-i18n="settings.languageCopy">Switch the interface between English and German.</div>
+                        </div>
+                    </div>
+                    <div class="setting-segmented" role="tablist" aria-label="Language">
+                        <button type="button" class="seg-btn" data-lang="en" onclick="setLanguage('en')">English</button>
+                        <button type="button" class="seg-btn" data-lang="de" onclick="setLanguage('de')">Deutsch</button>
+                    </div>
+                </div>
+
                 <div class="setting-row-v2">
                     <div class="setting-row-head">
                         <div class="setting-icon">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19 6a9 9 0 0 1 0 12"/></svg>
                         </div>
                         <div class="setting-info">
-                            <div class="setting-label">SFX Volume</div>
-                            <div class="setting-copy">Schüsse, Hits und Pack-Sounds.</div>
+                            <div class="setting-label" data-i18n="settings.sfx">SFX Volume</div>
+                            <div class="setting-copy" data-i18n="settings.sfxCopy">Shots, hits and pack sounds.</div>
                         </div>
                         <span class="setting-value" id="settings-sfx-value">70%</span>
                     </div>
@@ -355,8 +386,8 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                         </div>
                         <div class="setting-info">
-                            <div class="setting-label">Musik Volume</div>
-                            <div class="setting-copy">Hintergrundmusik im Lobby + Spiel.</div>
+                            <div class="setting-label" data-i18n="settings.music">Music Volume</div>
+                            <div class="setting-copy" data-i18n="settings.musicCopy">Background music in the lobby and during a run.</div>
                         </div>
                         <span class="setting-value" id="settings-music-value">35%</span>
                     </div>
@@ -369,8 +400,8 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
                         </div>
                         <div class="setting-info">
-                            <div class="setting-label">Haptik</div>
-                            <div class="setting-copy">Vibration bei Hits und Belohnungen.</div>
+                            <div class="setting-label" data-i18n="settings.haptics">Haptics</div>
+                            <div class="setting-copy" data-i18n="settings.hapticsCopy">Vibration on hits and rewards (Android & in-app browsers).</div>
                         </div>
                     </div>
                     <label class="toggle-switch">
@@ -429,32 +460,66 @@
 
     <div id="upgrade-toast" class="upgrade-toast"></div>
 
+    <!-- ══ TEST ARENA OVERLAY ══ -->
+    <div id="test-overlay" class="modal-overlay" onclick="closeTestArena(event)">
+        <div class="modal-content test-arena-content" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeTestArena()">×</button>
+            <div class="lb-style-header"><h2 data-i18n="test.title">🧪 TEST ARENA</h2></div>
+
+            <div class="test-controls">
+                <div class="test-row">
+                    <button class="test-btn test-green" onclick="testStartArena()" data-i18n="test.start">▶ START ARENA</button>
+                    <button class="test-btn test-red" onclick="testStopArena()" data-i18n="test.stop">■ STOP</button>
+                    <button class="test-btn" onclick="testResetAbilities()" data-i18n="test.reset">↻ RESET</button>
+                </div>
+                <div class="test-row">
+                    <label class="test-toggle"><input type="checkbox" id="test-godmode" onchange="testGodMode(this.checked)"><span data-i18n="test.god">GOD MODE</span></label>
+                    <label class="test-toggle"><input type="checkbox" id="test-oneshotmode" onchange="testOneShotMode(this.checked)"><span data-i18n="test.oneshot">ONE-SHOT</span></label>
+                </div>
+                <div class="test-row">
+                    <span class="test-label" data-i18n="test.enemies">ENEMIES:</span>
+                    <button class="test-btn test-sm" onclick="testSpawnEnemies('drone', 5)">5 Drones</button>
+                    <button class="test-btn test-sm" onclick="testSpawnEnemies('strafe', 5)">5 Strafe</button>
+                    <button class="test-btn test-sm" onclick="testSpawnEnemies('heavy', 3)">3 Heavy</button>
+                    <button class="test-btn test-sm" onclick="testSpawnEnemies('boss', 1)">1 Boss</button>
+                    <button class="test-btn test-sm" onclick="testSpawnEnemies('drone', 30)">30 Horde</button>
+                </div>
+            </div>
+
+            <h3 class="test-section-title" data-i18n="test.abilitiesHelp">ABILITIES — click = rank +1 (max 4)</h3>
+            <div id="test-ability-grid" class="test-ability-grid"></div>
+
+            <h3 class="test-section-title" data-i18n="test.activeBuffs">ACTIVE BUFFS</h3>
+            <div id="test-active-buffs" class="test-active-buffs" data-i18n="test.none">None</div>
+        </div>
+    </div>
+
     <nav id="global-nav" class="nav-v2">
         <button class="nav-tab" onclick="showShop()" id="nav-shop" type="button">
             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l1.5-3h15L21 7"/><path d="M3 7v13h18V7"/><path d="M9 7v4a3 3 0 0 1-3 3"/><path d="M15 7v4a3 3 0 0 0 3 3"/></svg></span>
-            <span class="nav-label">GESCHÄFT</span>
+            <span class="nav-label" data-i18n="nav.shop">SHOP</span>
         </button>
         <button class="nav-tab" onclick="showLoadout()" id="nav-loadout" type="button">
             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 14l10-10 10 10-3 1-2 5-5-3-5 3-2-5z"/></svg></span>
-            <span class="nav-label">FLUGZEUGE</span>
+            <span class="nav-label" data-i18n="nav.equipment">EQUIPMENT</span>
         </button>
         <button class="nav-tab nav-center active" onclick="showFight()" id="nav-fight" type="button">
             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12c4-3 7-3 9-3s5 0 9 3c-4 3-7 3-9 3s-5 0-9-3z"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/><path d="M12 9V6"/><path d="M12 9c-1 0-1.5-1.5-1.5-3S11 1 12 1s1.5 0 1.5 2S13 6 12 6"/></svg></span>
-            <span class="nav-label">KÄMPFEN</span>
+            <span class="nav-label" data-i18n="nav.fight">FIGHT</span>
         </button>
         <button class="nav-tab has-notifier" onclick="showHub()" id="nav-hub" type="button">
             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,12 6,4 4,6"/><polyline points="6,4 8,6"/><polyline points="12,12 12,4 10,6"/><polyline points="12,4 14,6"/><polyline points="18,12 18,4 16,6"/><polyline points="18,4 20,6"/><line x1="3" y1="14" x2="21" y2="14"/><polyline points="6,17 6,20"/><polyline points="12,17 12,20"/><polyline points="18,17 18,20"/></svg></span>
-            <span class="nav-label">UPGRADES</span>
+            <span class="nav-label" data-i18n="nav.upgrades">UPGRADES</span>
             <span id="upgrade-nav-dot" class="nav-tab-dot" aria-hidden="true"></span>
         </button>
         <button class="nav-tab" onclick="showInventory()" id="nav-inventory" type="button">
             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,8 22,16 12,21 2,16 2,8"/><polyline points="2,8 12,13 22,8"/><line x1="12" y1="13" x2="12" y2="21"/></svg></span>
-            <span class="nav-label">INVENTAR</span>
+            <span class="nav-label" data-i18n="nav.inventory">INVENTORY</span>
         </button>
         <!-- Skills tab kept for back-compat (offscreen — accessible via swipe or detail) -->
         <button class="nav-tab" id="nav-abilities" onclick="showAbilities()" type="button" style="display:none">
             <span class="nav-icon"><svg viewBox="0 0 24 24"><polygon points="12,3 15,9 22,10 17,15 18,22 12,18 6,22 7,15 2,10 9,9"/></svg></span>
-            <span class="nav-label">SKILLS</span>
+            <span class="nav-label" data-i18n="nav.skills">SKILLS</span>
         </button>
     </nav>
 

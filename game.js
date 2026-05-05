@@ -21,8 +21,248 @@ let save = {
     inventory: [],
     lastLogin: 0,
     daily: { streak: 0, cycleDay: 0, lastClaimKey: '' },
-    settings: { sfx: 0.7, music: 0.35, haptics: false },
-    metaSlots: { normalExtra: 0, legendaryExtra: 0 }
+    settings: { sfx: 0.7, music: 0.35, haptics: false, language: 'en' },
+    metaSlots: { normalExtra: 0, legendaryExtra: 0 },
+    lastRunSkills: null
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// i18n — single source of truth for every user-facing string. Add new keys here
+// in BOTH `en` and `de` so the German fallback stays in sync. Use t('key').
+// ─────────────────────────────────────────────────────────────────────────────
+const I18N = {
+    en: {
+        'hud.level': 'LEVEL 1',
+        'hud.wave': 'WAVE 0/0',
+        'rail.newSkill': 'NEW SKILL',
+        'rail.skills': 'Skills',
+        'rail.noAds': 'No Ads',
+        'rail.leaderboard': 'Leaderboard',
+        'rail.quests': 'Quests',
+        'rail.dailyLogin': 'Daily Login',
+        'rail.test': 'Test',
+        'cta.endless': 'ENDLESS',
+        'cta.level': 'LEVEL',
+        'nav.shop': 'SHOP',
+        'nav.equipment': 'EQUIPMENT',
+        'nav.fight': 'FIGHT',
+        'nav.upgrades': 'UPGRADES',
+        'nav.inventory': 'INVENTORY',
+        'nav.skills': 'SKILLS',
+        'shop.title': 'MARKET',
+        'shop.sub': 'Card packs up top, utility below, premium on its own cleaner shelf.',
+        'shop.cardShop': 'Card Shop',
+        'shop.goldPacks': 'Gold Packs',
+        'shop.skinPacks': 'Skin Packs',
+        'shop.skinPacksTags': 'Gold, Gems, Premium',
+        'shop.gemLab': 'Gem Lab',
+        'shop.utility': 'Utility',
+        'shop.premiumVault': 'Premium Vault',
+        'shop.realMoney': 'Real Money',
+        'inventory.title': 'INVENTORY',
+        'inventory.sub': 'Open stored packs here and sell spare cards for gold.',
+        'equipment.title': 'EQUIPMENT',
+        'equipment.sub': 'Equip cards. Slots unlock as you level up.',
+        'equipment.slotProgression': 'Slot Progression',
+        'equipment.normalSlots': 'Normal Slots',
+        'equipment.legendarySlots': 'Legendary Slots',
+        'equipment.slotLockedAt': 'Unlocks at Lv',
+        'equipment.empty': 'Empty',
+        'equipment.maxNote': 'Max slots: 5 Normal + 2 paid · 2 Legendary + 1 paid. The shop will not sell more than this.',
+        'abilities.title': 'ABILITY ARCHIVE',
+        'hub.title': 'STRIKER-X',
+        'hub.sub': 'Upgrade rings animate around the ship like the reference layout.',
+        'settings.title': 'SETTINGS',
+        'settings.language': 'Language',
+        'settings.languageCopy': 'Switch the interface between English and German.',
+        'settings.sfx': 'SFX Volume',
+        'settings.sfxCopy': 'Shots, hits and pack sounds.',
+        'settings.music': 'Music Volume',
+        'settings.musicCopy': 'Background music in the lobby and during a run.',
+        'settings.haptics': 'Haptics',
+        'settings.hapticsCopy': 'Vibration on hits and rewards (Android & in-app browsers).',
+        'daily.title': 'DAILY LOGIN',
+        'daily.status': 'Day 1 ready',
+        'daily.statusReady': 'Day {n} ready',
+        'daily.statusClaimed': 'Day {n} claimed',
+        'daily.streak': 'Streak {n}',
+        'daily.copyReady': 'Today\'s reward is ready. Already-claimed days stay marked.',
+        'daily.copyClaimed': 'Today is already collected. Future days are previewed below.',
+        'daily.done': 'Done',
+        'daily.now': 'Now',
+        'daily.later': 'Later',
+        'quests.title': 'QUESTS',
+        'quests.sub': 'Complete them and climb the league.',
+        'leaderboard.subline': 'Reach <strong>Top 3</strong> and win great prizes!',
+        'runSummary.title': 'SKILLS USED',
+        'runSummary.sub': 'Abilities you leveraged this run.',
+        'runSummary.empty': 'No abilities were picked during this run.',
+        'runSummary.rank': 'Rank',
+        'test.title': '🧪 TEST ARENA',
+        'test.start': '▶ START ARENA',
+        'test.stop': '■ STOP',
+        'test.reset': '↻ RESET',
+        'test.god': 'GOD MODE',
+        'test.oneshot': 'ONE-SHOT',
+        'test.enemies': 'ENEMIES:',
+        'test.abilitiesHelp': 'ABILITIES — click = rank +1 (max 4)',
+        'test.activeBuffs': 'ACTIVE BUFFS',
+        'test.none': 'None',
+        'roadmap.reward': 'Reward',
+        'roadmap.locked': 'locked',
+        'roadmap.ready': 'ready',
+        'roadmap.skillUnlock': 'New skill at this level',
+        'milestone.statSuffix': '. ',
+        'milestone.unlockedAt': 'Unlocked from Lv',
+        'milestone.lockedFrom': 'From Lv',
+        'milestone.archiveAvailable': 'AVAILABLE NOW',
+        'pack.subtitle': 'Spin the reel and claim a permanent account card.'
+    },
+    de: {
+        'hud.level': 'LEVEL 1',
+        'hud.wave': 'WELLE 0/0',
+        'rail.newSkill': 'NEUER SKILL',
+        'rail.skills': 'Skills',
+        'rail.noAds': 'Keine Werbung',
+        'rail.leaderboard': 'Rangliste',
+        'rail.quests': 'Aufgaben',
+        'rail.dailyLogin': 'Täglicher Login',
+        'rail.test': 'Test',
+        'cta.endless': 'ENDLOS',
+        'cta.level': 'EBENE',
+        'nav.shop': 'SHOP',
+        'nav.equipment': 'AUSRÜSTUNG',
+        'nav.fight': 'KÄMPFEN',
+        'nav.upgrades': 'UPGRADES',
+        'nav.inventory': 'INVENTAR',
+        'nav.skills': 'SKILLS',
+        'shop.title': 'MARKT',
+        'shop.sub': 'Kartenpakete oben, Utility darunter, Premium ganz eigenes Regal.',
+        'shop.cardShop': 'Kartenshop',
+        'shop.goldPacks': 'Gold-Pakete',
+        'shop.skinPacks': 'Skin-Pakete',
+        'shop.skinPacksTags': 'Gold, Edelsteine, Premium',
+        'shop.gemLab': 'Edelstein-Labor',
+        'shop.utility': 'Utility',
+        'shop.premiumVault': 'Premium-Tresor',
+        'shop.realMoney': 'Echtgeld',
+        'inventory.title': 'INVENTAR',
+        'inventory.sub': 'Öffne hier deine gespeicherten Pakete und verkaufe doppelte Karten.',
+        'equipment.title': 'AUSRÜSTUNG',
+        'equipment.sub': 'Rüste Karten aus. Slots schalten sich mit dem Level frei.',
+        'equipment.slotProgression': 'Slot-Fortschritt',
+        'equipment.normalSlots': 'Normale Slots',
+        'equipment.legendarySlots': 'Legendäre Slots',
+        'equipment.slotLockedAt': 'Frei ab Lv',
+        'equipment.empty': 'Leer',
+        'equipment.maxNote': 'Maximale Slots: 5 Normal + 2 gekauft · 2 Legendär + 1 gekauft. Der Shop verkauft nicht mehr.',
+        'abilities.title': 'FÄHIGKEITS-ARCHIV',
+        'hub.title': 'STRIKER-X',
+        'hub.sub': 'Upgrade-Ringe drehen sich wie im Referenz-Layout um das Schiff.',
+        'settings.title': 'EINSTELLUNGEN',
+        'settings.language': 'Sprache',
+        'settings.languageCopy': 'Wechsle die Oberfläche zwischen Englisch und Deutsch.',
+        'settings.sfx': 'SFX-Lautstärke',
+        'settings.sfxCopy': 'Schüsse, Treffer und Pack-Sounds.',
+        'settings.music': 'Musik-Lautstärke',
+        'settings.musicCopy': 'Hintergrundmusik in Lobby und Spiel.',
+        'settings.haptics': 'Haptik',
+        'settings.hapticsCopy': 'Vibration bei Treffern und Belohnungen (Android & In-App).',
+        'daily.title': 'TÄGLICHER LOGIN',
+        'daily.status': 'Tag 1 bereit',
+        'daily.statusReady': 'Tag {n} bereit',
+        'daily.statusClaimed': 'Tag {n} abgeholt',
+        'daily.streak': 'Streak {n}',
+        'daily.copyReady': 'Heute kannst du den aktuellen Reward holen. Eingesammelte Tage bleiben markiert.',
+        'daily.copyClaimed': 'Heute ist schon eingesammelt. Die nächsten Tage sind unten sichtbar.',
+        'daily.done': 'Fertig',
+        'daily.now': 'Jetzt',
+        'daily.later': 'Später',
+        'quests.title': 'AUFGABEN',
+        'quests.sub': 'Erledige sie und steige in der Liga auf.',
+        'leaderboard.subline': 'Erreiche <strong>Top 3</strong> und gewinne tolle Preise!',
+        'runSummary.title': 'GENUTZTE SKILLS',
+        'runSummary.sub': 'Diese Fähigkeiten hast du in diesem Run genutzt.',
+        'runSummary.empty': 'In diesem Run wurden keine Skills gewählt.',
+        'runSummary.rank': 'Rang',
+        'test.title': '🧪 TEST-ARENA',
+        'test.start': '▶ ARENA STARTEN',
+        'test.stop': '■ STOPPEN',
+        'test.reset': '↻ RESET',
+        'test.god': 'GOD MODE',
+        'test.oneshot': 'ONE-SHOT',
+        'test.enemies': 'GEGNER:',
+        'test.abilitiesHelp': 'SKILLS — Klick = Rang +1 (max 4)',
+        'test.activeBuffs': 'AKTIVE BUFFS',
+        'test.none': 'Keine',
+        'roadmap.reward': 'Belohnung',
+        'roadmap.locked': 'gesperrt',
+        'roadmap.ready': 'bereit',
+        'roadmap.skillUnlock': 'Neuer Skill auf diesem Level',
+        'milestone.statSuffix': '. ',
+        'milestone.unlockedAt': 'Frei ab Lv',
+        'milestone.lockedFrom': 'Ab Lv',
+        'milestone.archiveAvailable': 'JETZT VERFÜGBAR',
+        'pack.subtitle': 'Lass die Walze drehen und sichere dir eine permanente Account-Karte.'
+    }
+};
+
+function getLang() {
+    const l = save?.settings?.language;
+    return (l === 'de' || l === 'en') ? l : 'en';
+}
+
+function t(key, vars) {
+    const lang = getLang();
+    const dict = I18N[lang] || I18N.en;
+    let str = dict[key];
+    if (str == null) str = (I18N.en[key] != null ? I18N.en[key] : key);
+    if (vars) {
+        Object.keys(vars).forEach((k) => {
+            str = str.replace(new RegExp('\\{' + k + '\\}', 'g'), vars[k]);
+        });
+    }
+    return str;
+}
+
+function applyI18nToDom() {
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.getAttribute('data-i18n');
+        if (!key) return;
+        const value = t(key);
+        // leaderboard.subline contains <strong> markup — allow HTML for that one key only
+        if (key === 'leaderboard.subline') {
+            el.innerHTML = value;
+        } else {
+            el.textContent = value;
+        }
+    });
+    // Reflect chosen segmented button in settings
+    const segs = document.querySelectorAll('.setting-segmented .seg-btn');
+    const lang = getLang();
+    segs.forEach((b) => b.classList.toggle('active', b.getAttribute('data-lang') === lang));
+    // Update the html lang attribute so screen readers behave
+    if (document.documentElement) document.documentElement.setAttribute('lang', lang);
+    // Sync the dynamic CTA label with the picked language
+    const cta = document.getElementById('primary-cta-label');
+    if (cta) cta.textContent = `${t('cta.level')} ${save.unlocked || 1}`;
+}
+
+window.setLanguage = function(lang) {
+    if (lang !== 'en' && lang !== 'de') lang = 'en';
+    save.settings = save.settings || {};
+    save.settings.language = lang;
+    if (typeof saveSave === 'function') saveSave();
+    applyI18nToDom();
+    // Re-render anything that bakes localized strings into innerHTML
+    if (typeof refreshLevelCta === 'function') refreshLevelCta();
+    if (typeof renderDailyLoginPanel === 'function') renderDailyLoginPanel();
+    if (typeof renderLevelRoadmap === 'function') renderLevelRoadmap();
+    if (typeof renderShop === 'function' && document.getElementById('shop-screen')?.classList.contains('active')) renderShop();
+    if (typeof renderLoadout === 'function' && document.getElementById('loadout-screen')?.classList.contains('active')) renderLoadout();
+    if (typeof renderAbilityArchive === 'function' && document.getElementById('abilities-screen')?.classList.contains('active')) renderAbilityArchive();
+    if (typeof refreshMapRail === 'function') refreshMapRail();
+    if (typeof refreshRailBadges === 'function') refreshRailBadges();
 };
 
 let currentLevel = 1;
@@ -994,7 +1234,8 @@ function loadSave() {
     save.equippedCards = Array.isArray(save.equippedCards) ? save.equippedCards : [];
     save.metaSlots = Object.assign({ normalExtra: 0, legendaryExtra: 0 }, save.metaSlots || {});
     save.daily = Object.assign({ streak: 0, cycleDay: 0, lastClaimKey: '' }, save.daily || {});
-    save.settings = Object.assign({ sfx: 0.7, music: 0.35, haptics: false }, save.settings || {});
+    save.settings = Object.assign({ sfx: 0.7, music: 0.35, haptics: false, language: 'en' }, save.settings || {});
+    if (save.settings.language !== 'en' && save.settings.language !== 'de') save.settings.language = 'en';
     // Permanent micro-boosts trickled in from pack drops (small but persistent)
     save.permanentBoosts = Object.assign({ damageMultiplier: 0, attackSpeedMultiplier: 0, magnetFlat: 0, packsOpened: 0 }, save.permanentBoosts || {});
     save.abilityRanks = Object.assign({}, save.abilityRanks || {});
@@ -1045,6 +1286,11 @@ function syncSettingsUi() {
     if (musicSlider) musicSlider.value = Math.round((save.settings?.music ?? 0.35) * 100);
     if (musicValue) musicValue.textContent = `${Math.round((save.settings?.music ?? 0.35) * 100)}%`;
     if (hapticsToggle) hapticsToggle.checked = !!save.settings?.haptics;
+    // Reflect language pick on the segmented control
+    const lang = getLang();
+    document.querySelectorAll('.setting-segmented .seg-btn').forEach((b) => {
+        b.classList.toggle('active', b.getAttribute('data-lang') === lang);
+    });
 }
 
 function getInventoryBonuses() {
@@ -1100,6 +1346,21 @@ function getLoadoutSlotCaps() {
     const normal = Math.min(7, baseNormal + (save.metaSlots.normalExtra || 0));
     const legendary = Math.min(3, baseLegendary + (save.metaSlots.legendaryExtra || 0));
     return { normal, legendary, baseNormal, baseLegendary };
+}
+
+// Hard caps so the shop won't sell phantom slots and the UI can show a ceiling.
+const SLOT_HARD_CAPS = { normal: 7, legendary: 3, normalPaid: 2, legendaryPaid: 1 };
+
+// Per-slot unlock level for the *base* slots only (paid extras unlock on purchase).
+function getNormalSlotUnlockLevel(idx) {
+    // 1 base (lvl 1), then +1 every 15 levels up to 5 base slots:
+    // slot index → unlocked at level: 0 → 1, 1 → 15, 2 → 30, 3 → 45, 4 → 60
+    if (idx <= 0) return 1;
+    return idx * 15;
+}
+function getLegendarySlotUnlockLevel(idx) {
+    // 1st legendary → lvl 30, 2nd legendary → lvl 60
+    return idx === 0 ? 30 : idx === 1 ? 60 : 999;
 }
 
 function getEquippedCounts() {
@@ -1405,9 +1666,11 @@ function createPlayer() {
         damageMultiplier: 1,
         spd: speed,
         atkCooldown: 0.82 / atkSpeedMult,
+        baseAtkCooldown: 0.82 / atkSpeedMult,
         shootTimer: 0,
         range: PLAYER_STATS.range.base,
         multishot: 1,
+        multiSpread: 0,
         pierce: 0,
         magnet,
         reviveUsed: false,
@@ -1424,8 +1687,164 @@ function createPlayer() {
         shockNova: false,
         shockNovaCounter: 0,
         shotCounter: 0,
+        hitCounter: 0,
         trailPoints: [],
-        trailBudget: 0
+        trailBudget: 0,
+        // ── Crit System ──
+        critChance: 0,
+        critMultiplier: 2.0,
+        megaCritChance: 0,
+        // ── Lifesteal / Healing ──
+        lifesteal: 0,
+        healAccum: 0,
+        healOnKillChance: 0,
+        everyKillHeal: 0,
+        healPerKills: 0,
+        healPerKillCounter: 0,
+        heartDropOnKill: 0,
+        bossFullHeal: false,
+        // ── Kill Streak / Combo ──
+        comboBuff: false,
+        comboPct: 0,
+        comboCap: 0,
+        comboTimeBonus: 0,
+        comboPermanent: false,
+        // ── Frenzy ──
+        frenzyOnKill: false,
+        frenzyStack: 0,
+        frenzyCap: 0.30,
+        frenzyTimer: 0,
+        frenzyPermanent: false,
+        // ── Gold ──
+        goldBonus: 0,
+        doubleDropChance: 0,
+        passiveGold: 0,
+        bossPackToken: false,
+        // ── Trigger Fingers ──
+        killSpeedBoost: false,
+        killSpeedPct: 0,
+        killSpeedCap: 0,
+        killSpeedStack: 0,
+        killDamageBoost: 0,
+        killDamageBuff: 0,
+        bossResetCap: false,
+        // ── Platinum Rounds ──
+        platinumStack: false,
+        platinumPerHit: 0,
+        platinumCap: 0,
+        platinumDmg: 0,
+        platinumFireRate: 0,
+        platinumFireRateDmg: 0,
+        // ── Lucky Seven ──
+        luckyEvery: 0,
+        luckyMult: 0,
+        luckyHeals: 0,
+        // ── Frost ──
+        frostOnHit: false,
+        frostStrength: 0,
+        frostDoT: false,
+        freezeChance: 0,
+        frozenShatter: false,
+        // ── Poison ──
+        poisonOnHit: false,
+        poisonPct: 0,
+        poisonDuration: 0,
+        poisonSpread: false,
+        poisonExplodeOnDeath: false,
+        poisonJump: false,
+        // ── Bullet Storm ──
+        slowImmune: false,
+        // ── Glass Cannon ──
+        closeRangeBonus: 0,
+        pointBlankMult: 0,
+        // ── Glass Shards ──
+        shardsOnHit: false,
+        shardCount: 0,
+        shardDmgMult: 0,
+        shardBleed: false,
+        shardsBounce: false,
+        shardsExplode: false,
+        // ── Arc Pulse ──
+        arcOnHit: false,
+        arcEvery: 0,
+        arcTargets: 0,
+        arcParalyze: false,
+        // ── Crit Bomb ──
+        critExplode: false,
+        critExplodeRadius: 0,
+        critExplodeMult: 0,
+        critStunWave: false,
+        critOneShot: false,
+        // ── Phantom Shield ──
+        shieldEvery: 0,
+        shieldCharges: 0,
+        shieldTimer: 0,
+        shieldActive: false,
+        shieldReflect: false,
+        shieldHeals: false,
+        // ── Strong Spirit / Phoenix ──
+        firstLethalBlock: false,
+        lethalBlockUsed: false,
+        spiritInvul: 0,
+        spiritResetOnFullHeal: false,
+        spiritEvery: 0,
+        spiritCooldown: 0,
+        shieldEachWave: false,
+        phoenixDrive: false,
+        phoenixBurning: false,
+        phoenixDouble: false,
+        phoenixRevive: false,
+        phoenixReviveUsed: false,
+        // ── Scarier Face ──
+        enemyHpMult: 1,
+        enemyFleeChance: 0,
+        bossHpMult: 1,
+        executeThreshold: 0,
+        // ── Ricochet ──
+        bulletsRicochet: false,
+        ricochetCount: 0,
+        ricochetDmgPerBounce: 0,
+        ricochetSeek: false,
+        // ── Heat Seeker ──
+        bulletsHome: 0,
+        markedDmg: 0,
+        bulletsHardHome: false,
+        bulletsSmartWait: false,
+        // ── Boomerang ──
+        boomerangShot: false,
+        boomerangEvery: 0,
+        boomerangSpawnsClone: false,
+        boomerangCount: 1,
+        boomerangPendulum: 0,
+        // ── Lich Bullets ──
+        bulletFork: false,
+        bulletForkCount: 0,
+        forkCritChance: 0,
+        lichEye: false,
+        // ── Cluster Bomb ──
+        clusterBomb: false,
+        clusterEvery: 0,
+        clusterDmgMult: 0,
+        clusterSplit: false,
+        clusterChain: false,
+        // ── Blank Burst ──
+        blankChance: 0,
+        blankPulse: false,
+        blankRadius: 1,
+        permanentBlankAura: false,
+        // ── Singularity ──
+        singularity: false,
+        singularityEvery: 0,
+        singularityImplode: false,
+        permaSingularity: false,
+        singularityTimer: 0,
+        // ── Spread Volley ──
+        markOnHit: false,
+        pierceDamageBonus: 0,
+        pulsarBurst: false,
+        sentinelHalo: false,
+        sawWaves: false,
+        sawPull: false
     };
 }
 
@@ -1532,13 +1951,21 @@ function handlePointerUp() {
 }
 
 function createEnemy(type, x, y) {
+    // Apply Scarier Face HP reduction
+    let hp = type.hp;
+    if (player && player.enemyHpMult && player.enemyHpMult < 1) {
+        hp = Math.max(1, Math.round(hp * player.enemyHpMult));
+    }
+    if (player && type.isBoss && player.bossHpMult && player.bossHpMult < 1) {
+        hp = Math.max(1, Math.round(hp * player.bossHpMult));
+    }
     return {
         ...type,
         id: nextEnemyId++,
         x,
         y,
-        hp: type.hp,
-        maxHp: type.hp,
+        hp: hp,
+        maxHp: hp,
         alive: true,
         hitFlash: 0,
         aiClock: Math.random() * 2,
@@ -1548,7 +1975,16 @@ function createEnemy(type, x, y) {
         sprintDirY: 0,
         strafeDir: Math.random() > 0.5 ? 1 : -1,
         abilityCooldown: type.isBoss ? 4 : 0,
-        lastHitBy: 0
+        lastHitBy: 0,
+        // ── Status Effects ──
+        frostSlow: 0,
+        frostTimer: 0,
+        poisonDmg: 0,
+        poisonTimer: 0,
+        frozen: false,
+        frozenTimer: 0,
+        marked: false,
+        markedTimer: 0
     };
 }
 
@@ -1617,11 +2053,13 @@ function update(dt) {
     updateLightningBolts(dt);
     updateFxTexts(dt);
     updateParticles(dt);
+    updateStatusEffects(dt);
+    updateAbilityTimers(dt);
     player.invulnerable = Math.max(0, player.invulnerable - dt);
     screenShake = Math.max(0, screenShake - dt * 3.2);
     powerPulse = Math.max(0, powerPulse - dt * 1.6);
     killStreakTimer = Math.max(0, killStreakTimer - dt);
-    if (killStreakTimer <= 0) killStreak = 0;
+    if (killStreakTimer <= 0 && !player.comboPermanent) killStreak = 0;
     checkWaveProgress();
 }
 
@@ -1717,30 +2155,81 @@ function updateAutoFire(dt) {
     player.angle = Math.atan2(nearest.y - player.y, nearest.x - player.x) + Math.PI / 2;
     if (player.shootTimer > 0) return;
 
-    player.shootTimer = player.atkCooldown;
+    // ── Frenzy / Trigger Fingers fire-rate modifier ──
+    let cooldownMod = 1;
+    if (player.frenzyStack > 0) cooldownMod *= (1 - player.frenzyStack);
+    if (player.killSpeedStack > 0) cooldownMod *= (1 - player.killSpeedStack);
+    if (player.platinumFireRateDmg > 0) cooldownMod *= (1 - Math.min(0.5, player.platinumFireRateDmg));
+    player.shootTimer = Math.max(0.06, player.atkCooldown * cooldownMod);
     player.shotCounter += 1;
 
+    // ── Combo damage multiplier ──
+    let comboDmg = 1;
+    if (player.comboBuff && killStreak > 0) {
+        comboDmg = 1 + Math.min(player.comboCap, killStreak * player.comboPct);
+    }
+
+    // ── Platinum Rounds stacking damage ──
+    const platDmg = 1 + (player.platinumDmg || 0);
+
+    const baseBulletDmg = player.dmg * player.damageMultiplier * comboDmg * platDmg;
+
     const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-    const spreadStep = 0.14;
+    const spreadStep = 0.14 + (player.multiSpread || 0);
     const start = -spreadStep * (player.multishot - 1) / 2;
 
     for (let i = 0; i < player.multishot; i++) {
-        addP(player.x, player.y - 12, '#00f2ff', 5, 140, 0.18, 2);
+        // ── Lucky Seven ──
+        let shotDmg = baseBulletDmg;
+        const isLucky = player.luckyEvery > 0 && player.shotCounter % player.luckyEvery === 0;
+        if (isLucky) {
+            shotDmg *= (player.luckyMult || 5);
+            addFxText(player.x, player.y - 28, 'LUCKY!', '#ffd14d', 0.5, 20);
+        }
+
+        addP(player.x, player.y - 12, isLucky ? '#ffd14d' : '#00f2ff', isLucky ? 8 : 5, 140, 0.18, 2);
         spawnProjectile({
             x: player.x,
             y: player.y,
             angle: baseAngle + start + (spreadStep * i),
             speed: 760,
             life: 1.1,
-            radius: 5,
-            damage: player.dmg * player.damageMultiplier,
+            radius: isLucky ? 7 : 5,
+            damage: shotDmg,
             pierce: player.pierce,
             canChain: player.chainLightning,
-            color: '#f5fbff'
+            color: isLucky ? '#ffd14d' : '#f5fbff',
+            isBoomerang: player.boomerangShot && player.shotCounter % (player.boomerangEvery || 5) === 0,
+            bouncesLeft: player.ricochetCount || 0,
+            homingStrength: player.bulletsHome || 0,
+            forkTimer: player.bulletFork ? 0.4 : 0,
+            forkCount: player.bulletForkCount || 0
         });
     }
 
     playSfx('shoot', Math.min(1.2, 0.7 + player.multishot * 0.08));
+
+    // ── Cluster Bomb ──
+    if (player.clusterBomb && player.shotCounter % (player.clusterEvery || 10) === 0) {
+        addP(player.x, player.y - 12, '#ff6b35', 12, 180, 0.25, 3);
+        spawnProjectile({
+            x: player.x,
+            y: player.y,
+            angle: baseAngle,
+            speed: 560,
+            life: 1.3,
+            radius: 10,
+            damage: baseBulletDmg * (player.clusterDmgMult || 3),
+            pierce: 0,
+            canChain: false,
+            color: '#ff6b35',
+            isBomb: true,
+            bombSplitCount: player.clusterSplit ? 5 : 0,
+            bombChain: player.clusterChain
+        });
+        playSfx('ability', 1.1);
+        addFxText(player.x, player.y - 32, 'BOMB!', '#ff6b35', 0.4, 18);
+    }
 
     if (player.echoShot && player.shotCounter % 4 === 0) {
         const echoRank = getAbilityRank('echo_shot');
@@ -1752,7 +2241,7 @@ function updateAutoFire(dt) {
             speed: 860,
             life: 1.25,
             radius: 6,
-            damage: player.dmg * player.damageMultiplier * (0.52 + (echoRank * 0.08)),
+            damage: baseBulletDmg * (0.52 + (echoRank * 0.08)),
             pierce: player.pierce + 1,
             canChain: false,
             color: '#7be8ff'
@@ -1770,7 +2259,7 @@ function updateAutoFire(dt) {
             speed: 940,
             life: 1.18,
             radius: 8,
-            damage: player.dmg * player.damageMultiplier * (1.45 + (ionRank * 0.25)),
+            damage: baseBulletDmg * (1.45 + (ionRank * 0.25)),
             pierce: player.pierce + 1,
             canChain: true,
             color: '#ffcf4d'
@@ -1785,7 +2274,33 @@ function updateAutoFire(dt) {
         playSfx('tornado', 1);
     }
 
+    // ── Singularity pull field ──
+    if (player.singularity && player.shotCounter % (player.singularityEvery || 8) === 0) {
+        spawnSingularity(nearest.x, nearest.y);
+    }
+
     screenShake = Math.min(1.5, screenShake + 0.08);
+}
+
+// ── Singularity pull field ──
+function spawnSingularity(tx, ty) {
+    const rank = Math.max(1, getAbilityRank('singularity'));
+    hazards.push({
+        id: nextHazardId++,
+        type: 'singularity',
+        x: tx, y: ty,
+        radius: 80 + rank * 12,
+        life: 1.2 + rank * 0.3,
+        maxLife: 1.2 + rank * 0.3,
+        pullStrength: 180 + rank * 40,
+        damage: player.dmg * player.damageMultiplier * 0.1,
+        implode: player.singularityImplode,
+        color: '#bc13fe',
+        hit: false
+    });
+    addP(tx, ty, '#bc13fe', 18, 120, 0.3, 4);
+    addFxText(tx, ty - 20, 'PULL', '#bc13fe', 0.35, 16);
+    playSfx('ability', 0.9);
 }
 
 function spawnProjectile(config) {
@@ -1802,7 +2317,21 @@ function spawnProjectile(config) {
         canChain: config.canChain,
         tornado: !!config.tornado,
         spin: 0,
-        color: config.color || '#f5fbff'
+        color: config.color || '#f5fbff',
+        // ── Extended bullet fields ──
+        isBoomerang: !!config.isBoomerang,
+        boomerangPhase: 0,
+        boomerangTime: 0,
+        bouncesLeft: config.bouncesLeft || 0,
+        homingStrength: config.homingStrength || 0,
+        forkTimer: config.forkTimer || 0,
+        forkCount: config.forkCount || 0,
+        forked: false,
+        isBomb: !!config.isBomb,
+        bombSplitCount: config.bombSplitCount || 0,
+        bombChain: !!config.bombChain,
+        isShard: !!config.isShard,
+        speed: config.speed || 760
     });
 }
 
@@ -1829,28 +2358,254 @@ function spawnTornadoVolley(baseAngle, rank = 1) {
 }
 
 function updateProjectiles(dt) {
+    const newProjectiles = [];
+
     projectiles.forEach((projectile) => {
+        // ── Homing ──
+        if (projectile.homingStrength > 0 && !projectile.tornado) {
+            const nearestE = findNearestEnemyToPoint(projectile.x, projectile.y, 200);
+            if (nearestE) {
+                const toX = nearestE.x - projectile.x;
+                const toY = nearestE.y - projectile.y;
+                const toMag = Math.max(0.01, Math.hypot(toX, toY));
+                const curAngle = Math.atan2(projectile.vy, projectile.vx);
+                const targetAngle = Math.atan2(toY, toX);
+                let diff = targetAngle - curAngle;
+                while (diff > Math.PI) diff -= 2 * Math.PI;
+                while (diff < -Math.PI) diff += 2 * Math.PI;
+                const turnRate = projectile.homingStrength * 3 * dt;
+                const newAngle = curAngle + Math.sign(diff) * Math.min(Math.abs(diff), turnRate);
+                const spd = Math.hypot(projectile.vx, projectile.vy);
+                projectile.vx = Math.cos(newAngle) * spd;
+                projectile.vy = Math.sin(newAngle) * spd;
+            }
+        }
+
+        // ── Boomerang return ──
+        if (projectile.isBoomerang) {
+            projectile.boomerangTime += dt;
+            if (projectile.boomerangTime > 0.35 && projectile.boomerangPhase === 0) {
+                projectile.boomerangPhase = 1;
+                // Reverse toward player
+                const toPlayerX = player.x - projectile.x;
+                const toPlayerY = player.y - projectile.y;
+                const mag = Math.max(0.01, Math.hypot(toPlayerX, toPlayerY));
+                const spd = Math.hypot(projectile.vx, projectile.vy) * 1.2;
+                projectile.vx = (toPlayerX / mag) * spd;
+                projectile.vy = (toPlayerY / mag) * spd;
+                projectile.life = 2.0; // extend life for return trip
+                projectile.pierce = 99; // pierce everything on return
+            }
+        }
+
+        // ── Lich Bullet Fork ──
+        if (projectile.forkTimer > 0 && !projectile.forked) {
+            projectile.forkTimer -= dt;
+            if (projectile.forkTimer <= 0) {
+                projectile.forked = true;
+                const forks = projectile.forkCount || 3;
+                const baseAngle = Math.atan2(projectile.vy, projectile.vx);
+                const spread = 0.5;
+                for (let f = 0; f < forks; f++) {
+                    const angle = baseAngle - spread / 2 + (spread / (forks - 1 || 1)) * f;
+                    newProjectiles.push({
+                        id: nextProjectileId++,
+                        x: projectile.x, y: projectile.y,
+                        vx: Math.cos(angle) * 640,
+                        vy: Math.sin(angle) * 640,
+                        dmg: projectile.dmg * 0.6,
+                        life: 0.8, r: 4,
+                        pierce: player.pierce,
+                        canChain: false, tornado: false,
+                        spin: 0, color: '#c890ff',
+                        isBoomerang: false, boomerangPhase: 0, boomerangTime: 0,
+                        bouncesLeft: 0, homingStrength: 0,
+                        forkTimer: 0, forkCount: 0, forked: true,
+                        isBomb: false, bombSplitCount: 0, bombChain: false,
+                        isShard: false, speed: 640
+                    });
+                }
+                addP(projectile.x, projectile.y, '#c890ff', 10, 100, 0.2, 3);
+            }
+        }
+
         projectile.x += projectile.vx * dt;
         projectile.y += projectile.vy * dt;
         projectile.life -= dt;
         projectile.spin += dt * 10;
 
+        // ── Ricochet off arena walls ──
+        if (projectile.bouncesLeft > 0 && !projectile.tornado) {
+            let bounced = false;
+            if (projectile.x <= WALL + projectile.r || projectile.x >= arena.width - WALL - projectile.r) {
+                projectile.vx *= -1;
+                projectile.x = Math.max(WALL + projectile.r + 1, Math.min(arena.width - WALL - projectile.r - 1, projectile.x));
+                bounced = true;
+            }
+            if (projectile.y <= arena.top + projectile.r || projectile.y >= arena.height - WALL - projectile.r) {
+                projectile.vy *= -1;
+                projectile.y = Math.max(arena.top + projectile.r + 1, Math.min(arena.height - WALL - projectile.r - 1, projectile.y));
+                bounced = true;
+            }
+            if (bounced) {
+                projectile.bouncesLeft -= 1;
+                projectile.life = Math.max(projectile.life, 0.5);
+                projectile.dmg *= (1 + (player.ricochetDmgPerBounce || 0));
+                addP(projectile.x, projectile.y, '#7be8ff', 6, 60, 0.15, 2);
+            }
+        }
+
         if (projectile.tornado) {
             addP(projectile.x, projectile.y, '#bc13fe', 2, 40, 0.12, 2);
+        } else if (projectile.isBomb) {
+            addP(projectile.x, projectile.y, '#ff6b35', 3, 30, 0.12, 2);
         } else if (Math.random() < 0.45) {
             addP(projectile.x, projectile.y, projectile.color, 1, 20, 0.1, 1);
         }
 
         for (const enemy of enemies) {
             if (!enemy.alive) continue;
+            if (enemy.frozen) continue; // Frozen enemies skip collision temporarily (stun)
             const distance = Math.hypot(enemy.x - projectile.x, enemy.y - projectile.y);
             if (distance >= enemy.r + projectile.r) continue;
             if (projectile.tornado && enemy.lastHitBy === projectile.id) continue;
 
-            enemy.hp -= projectile.dmg * (projectile.tornado ? dt * 8 : 1);
-            enemy.hitFlash = 0.08;
+            player.hitCounter += 1;
+
+            // ── Crit System ──
+            let finalDmg = projectile.dmg;
+            let isCrit = false;
+            if (!projectile.tornado && !projectile.isShard) {
+                if (player.critChance > 0 && Math.random() < player.critChance) {
+                    let critMult = player.critMultiplier || 2;
+                    // Mega crit
+                    if (player.megaCritChance > 0 && Math.random() < player.megaCritChance) {
+                        critMult *= 3;
+                        addFxText(projectile.x, projectile.y - 24, 'MEGA!', '#ff375f', 0.55, 22);
+                    }
+                    finalDmg *= critMult;
+                    isCrit = true;
+                }
+            }
+
+            // ── Marked target bonus (Heat Seeker) ──
+            if (enemy.marked && player.markedDmg > 0) {
+                finalDmg *= (1 + player.markedDmg);
+            }
+
+            // ── Pierce damage bonus ──
+            if (player.pierceDamageBonus > 0 && projectile.pierce > 0) {
+                finalDmg *= (1 + player.pierceDamageBonus);
+            }
+
+            // ── Close-range bonus (Spread Volley / Glass Cannon) ──
+            if (player.closeRangeBonus > 0 || player.pointBlankMult > 0) {
+                const distToPlayer = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+                if (distToPlayer < 120) {
+                    finalDmg *= (1 + (player.closeRangeBonus || 0));
+                    if (player.pointBlankMult > 0 && distToPlayer < 60) {
+                        finalDmg *= player.pointBlankMult;
+                    }
+                }
+            }
+
+            const dmgApplied = finalDmg * (projectile.tornado ? dt * 8 : 1);
+            enemy.hp -= dmgApplied;
+            enemy.hitFlash = isCrit ? 0.16 : 0.08;
             enemy.lastHitBy = projectile.id;
-            addP(projectile.x, projectile.y, enemy.glow, projectile.tornado ? 4 : 3, 90, 0.16, 2);
+
+            if (isCrit) {
+                addP(projectile.x, projectile.y, '#ffd14d', 8, 120, 0.2, 3);
+                addFxText(projectile.x, projectile.y - 16, 'CRIT!', '#ffd14d', 0.35, 18);
+                // ── Crit Bomb AOE ──
+                if (player.critExplode) {
+                    triggerCritExplosion(projectile.x, projectile.y, finalDmg);
+                }
+            } else {
+                addP(projectile.x, projectile.y, enemy.glow, projectile.tornado ? 4 : 3, 90, 0.16, 2);
+            }
+
+            // ── Lifesteal (Vampire) ──
+            if (player.lifesteal > 0 && !projectile.tornado && !projectile.isShard) {
+                player.healAccum += dmgApplied * player.lifesteal;
+                if (player.healAccum >= enemy.maxHp * 0.5) {
+                    player.hp = Math.min(player.maxHp, player.hp + 1);
+                    player.healAccum = 0;
+                    addFxText(player.x, player.y - 20, '+1 HP', '#00ff9d', 0.4, 16);
+                    syncHpDangerFlair();
+                }
+            }
+
+            // ── Platinum Rounds stacking ──
+            if (player.platinumStack && !projectile.tornado) {
+                player.platinumDmg = Math.min(player.platinumCap === 99 ? 9999 : player.platinumCap, (player.platinumDmg || 0) + player.platinumPerHit);
+                if (player.platinumFireRate > 0) {
+                    player.platinumFireRateDmg = Math.min(0.5, (player.platinumFireRateDmg || 0) + player.platinumFireRate);
+                }
+            }
+
+            // ── Frost on Hit ──
+            if (player.frostOnHit && !projectile.tornado) {
+                enemy.frostSlow = player.frostStrength || 0.25;
+                enemy.frostTimer = 1.5;
+                if (player.frostDoT && !enemy.frozen) {
+                    enemy.hp -= player.dmg * 0.05;
+                }
+                if (player.freezeChance > 0 && Math.random() < player.freezeChance) {
+                    enemy.frozen = true;
+                    enemy.frozenTimer = 1.0;
+                    addFxText(enemy.x, enemy.y - 14, 'FROZEN', '#7be8ff', 0.45, 14);
+                    addP(enemy.x, enemy.y, '#7be8ff', 12, 80, 0.3, 3);
+                }
+            }
+
+            // ── Poison on Hit ──
+            if (player.poisonOnHit && !projectile.tornado) {
+                enemy.poisonDmg = player.dmg * player.damageMultiplier * (player.poisonPct || 0.08);
+                enemy.poisonTimer = player.poisonDuration || 3;
+                if (!enemy._poisoned) {
+                    enemy._poisoned = true;
+                    addFxText(enemy.x, enemy.y - 14, 'POISON', '#00ff9d', 0.35, 14);
+                }
+            }
+
+            // ── Mark on Hit (Pierce ability) ──
+            if (player.markOnHit && Math.random() < 0.35) {
+                enemy.marked = true;
+                enemy.markedTimer = 3;
+            }
+
+            // ── Glass Shards on Hit ──
+            if (player.shardsOnHit && !projectile.tornado && !projectile.isShard) {
+                const shardCount = player.shardCount || 3;
+                for (let s = 0; s < shardCount; s++) {
+                    const shardAngle = Math.random() * Math.PI * 2;
+                    newProjectiles.push({
+                        id: nextProjectileId++,
+                        x: projectile.x, y: projectile.y,
+                        vx: Math.cos(shardAngle) * 420,
+                        vy: Math.sin(shardAngle) * 420,
+                        dmg: player.dmg * player.damageMultiplier * (player.shardDmgMult || 0.5),
+                        life: 0.4, r: 3,
+                        pierce: player.shardsBounce ? 1 : 0,
+                        canChain: false, tornado: false,
+                        spin: 0, color: '#a0e0ff',
+                        isBoomerang: false, boomerangPhase: 0, boomerangTime: 0,
+                        bouncesLeft: player.shardsBounce ? 1 : 0,
+                        homingStrength: 0,
+                        forkTimer: 0, forkCount: 0, forked: true,
+                        isBomb: false, bombSplitCount: 0, bombChain: false,
+                        isShard: true, speed: 420
+                    });
+                }
+            }
+
+            // ── Arc Pulse ──
+            if (player.arcOnHit && !projectile.tornado && !projectile.isShard) {
+                if (player.hitCounter % (player.arcEvery || 6) === 0) {
+                    triggerArcPulse(enemy);
+                }
+            }
 
             if (projectile.canChain) {
                 triggerChainLightning(enemy, projectile.dmg * 0.45);
@@ -1861,15 +2616,131 @@ function updateProjectiles(dt) {
                 projectile.pierce -= 1;
             }
 
+            // ── Execute threshold (Scarier Face rank 4) ──
+            if (player.executeThreshold > 0 && enemy.hp > 0 && enemy.hp <= enemy.maxHp * player.executeThreshold && !enemy.isBoss) {
+                enemy.hp = 0;
+                addFxText(enemy.x, enemy.y - 16, 'EXECUTE!', '#ff375f', 0.45, 18);
+                addP(enemy.x, enemy.y, '#ff375f', 14, 160, 0.3, 4);
+            }
+
             if (enemy.hp <= 0) triggerKill(enemy);
             if (!projectile.tornado && projectile.pierce < 0) {
+                // ── Bomb explosion on impact ──
+                if (projectile.isBomb) {
+                    triggerBombExplosion(projectile);
+                }
                 projectile.life = 0;
                 break;
             }
         }
+
+        // ── Bomb expires (missed) — still explode ──
+        if (projectile.isBomb && projectile.life <= 0 && projectile.life > -dt * 2) {
+            triggerBombExplosion(projectile);
+        }
     });
 
+    // Add forked/shard projectiles
+    for (const np of newProjectiles) projectiles.push(np);
+
     projectiles = projectiles.filter((projectile) => projectile.life > 0);
+}
+
+// ── Crit Bomb Explosion ──
+function triggerCritExplosion(cx, cy, baseDmg) {
+    const radius = player.critExplodeRadius || 40;
+    const mult = player.critExplodeMult || 0.6;
+    addP(cx, cy, '#ffd14d', 20, 200, 0.3, 5);
+    screenShake = Math.min(2.5, screenShake + 0.35);
+    enemies.forEach((e) => {
+        if (!e.alive) return;
+        const d = Math.hypot(e.x - cx, e.y - cy);
+        if (d > radius) return;
+        const splashDmg = player.critOneShot ? e.maxHp * 10 : baseDmg * mult;
+        e.hp -= splashDmg;
+        e.hitFlash = 0.14;
+        addP(e.x, e.y, '#ffd14d', 6, 80, 0.15, 2);
+        if (e.hp <= 0) triggerKill(e);
+    });
+}
+
+// ── Arc Pulse ──
+function triggerArcPulse(origin) {
+    const targets = enemies
+        .filter((e) => e.alive && e.id !== origin.id)
+        .map((e) => ({ enemy: e, dist: Math.hypot(e.x - origin.x, e.y - origin.y) }))
+        .filter((e) => e.dist < 160)
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, player.arcTargets || 3);
+
+    const pulseDmg = player.dmg * player.damageMultiplier * 0.35;
+    targets.forEach(({ enemy }) => {
+        enemy.hp -= pulseDmg;
+        enemy.hitFlash = 0.1;
+        addLightningBolt(origin.x, origin.y, enemy.x, enemy.y, '#bc13fe', 0.14, 2.5);
+        addP(enemy.x, enemy.y, '#bc13fe', 8, 80, 0.18, 2);
+        if (player.arcParalyze) {
+            enemy.frozen = true;
+            enemy.frozenTimer = 0.3;
+        }
+        if (enemy.hp <= 0) triggerKill(enemy);
+    });
+    if (targets.length) {
+        addFxText(origin.x, origin.y - 18, 'ARC', '#bc13fe', 0.3, 14);
+        playSfx('chain', 0.85);
+    }
+}
+
+// ── Cluster Bomb Explosion ──
+function triggerBombExplosion(projectile) {
+    const radius = 70;
+    addP(projectile.x, projectile.y, '#ff6b35', 28, 250, 0.4, 6);
+    addP(projectile.x, projectile.y, '#ffd14d', 14, 180, 0.25, 4);
+    screenShake = Math.min(3, screenShake + 0.55);
+    powerPulse = Math.min(2, powerPulse + 0.4);
+    playSfx('hit', 1.2);
+
+    enemies.forEach((e) => {
+        if (!e.alive) return;
+        const d = Math.hypot(e.x - projectile.x, e.y - projectile.y);
+        if (d > radius) return;
+        e.hp -= projectile.dmg * 0.8;
+        e.hitFlash = 0.14;
+        if (e.hp <= 0) triggerKill(e);
+    });
+
+    // Sub-bombs
+    if (projectile.bombSplitCount > 0) {
+        for (let s = 0; s < projectile.bombSplitCount; s++) {
+            const angle = (s / projectile.bombSplitCount) * Math.PI * 2;
+            spawnProjectile({
+                x: projectile.x, y: projectile.y,
+                angle: angle,
+                speed: 320,
+                life: 0.6,
+                radius: 6,
+                damage: projectile.dmg * 0.4,
+                pierce: 0,
+                canChain: false,
+                color: '#ff9d00',
+                isBomb: projectile.bombChain,
+                bombSplitCount: projectile.bombChain ? Math.floor(projectile.bombSplitCount / 2) : 0,
+                bombChain: false
+            });
+        }
+    }
+}
+
+// Helper: find nearest enemy to an arbitrary point
+function findNearestEnemyToPoint(px, py, range) {
+    let nearest = null;
+    let minDist = range;
+    enemies.forEach((e) => {
+        if (!e.alive) return;
+        const d = Math.hypot(e.x - px, e.y - py);
+        if (d < minDist) { minDist = d; nearest = e; }
+    });
+    return nearest;
 }
 
 function triggerChainLightning(origin, damage) {
@@ -1910,9 +2781,17 @@ function updateEnemies(dt) {
         const px = -ny;
         const py = nx;
 
+        // ── Frozen stun — skip movement entirely ──
+        if (enemy.frozen) return;
+
         let moveX = nx;
         let moveY = ny;
         let speed = enemy.spd * 70;
+
+        // ── Frost slow ──
+        if (enemy.frostSlow > 0) {
+            speed *= (1 - enemy.frostSlow);
+        }
 
         if (enemy.ai === 'strafe') {
             moveX = nx * 0.72 + px * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
@@ -2097,8 +2976,139 @@ function updateHazards(dt) {
                 damagePlayer('boss');
             }
         }
+        // ── Singularity pull field ──
+        if (hazard.type === 'singularity') {
+            addP(hazard.x, hazard.y, '#bc13fe', 2, 30, 0.1, 1);
+            enemies.forEach((e) => {
+                if (!e.alive) return;
+                const d = Math.hypot(e.x - hazard.x, e.y - hazard.y);
+                if (d > hazard.radius) return;
+                // Pull toward center
+                const pullX = (hazard.x - e.x) / Math.max(1, d);
+                const pullY = (hazard.y - e.y) / Math.max(1, d);
+                e.x += pullX * hazard.pullStrength * dt;
+                e.y += pullY * hazard.pullStrength * dt;
+                // Tick damage
+                e.hp -= hazard.damage * dt;
+                if (e.hp <= 0) triggerKill(e);
+            });
+            // Implode at end
+            if (hazard.implode && hazard.life <= 0 && hazard.life > -dt * 2) {
+                addP(hazard.x, hazard.y, '#bc13fe', 24, 200, 0.35, 5);
+                addP(hazard.x, hazard.y, '#ffffff', 12, 140, 0.2, 3);
+                screenShake = Math.min(2.5, screenShake + 0.5);
+                enemies.forEach((e) => {
+                    if (!e.alive) return;
+                    const d = Math.hypot(e.x - hazard.x, e.y - hazard.y);
+                    if (d < hazard.radius * 0.8) {
+                        e.hp -= player.dmg * player.damageMultiplier * 2;
+                        e.hitFlash = 0.2;
+                        if (e.hp <= 0) triggerKill(e);
+                    }
+                });
+            }
+        }
     });
-    hazards = hazards.filter((hazard) => hazard.life > 0 && hazard.radius < hazard.maxRadius);
+    hazards = hazards.filter((hazard) => hazard.life > 0 && (hazard.type === 'singularity' || hazard.radius < hazard.maxRadius));
+}
+
+// ── Status Effects on Enemies ──
+function updateStatusEffects(dt) {
+    enemies.forEach((enemy) => {
+        if (!enemy.alive) return;
+
+        // ── Frost slow decay ──
+        if (enemy.frostTimer > 0) {
+            enemy.frostTimer -= dt;
+            if (enemy.frostTimer <= 0) enemy.frostSlow = 0;
+        }
+
+        // ── Frozen stun ──
+        if (enemy.frozen) {
+            enemy.frozenTimer -= dt;
+            if (enemy.frozenTimer <= 0) enemy.frozen = false;
+        }
+
+        // ── Poison DoT ──
+        if (enemy.poisonTimer > 0) {
+            enemy.poisonTimer -= dt;
+            enemy.hp -= enemy.poisonDmg * dt;
+            // Visual tick
+            if (Math.random() < 0.15) addP(enemy.x, enemy.y, '#00ff9d', 2, 30, 0.12, 1);
+            // Poison spread
+            if (player.poisonSpread && Math.random() < 0.02 * dt) {
+                enemies.forEach((other) => {
+                    if (other === enemy || !other.alive || other._poisoned) return;
+                    const d = Math.hypot(other.x - enemy.x, other.y - enemy.y);
+                    if (d < 60) {
+                        other.poisonDmg = enemy.poisonDmg;
+                        other.poisonTimer = player.poisonDuration || 3;
+                        other._poisoned = true;
+                    }
+                });
+            }
+            if (enemy.hp <= 0) triggerKill(enemy);
+        }
+
+        // ── Marked timer ──
+        if (enemy.markedTimer > 0) {
+            enemy.markedTimer -= dt;
+            if (enemy.markedTimer <= 0) enemy.marked = false;
+        }
+    });
+}
+
+// ── Ability Timers (Frenzy decay, Shield recharge, Passive gold, Singularity aura) ──
+function updateAbilityTimers(dt) {
+    if (!player) return;
+
+    // ── Frenzy decay ──
+    if (player.frenzyOnKill && !player.frenzyPermanent && player.frenzyStack > 0) {
+        player.frenzyTimer -= dt;
+        if (player.frenzyTimer <= 0) {
+            player.frenzyStack = Math.max(0, player.frenzyStack - dt * 0.3);
+        }
+    }
+
+    // ── Phantom Shield recharge ──
+    if (player.shieldEvery > 0) {
+        player.shieldTimer = (player.shieldTimer || 0) + dt;
+        if (player.shieldTimer >= player.shieldEvery) {
+            player.shieldTimer = 0;
+            player.shieldCharges = Math.max(player.shieldCharges, 1);
+            player.shieldActive = true;
+            addP(player.x, player.y, '#7be8ff', 10, 80, 0.2, 2);
+        }
+    }
+
+    // ── Strong Spirit cooldown reset ──
+    if (player.spiritEvery > 0 && player.lethalBlockUsed) {
+        player.spiritCooldown = (player.spiritCooldown || 0) + dt;
+        if (player.spiritCooldown >= player.spiritEvery) {
+            player.spiritCooldown = 0;
+            player.lethalBlockUsed = false;
+        }
+    }
+
+    // ── Passive gold (Fortune Coin rank 4) ──
+    if (player.passiveGold > 0) {
+        player._passiveGoldTimer = (player._passiveGoldTimer || 0) + dt;
+        if (player._passiveGoldTimer >= 1) { // every second
+            player._passiveGoldTimer = 0;
+            // Only in mission mode, give passive gold per second (scaled down)
+            const pgold = Math.round(player.passiveGold / 10); // per second fraction
+            if (pgold > 0) save.gold += pgold;
+        }
+    }
+
+    // ── Permanent Singularity aura ──
+    if (player.permaSingularity) {
+        player.singularityTimer = (player.singularityTimer || 0) + dt;
+        if (player.singularityTimer >= 3) {
+            player.singularityTimer = 0;
+            spawnSingularity(player.x, player.y);
+        }
+    }
 }
 
 function updateFxTexts(dt) {
@@ -2139,7 +3149,12 @@ function triggerKill(enemy) {
     enemy.alive = false;
     const economy = getEconomyMultiplier();
     const killGoldBase = currentMode === 'endless' ? (enemy.isBoss ? 2 : 0) : (enemy.isBoss ? 10 : 1);
-    const killGold = Math.max(0, Math.round(killGoldBase * economy));
+    // ── Fortune Coin gold bonus ──
+    const goldMult = 1 + (player.goldBonus || 0);
+    let killGold = Math.max(0, Math.round(killGoldBase * economy * goldMult));
+    if (player.doubleDropChance > 0 && Math.random() < player.doubleDropChance) {
+        killGold *= 2;
+    }
     addP(enemy.x, enemy.y, enemy.glow, enemy.isBoss ? 42 : 18, enemy.isBoss ? 260 : 210, 0.8, enemy.isBoss ? 7 : 4);
     addP(enemy.x, enemy.y, '#ffffff', enemy.isBoss ? 16 : 6, enemy.isBoss ? 180 : 120, 0.26, enemy.isBoss ? 4 : 2);
     if (killGold > 0) {
@@ -2147,6 +3162,105 @@ function triggerKill(enemy) {
     }
     grantAbilityXp(enemy.exp);
     if (enemy.isBoss) save.gems += 2;
+
+    // ── Bloodlust — heal on kill ──
+    if (player.healOnKillChance > 0 && Math.random() < player.healOnKillChance && player.hp < player.maxHp) {
+        player.hp = Math.min(player.maxHp, player.hp + 1);
+        addFxText(enemy.x, enemy.y - 20, '+1 HP', '#ff375f', 0.35, 14);
+        syncHpDangerFlair();
+    }
+    // ── Every-kill heal (bloodlust rank 4) ──
+    if (player.everyKillHeal > 0) {
+        player.healAccum = (player.healAccum || 0) + player.everyKillHeal;
+        if (player.healAccum >= 1 && player.hp < player.maxHp) {
+            player.hp = Math.min(player.maxHp, player.hp + 1);
+            player.healAccum -= 1;
+            syncHpDangerFlair();
+        }
+    }
+    // ── Heal per N kills ──
+    if (player.healPerKills > 0) {
+        player.healPerKillCounter = (player.healPerKillCounter || 0) + 1;
+        if (player.healPerKillCounter >= player.healPerKills && player.hp < player.maxHp) {
+            player.healPerKillCounter = 0;
+            player.hp = Math.min(player.maxHp, player.hp + 1);
+            addFxText(player.x, player.y - 20, '+1 HP', '#00ff9d', 0.4, 16);
+            syncHpDangerFlair();
+        }
+    }
+    // ── Boss full heal (Vampire rank 4) ──
+    if (player.bossFullHeal && enemy.isBoss) {
+        player.hp = player.maxHp;
+        addFxText(player.x, player.y - 24, 'FULL HEAL!', '#ff375f', 0.6, 20);
+        syncHpDangerFlair();
+    }
+    // ── Kill damage buff (Bloodlust / Trigger Fingers) ──
+    if (player.killDamageBuff > 0) {
+        player.damageMultiplier *= (1 + player.killDamageBuff);
+    }
+
+    // ── Frenzy stacking (Bullet Storm) ──
+    if (player.frenzyOnKill) {
+        const addFrenzy = 0.03;
+        if (player.frenzyPermanent) {
+            player.frenzyStack = Math.min(player.frenzyCap === 99 ? 9999 : player.frenzyCap, player.frenzyStack + addFrenzy);
+        } else {
+            player.frenzyStack = Math.min(player.frenzyCap, player.frenzyStack + addFrenzy);
+            player.frenzyTimer = 2.0;
+        }
+    }
+
+    // ── Trigger Fingers speed stacking ──
+    if (player.killSpeedBoost) {
+        player.killSpeedStack = Math.min(
+            player.killSpeedCap === 99 ? 9999 : player.killSpeedCap,
+            (player.killSpeedStack || 0) + (player.killSpeedPct || 0.005)
+        );
+    }
+
+    // ── Lucky Seven heal on kill ──
+    if (player.luckyHeals > 0 && player.hp < player.maxHp) {
+        player.hp = Math.min(player.maxHp, player.hp + player.luckyHeals);
+        syncHpDangerFlair();
+    }
+
+    // ── Chain on Kill (Chain Lightning rank 4) ──
+    if (player.chainOnKill) {
+        triggerChainLightning(enemy, player.dmg * player.damageMultiplier * 0.5);
+    }
+
+    // ── Poison explode on death ──
+    if (player.poisonExplodeOnDeath && enemy._poisoned) {
+        addP(enemy.x, enemy.y, '#00ff9d', 16, 140, 0.3, 4);
+        enemies.forEach((e) => {
+            if (!e.alive || e.id === enemy.id) return;
+            const d = Math.hypot(e.x - enemy.x, e.y - enemy.y);
+            if (d < 80) {
+                e.hp -= player.dmg * player.damageMultiplier * 0.3;
+                e.poisonDmg = player.dmg * player.damageMultiplier * (player.poisonPct || 0.08);
+                e.poisonTimer = player.poisonDuration || 3;
+                e._poisoned = true;
+                e.hitFlash = 0.1;
+                if (e.hp <= 0) triggerKill(e);
+            }
+        });
+    }
+
+    // ── Frozen shatter ──
+    if (player.frozenShatter && enemy.frozen) {
+        addP(enemy.x, enemy.y, '#7be8ff', 22, 180, 0.35, 5);
+        screenShake = Math.min(2.5, screenShake + 0.3);
+        enemies.forEach((e) => {
+            if (!e.alive || e.id === enemy.id) return;
+            const d = Math.hypot(e.x - enemy.x, e.y - enemy.y);
+            if (d < 100) {
+                e.hp -= enemy.maxHp * 0.5;
+                e.hitFlash = 0.14;
+                if (e.hp <= 0) triggerKill(e);
+            }
+        });
+    }
+
     if (player.shockNova) {
         player.shockNovaCounter += 1;
         const shockRank = Math.max(1, getAbilityRank('shock_nova'));
@@ -2157,7 +3271,7 @@ function triggerKill(enemy) {
         }
     }
     killStreak += 1;
-    killStreakTimer = 2.2;
+    killStreakTimer = 2.2 + (player.comboTimeBonus || 0);
     screenShake = Math.min(2.9, screenShake + (enemy.isBoss ? 1.05 : 0.28));
     powerPulse = Math.min(2.3, powerPulse + (enemy.isBoss ? 0.88 : 0.2));
     if (enemy.isBoss) playHaptic('hard');
@@ -2715,6 +3829,48 @@ function findNearestEnemy(range) {
 
 function damagePlayer(source) {
     if (player.invulnerable > 0) return;
+
+    // ── Phantom Shield — block the hit entirely ──
+    if (player.shieldActive && player.shieldCharges > 0) {
+        player.shieldCharges -= 1;
+        player.invulnerable = 0.5;
+        addP(player.x, player.y, '#7be8ff', 20, 160, 0.3, 4);
+        addFxText(player.x, player.y - 22, 'BLOCKED!', '#7be8ff', 0.5, 20);
+        playSfx('ability', 1.0);
+        screenShake = Math.min(2, screenShake + 0.4);
+        // Shield heals
+        if (player.shieldHeals && player.hp < player.maxHp) {
+            player.hp = Math.min(player.maxHp, player.hp + 1);
+            addFxText(player.x, player.y - 36, '+1 HP', '#00ff9d', 0.35, 14);
+            syncHpDangerFlair();
+        }
+        // Shield reflect
+        if (player.shieldReflect) {
+            const nearestE = findNearestEnemy(200);
+            if (nearestE) {
+                const angle = Math.atan2(nearestE.y - player.y, nearestE.x - player.x);
+                spawnProjectile({
+                    x: player.x, y: player.y,
+                    angle: angle, speed: 900, life: 0.8, radius: 6,
+                    damage: player.dmg * player.damageMultiplier * 2,
+                    pierce: 2, canChain: true,
+                    color: '#7be8ff'
+                });
+                addFxText(player.x, player.y - 44, 'REFLECT!', '#ffd14d', 0.4, 16);
+            }
+        }
+        if (player.shieldCharges <= 0) player.shieldActive = false;
+        return;
+    }
+
+    // ── Blank Burst aura — chance to negate hit ──
+    if (player.permanentBlankAura || (player.blankChance > 0 && Math.random() < player.blankChance)) {
+        player.invulnerable = 0.3;
+        addP(player.x, player.y, '#ffffff', 16, 120, 0.25, 3);
+        addFxText(player.x, player.y - 20, 'BLANK!', '#ffffff', 0.4, 18);
+        return;
+    }
+
     const hpBefore = player.hp;
     player.hp -= 1;
     player.invulnerable = 0.9;
@@ -2730,6 +3886,27 @@ function damagePlayer(source) {
     playSfx('death', 0.4); // small ominous low note layered on every -1
     playHaptic(source === 'boss' ? 'hard' : 'hard');
 
+    // ── Phoenix Drive — fire-wave on heart loss ──
+    if (player.phoenixDrive) {
+        const waveRadius = 180;
+        addP(player.x, player.y, '#ff6b35', 30, 280, 0.45, 6);
+        addFxText(player.x, player.y - 30, 'PHOENIX!', '#ff6b35', 0.5, 20);
+        playSfx('ability', 1.2);
+        enemies.forEach((e) => {
+            if (!e.alive) return;
+            const d = Math.hypot(e.x - player.x, e.y - player.y);
+            if (d < waveRadius) {
+                e.hp -= player.dmg * player.damageMultiplier * (player.phoenixDouble ? 3 : 1.5);
+                e.hitFlash = 0.2;
+                addP(e.x, e.y, '#ff6b35', 8, 100, 0.2, 3);
+                if (e.hp <= 0) triggerKill(e);
+            }
+        });
+        if (player.phoenixDouble) {
+            player.invulnerable = Math.max(player.invulnerable, 3);
+        }
+    }
+
     // Trigger HUD heart shake/lost animation
     window.__heartDamageTime = performance.now();
     window.__heartLostIdx = hpBefore - 1; // the heart that just got depleted
@@ -2741,6 +3918,34 @@ function damagePlayer(source) {
     syncHpDangerFlair();
 
     if (player.hp > 0) return;
+
+    // ── Strong Spirit / First Lethal Block ──
+    if (player.firstLethalBlock && !player.lethalBlockUsed) {
+        player.lethalBlockUsed = true;
+        player.hp = 1;
+        player.invulnerable = Math.max(player.invulnerable, player.spiritInvul || 2);
+        addP(player.x, player.y, '#ffd14d', 24, 220, 0.4, 5);
+        addFxText(player.x, player.y - 28, 'SAVED!', '#ffd14d', 0.6, 22);
+        playSfx('ability', 1.3);
+        playHaptic('hard');
+        syncHpDangerFlair();
+        updateMetaHud();
+        return;
+    }
+
+    // ── Phoenix Revive — full HP once per run ──
+    if (player.phoenixRevive && !player.phoenixReviveUsed) {
+        player.phoenixReviveUsed = true;
+        player.hp = player.maxHp;
+        player.invulnerable = 3;
+        addP(player.x, player.y, '#ff6b35', 40, 320, 0.6, 8);
+        addFxText(player.x, player.y - 30, 'REVIVE!', '#ff6b35', 0.8, 26);
+        playSfx('win', 1);
+        playHaptic('hard');
+        syncHpDangerFlair();
+        updateMetaHud();
+        return;
+    }
 
     if (source === 'boss' && !player.bossReviveUsed && save.bossRevive > 0) {
         save.bossRevive -= 1;
@@ -2828,6 +4033,12 @@ function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, sec
 }
 
 function gameOver() {
+    // Capture this run's skill ranks before closing so the post-run summary works.
+    if (player && player.abilityRanks) {
+        save.lastRunSkills = Object.assign({}, player.abilityRanks);
+    } else {
+        save.lastRunSkills = {};
+    }
     saveSave();
     closeMission();
     playSfx('death', 1.1);
@@ -2859,21 +4070,24 @@ function gameOver() {
         });
         return;
     }
+    const failStats = [
+        { label: 'Mission', value: `Level ${currentLevel}` },
+        { label: 'Best Reach', value: `Wave ${Math.min(currentWave + 1, Math.max(1, currentLevelWaves.length))}/${Math.max(1, currentLevelWaves.length)}` },
+        { label: 'Gold Bank', value: formatCompactNumber(save.gold) }
+    ];
+    const failSkills = formatRunSkillsList(save.lastRunSkills);
+    if (failSkills) failStats.push({ label: 'Skills Used', value: failSkills });
     showResultOverlay({
         loss: true,
         title: 'Mission Failed',
         copy: 'One hit costs one full heart. Upgrade and push again.',
-        stats: [
-            { label: 'Mission', value: `Level ${currentLevel}` },
-            { label: 'Best Reach', value: `Wave ${Math.min(currentWave + 1, Math.max(1, currentLevelWaves.length))}/${Math.max(1, currentLevelWaves.length)}` },
-            { label: 'Gold Bank', value: formatCompactNumber(save.gold) }
-        ],
+        stats: failStats,
         primaryLabel: 'Retry',
-        secondaryLabel: 'Map',
+        secondaryLabel: 'Skills',
         onPrimary: () => window.startCurrentLevel(),
         onSecondary: () => {
             hideResultOverlay();
-            showFight();
+            openRunSummary();
         }
     });
 }
@@ -2886,30 +4100,115 @@ function victory() {
     save.selectedLevel = save.unlocked;
     save.gems += gemReward;
     save.gold += goldReward;
+
+    // Every 3rd level grants a milestone bonus: extra gold, extra gems and a
+    // level-appropriate pack token. The pack picked scales with current level.
+    let milestoneBonus = null;
+    if (currentLevel % 3 === 0) {
+        const bonusGold = Math.round(goldReward * 0.5);
+        const bonusGems = 5 + Math.floor(currentLevel / 4);
+        let packKey = 'supply_pack_i';
+        if (currentLevel >= 30) packKey = 'apex_pack_iii';
+        else if (currentLevel >= 12) packKey = 'strike_pack_ii';
+        save.gold += bonusGold;
+        save.gems += bonusGems;
+        save.packs.push(packKey);
+        milestoneBonus = { gold: bonusGold, gems: bonusGems, packKey };
+    }
+
+    // Capture this run's used skills so the post-run summary can render them.
+    if (player && player.abilityRanks) {
+        save.lastRunSkills = Object.assign({}, player.abilityRanks);
+    } else {
+        save.lastRunSkills = {};
+    }
+
     saveSave();
     closeMission();
     playSfx('win', 1);
     playHaptic('success');
     // Star rating: 1 (cleared), 2 (cleared with HP > half), 3 (cleared full HP)
     const stars = player && player.maxHp ? (player.hp >= player.maxHp ? 3 : (player.hp > player.maxHp / 2 ? 2 : 1)) : 1;
+    const stats = [
+        { label: 'Gold Earned', value: `+${formatCompactNumber(goldReward)}` },
+        { label: 'Gems Earned', value: `+${gemReward}` },
+        { label: 'Next Mission', value: `Level ${save.unlocked}` }
+    ];
+    if (milestoneBonus) {
+        stats.push({ label: 'Milestone Bonus', value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || 'Pack'}` });
+    }
+    // Append the "Skills used" summary as a single rolled-up stat line. The
+    // dedicated overlay (openRunSummary) is opened on demand via the result
+    // screen.
+    const skillsSummary = formatRunSkillsList(save.lastRunSkills);
+    if (skillsSummary) {
+        stats.push({ label: 'Skills Used', value: skillsSummary });
+    }
     showResultOverlay({
         title: `Level ${currentLevel} Clear`,
         copy: 'Rewards paid out. The next mission is live.',
         stars,
-        stats: [
-            { label: 'Gold Earned', value: `+${formatCompactNumber(goldReward)}` },
-            { label: 'Gems Earned', value: `+${gemReward}` },
-            { label: 'Next Mission', value: `Level ${save.unlocked}` }
-        ],
+        stats,
         primaryLabel: 'Next Fight',
-        secondaryLabel: 'Map',
+        secondaryLabel: 'Skills',
         onPrimary: () => window.startCurrentLevel(),
         onSecondary: () => {
             hideResultOverlay();
-            showFight();
+            openRunSummary();
         }
     });
 }
+
+// Build a one-line skills summary like "Damage Core (R1) · Twin Volley (R2)"
+function formatRunSkillsList(ranks) {
+    if (!ranks) return '';
+    const entries = Object.entries(ranks).filter(([, r]) => r > 0);
+    if (!entries.length) return '';
+    const parts = entries.slice(0, 4).map(([id, rank]) => {
+        const ab = ABILITIES.find((a) => a.id === id);
+        const name = ab ? ab.name : id;
+        return `${name} (R${rank})`;
+    });
+    if (entries.length > 4) parts.push(`+${entries.length - 4} more`);
+    return parts.join(' · ');
+}
+
+window.openRunSummary = function() {
+    const overlay = document.getElementById('run-summary-overlay');
+    const list = document.getElementById('run-summary-list');
+    if (!overlay || !list) return;
+    const ranks = save.lastRunSkills || {};
+    const entries = Object.entries(ranks).filter(([, r]) => r > 0);
+    if (!entries.length) {
+        list.innerHTML = `<div class="run-summary-empty">${t('runSummary.empty')}</div>`;
+    } else {
+        list.innerHTML = entries.map(([id, rank]) => {
+            const ab = ABILITIES.find((a) => a.id === id);
+            if (!ab) return '';
+            const tier = (ab.rarity || 'common').toLowerCase();
+            const node = (ab.tree && ab.tree[Math.min(ab.tree.length - 1, rank - 1)]) || { name: ab.name, desc: ab.desc };
+            return `
+                <div class="run-summary-row rarity-tier-${tier}">
+                    <div class="rs-icon">${getAbilityIconMarkup(ab.id, ab.icon) || ''}</div>
+                    <div class="rs-body">
+                        <div class="rs-head">
+                            <span class="rs-name">${ab.name}</span>
+                            <span class="rs-rank">${t('runSummary.rank')} ${rank}/${(ab.tree || []).length || 1}</span>
+                        </div>
+                        <div class="rs-desc">${node.desc || ab.desc || ''}</div>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+    overlay.classList.add('active');
+    playHaptic('peek');
+};
+
+window.closeRunSummary = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('run-summary-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
 
 function updateHubVisualization(focusId) {
     const holder = document.getElementById('hub-ring-progress');
@@ -3273,71 +4572,194 @@ function getRewardArtSvg(id, type) {
         if (!skin) return '';
         const s = skin.style;
         const theme = skin.theme || 'arrow';
-        const auraGrad = `<defs><radialGradient id="g-${id}" cx="50%" cy="60%" r="60%">
-            <stop offset="0%" stop-color="${s.pulse}" stop-opacity="0.95"/>
-            <stop offset="55%" stop-color="${s.core}" stop-opacity="0.4"/>
-            <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
-        </radialGradient></defs>
-        <circle cx="50" cy="60" r="38" fill="url(#g-${id})"/>`;
+        // Aura/glow background — common to all skins, intensity scales with rarity
+        const rarityIntensity = ({ blue: 0.85, dark: 1.0, purple: 1.15, red: 1.3, gold: 1.5 })[skin.rarity] || 1.0;
+        const auraGrad = `<defs>
+            <radialGradient id="g-${id}" cx="50%" cy="55%" r="60%">
+                <stop offset="0%" stop-color="${s.pulse}" stop-opacity="${(0.95 * rarityIntensity).toFixed(2)}"/>
+                <stop offset="50%" stop-color="${s.core}" stop-opacity="${(0.5 * rarityIntensity).toFixed(2)}"/>
+                <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+            </radialGradient>
+        </defs>
+        <circle cx="50" cy="55" r="44" fill="url(#g-${id})"/>`;
 
-        // Each theme draws a unique ship + flair
+        // Each theme draws a unique ship + flair (heavy VFX)
         let body = '';
+
         if (theme === 'arrow') {
+            // Stock — clean white triangle with subtle glow ring
             body = `
-                <polygon points="50,12 74,84 50,72 26,84" fill="${s.ship}" stroke="${s.core}" stroke-width="1.5"/>
-                <circle cx="50" cy="50" r="7" fill="${s.core}"/>
-                <line x1="34" y1="80" x2="66" y2="80" stroke="${s.trail}" stroke-width="3" stroke-linecap="round"/>`;
-        } else if (theme === 'molten') {
-            // Magma plate with cracks + ember sparks
+                <circle cx="50" cy="50" r="36" fill="none" stroke="${s.pulse}" stroke-width="0.8" opacity="0.4" stroke-dasharray="2 2"/>
+                <polygon points="50,16 70,80 50,70 30,80" fill="${s.ship}" stroke="${s.core}" stroke-width="1.6" stroke-linejoin="round"/>
+                <circle cx="50" cy="50" r="8" fill="${s.core}"/>
+                <circle cx="50" cy="50" r="3.5" fill="#ffffff"/>
+                <line x1="36" y1="78" x2="64" y2="78" stroke="${s.trail}" stroke-width="3" stroke-linecap="round"/>`;
+        }
+        else if (theme === 'molten') {
+            // EMBER BLADE — magma shell with glowing cracks + flame trail + embers
             body = `
-                <polygon points="50,10 80,86 50,76 20,86" fill="${s.ship}" stroke="${s.pulse}" stroke-width="1.5"/>
-                <polyline points="50,18 46,40 52,52 44,68" fill="none" stroke="${s.core}" stroke-width="1.6"/>
-                <polyline points="50,18 56,38 48,46 56,66" fill="none" stroke="${s.core}" stroke-width="1.4" opacity="0.8"/>
-                <circle cx="40" cy="86" r="2" fill="${s.core}"/>
-                <circle cx="60" cy="86" r="2" fill="${s.core}"/>
-                <circle cx="50" cy="48" r="6" fill="${s.core}"/>`;
-        } else if (theme === 'wave') {
-            // Glass wing with rippling void wave behind
+                <defs>
+                    <linearGradient id="emb-${id}" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="${s.core}" stop-opacity="0.95"/>
+                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="1"/>
+                    </linearGradient>
+                </defs>
+                <!-- big flame trail behind ship -->
+                <path d="M 36 70 Q 30 85, 36 95 Q 50 88, 64 95 Q 70 85, 64 70 Z" fill="${s.pulse}" opacity="0.55"/>
+                <path d="M 40 72 Q 36 86, 42 92 Q 50 86, 58 92 Q 64 86, 60 72 Z" fill="${s.core}" opacity="0.85"/>
+                <!-- ship plate with magma gradient -->
+                <polygon points="50,14 72,76 50,68 28,76" fill="url(#emb-${id})" stroke="${s.core}" stroke-width="1.6" stroke-linejoin="round"/>
+                <!-- glowing cracks -->
+                <polyline points="50,20 46,38 52,46 44,60" fill="none" stroke="${s.core}" stroke-width="1.6" opacity="0.95"/>
+                <polyline points="50,22 56,40 48,48 56,62" fill="none" stroke="#ffe168" stroke-width="1.2" opacity="0.85"/>
+                <polyline points="50,26 50,60" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+                <!-- core -->
+                <circle cx="50" cy="46" r="7" fill="#ffe168"/>
+                <circle cx="50" cy="46" r="3" fill="#ffffff"/>
+                <!-- floating embers -->
+                <circle cx="22" cy="38" r="1.6" fill="${s.core}" opacity="0.9"/>
+                <circle cx="76" cy="44" r="1.4" fill="${s.core}" opacity="0.85"/>
+                <circle cx="18" cy="58" r="1.2" fill="${s.pulse}" opacity="0.85"/>
+                <circle cx="80" cy="62" r="1.6" fill="${s.pulse}" opacity="0.9"/>`;
+        }
+        else if (theme === 'wave') {
+            // VIOLET DRIFT — translucent purple wing with rippling void waves + glow trails
             body = `
-                <path d="M 18 80 Q 30 64, 50 76 T 82 80" fill="none" stroke="${s.trail}" stroke-width="2"/>
-                <path d="M 14 88 Q 28 70, 50 84 T 86 88" fill="none" stroke="${s.pulse}" stroke-width="1.5" opacity="0.7"/>
-                <polygon points="50,14 78,80 50,68 22,80" fill="${s.ship}" opacity="0.95"/>
-                <polygon points="50,28 64,72 50,62 36,72" fill="${s.pulse}" opacity="0.4"/>
-                <circle cx="50" cy="48" r="6" fill="${s.core}"/>`;
-        } else if (theme === 'corona') {
-            // Sun ship: spikes radiate outward
-            const spikes = Array.from({ length: 8 }, (_, i) => {
-                const a = (i / 8) * Math.PI * 2;
-                const x1 = 50 + Math.cos(a) * 24, y1 = 50 + Math.sin(a) * 24;
-                const x2 = 50 + Math.cos(a) * 38, y2 = 50 + Math.sin(a) * 38;
-                return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${s.core}" stroke-width="2.4" opacity="0.85"/>`;
+                <defs>
+                    <linearGradient id="wave-${id}" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="${s.ship}" stop-opacity="0.95"/>
+                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.5"/>
+                    </linearGradient>
+                </defs>
+                <!-- void waves behind ship -->
+                <path d="M 8 78 Q 24 60, 50 74 T 92 78" fill="none" stroke="${s.trail}" stroke-width="2.4"/>
+                <path d="M 4 86 Q 22 68, 50 82 T 96 86" fill="none" stroke="${s.pulse}" stroke-width="2" opacity="0.75"/>
+                <path d="M 0 94 Q 20 76, 50 90 T 100 94" fill="none" stroke="${s.pulse}" stroke-width="1.4" opacity="0.55"/>
+                <!-- ship -->
+                <polygon points="50,14 76,78 50,66 24,78" fill="url(#wave-${id})" stroke="${s.pulse}" stroke-width="1.4"/>
+                <polygon points="50,28 64,68 50,58 36,68" fill="${s.pulse}" opacity="0.45"/>
+                <!-- core glow -->
+                <circle cx="50" cy="44" r="9" fill="${s.pulse}" opacity="0.4"/>
+                <circle cx="50" cy="44" r="6" fill="${s.core}"/>
+                <circle cx="50" cy="44" r="2.5" fill="#ffffff"/>
+                <!-- floating energy dots -->
+                <circle cx="20" cy="34" r="1.2" fill="#ffffff" opacity="0.85"/>
+                <circle cx="80" cy="38" r="1" fill="#ffffff" opacity="0.7"/>
+                <circle cx="14" cy="52" r="0.9" fill="${s.core}" opacity="0.8"/>
+                <circle cx="86" cy="56" r="1.1" fill="${s.core}" opacity="0.85"/>`;
+        }
+        else if (theme === 'corona') {
+            // SOLAR FLARE — plasma sun with corona spikes (16 instead of 8) + sunspots + rotating rings
+            const spikesOuter = Array.from({ length: 16 }, (_, i) => {
+                const a = (i / 16) * Math.PI * 2;
+                const inR = 22, outR = i % 2 === 0 ? 38 : 32;
+                const x1 = 50 + Math.cos(a) * inR, y1 = 50 + Math.sin(a) * inR;
+                const x2 = 50 + Math.cos(a) * outR, y2 = 50 + Math.sin(a) * outR;
+                return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${s.core}" stroke-width="${i % 2 === 0 ? '2.8' : '1.6'}" opacity="${i % 2 === 0 ? '0.95' : '0.7'}" stroke-linecap="round"/>`;
             }).join('');
-            body = `${spikes}
-                <circle cx="50" cy="50" r="22" fill="${s.ship}" opacity="0.95" stroke="${s.pulse}" stroke-width="1.5"/>
-                <circle cx="50" cy="50" r="9" fill="${s.core}"/>`;
-        } else if (theme === 'blade') {
-            // Sharp red dagger silhouette + twin afterburners
+            // corona rings
             body = `
-                <polygon points="50,8 60,80 50,72 40,80" fill="${s.ship}" stroke="${s.core}" stroke-width="1.4"/>
-                <polygon points="42,76 50,90 38,86" fill="${s.trail}" opacity="0.9"/>
-                <polygon points="58,76 50,90 62,86" fill="${s.trail}" opacity="0.9"/>
-                <polygon points="46,84 50,96 54,84" fill="${s.core}" opacity="0.8"/>
-                <circle cx="50" cy="48" r="5" fill="${s.core}"/>`;
-        } else if (theme === 'aurora') {
-            // Prismatic ship with rainbow ribbon and stars
+                <defs>
+                    <radialGradient id="sun-${id}" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+                        <stop offset="40%" stop-color="${s.core}" stop-opacity="1"/>
+                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.7"/>
+                    </radialGradient>
+                </defs>
+                ${spikesOuter}
+                <!-- outer corona ring -->
+                <circle cx="50" cy="50" r="34" fill="none" stroke="${s.core}" stroke-width="0.8" opacity="0.5" stroke-dasharray="3 3"/>
+                <circle cx="50" cy="50" r="28" fill="none" stroke="${s.pulse}" stroke-width="0.8" opacity="0.6" stroke-dasharray="2 2"/>
+                <!-- solar surface -->
+                <circle cx="50" cy="50" r="22" fill="url(#sun-${id})" stroke="${s.core}" stroke-width="1.5"/>
+                <!-- sunspots / plasma swirls -->
+                <circle cx="44" cy="46" r="3" fill="${s.pulse}" opacity="0.55"/>
+                <circle cx="56" cy="54" r="2.4" fill="${s.pulse}" opacity="0.5"/>
+                <circle cx="52" cy="42" r="1.6" fill="${s.pulse}" opacity="0.4"/>
+                <!-- bright core -->
+                <circle cx="50" cy="50" r="9" fill="#fff8d0"/>
+                <circle cx="50" cy="50" r="4" fill="#ffffff"/>`;
+        }
+        else if (theme === 'blade') {
+            // CRIMSON AFTERBURN — rocket-blade silhouette with TWIN afterburn cones + sparks + blood trail
             body = `
-                <defs><linearGradient id="aur-${id}" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stop-color="#7be8ff"/><stop offset="40%" stop-color="#fffbe8"/>
-                    <stop offset="70%" stop-color="#ffd14d"/><stop offset="100%" stop-color="#ff8ba2"/>
-                </linearGradient></defs>
-                <path d="M 14 84 Q 30 60, 50 78 T 86 84" stroke="url(#aur-${id})" stroke-width="3" fill="none"/>
-                <polygon points="50,12 76,84 50,72 24,84" fill="${s.ship}" opacity="0.95" stroke="url(#aur-${id})" stroke-width="1.5"/>
-                <circle cx="50" cy="50" r="7" fill="${s.core}"/>
-                <circle cx="22" cy="22" r="1.5" fill="#fff"/>
-                <circle cx="78" cy="26" r="1.2" fill="#fff"/>
-                <circle cx="74" cy="60" r="1.2" fill="#fff"/>
-                <circle cx="30" cy="60" r="1.2" fill="#fff"/>`;
-        } else {
+                <defs>
+                    <linearGradient id="blade-${id}" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="${s.ship}" stop-opacity="1"/>
+                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.85"/>
+                    </linearGradient>
+                    <linearGradient id="flame-${id}" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#fff8d0" stop-opacity="0"/>
+                        <stop offset="30%" stop-color="${s.core}" stop-opacity="0.95"/>
+                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="1"/>
+                    </linearGradient>
+                </defs>
+                <!-- twin afterburn cones (longer, more dramatic) -->
+                <polygon points="40,72 32,98 48,86" fill="url(#flame-${id})"/>
+                <polygon points="60,72 68,98 52,86" fill="url(#flame-${id})"/>
+                <polygon points="42,76 38,94 50,86" fill="${s.core}" opacity="0.85"/>
+                <polygon points="58,76 62,94 50,86" fill="${s.core}" opacity="0.85"/>
+                <polygon points="46,80 50,98 54,80" fill="${s.core}" opacity="0.7"/>
+                <!-- sharp blade silhouette -->
+                <polygon points="50,10 62,76 50,68 38,76" fill="url(#blade-${id})" stroke="${s.core}" stroke-width="1.4"/>
+                <!-- inner blade highlight -->
+                <polygon points="50,18 56,68 50,62 44,68" fill="#ffffff" opacity="0.35"/>
+                <!-- wing tips -->
+                <polygon points="38,76 30,64 36,72" fill="${s.ship}" opacity="0.85"/>
+                <polygon points="62,76 70,64 64,72" fill="${s.ship}" opacity="0.85"/>
+                <!-- core glow -->
+                <circle cx="50" cy="50" r="6" fill="${s.core}"/>
+                <circle cx="50" cy="50" r="2.5" fill="#ffffff"/>
+                <!-- sparks shooting from afterburners -->
+                <circle cx="28" cy="84" r="1.5" fill="${s.core}" opacity="0.9"/>
+                <circle cx="72" cy="86" r="1.4" fill="${s.core}" opacity="0.9"/>
+                <circle cx="22" cy="92" r="1" fill="#ffffff" opacity="0.85"/>
+                <circle cx="78" cy="92" r="1.1" fill="#ffffff" opacity="0.85"/>
+                <circle cx="50" cy="96" r="1.4" fill="#ffffff" opacity="0.9"/>`;
+        }
+        else if (theme === 'aurora') {
+            // AURORA ZERO — prismatic foil with HUGE rainbow ribbon + halo + sparkles + multi-layer ship
+            body = `
+                <defs>
+                    <linearGradient id="aur-rainbow-${id}" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%"   stop-color="#7be8ff"/>
+                        <stop offset="25%"  stop-color="#fffbe8"/>
+                        <stop offset="50%"  stop-color="#ffd14d"/>
+                        <stop offset="75%"  stop-color="#ff8ba2"/>
+                        <stop offset="100%" stop-color="#bc13fe"/>
+                    </linearGradient>
+                    <radialGradient id="aur-halo-${id}" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%"   stop-color="#ffd14d" stop-opacity="0.8"/>
+                        <stop offset="60%"  stop-color="#7be8ff" stop-opacity="0.4"/>
+                        <stop offset="100%" stop-color="#bc13fe" stop-opacity="0"/>
+                    </radialGradient>
+                </defs>
+                <!-- big rotating halo -->
+                <circle cx="50" cy="50" r="42" fill="url(#aur-halo-${id})"/>
+                <!-- prismatic outer ring -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="url(#aur-rainbow-${id})" stroke-width="1.4" opacity="0.9" stroke-dasharray="6 3"/>
+                <circle cx="50" cy="50" r="32" fill="none" stroke="url(#aur-rainbow-${id})" stroke-width="0.8" opacity="0.6" stroke-dasharray="2 4"/>
+                <!-- rainbow ribbons (2 sweeps for depth) -->
+                <path d="M 6 84 Q 26 56, 50 76 T 94 84" stroke="url(#aur-rainbow-${id})" stroke-width="3.2" fill="none" opacity="0.95"/>
+                <path d="M 2 92 Q 24 64, 50 84 T 98 92" stroke="url(#aur-rainbow-${id})" stroke-width="2" fill="none" opacity="0.65"/>
+                <!-- ship with prismatic outline -->
+                <polygon points="50,12 74,80 50,68 26,80" fill="${s.ship}" opacity="0.95" stroke="url(#aur-rainbow-${id})" stroke-width="1.8"/>
+                <polygon points="50,24 64,72 50,62 36,72" fill="url(#aur-rainbow-${id})" opacity="0.45"/>
+                <!-- multi-layer core -->
+                <circle cx="50" cy="48" r="10" fill="${s.core}" opacity="0.55"/>
+                <circle cx="50" cy="48" r="6"  fill="${s.core}"/>
+                <circle cx="50" cy="48" r="3"  fill="#ffffff"/>
+                <!-- sparkle stars (8 around) -->
+                <polygon points="18,18 19,22 23,23 19,24 18,28 17,24 13,23 17,22" fill="#ffffff" opacity="0.95"/>
+                <polygon points="82,22 82.5,25 86,26 82.5,27 82,30 81.5,27 78,26 81.5,25" fill="#ffffff" opacity="0.85"/>
+                <polygon points="84,58 84.5,61 88,62 84.5,63 84,66 83.5,63 80,62 83.5,61" fill="#ffffff" opacity="0.85"/>
+                <polygon points="16,60 16.5,63 20,64 16.5,65 16,68 15.5,65 12,64 15.5,63" fill="#ffffff" opacity="0.85"/>
+                <circle cx="40" cy="20" r="1.2" fill="#ffffff" opacity="0.9"/>
+                <circle cx="60" cy="20" r="1" fill="#ffffff" opacity="0.85"/>
+                <circle cx="30" cy="40" r="0.9" fill="#ffd14d" opacity="0.8"/>
+                <circle cx="72" cy="42" r="0.9" fill="#7be8ff" opacity="0.8"/>`;
+        }
+        else {
             body = `
                 <polygon points="50,12 74,84 50,72 26,84" fill="${s.ship}" stroke="${s.core}" stroke-width="1.5"/>
                 <circle cx="50" cy="50" r="7" fill="${s.core}"/>`;
@@ -3465,6 +4887,14 @@ window.closePackPeek = function(event) {
 };
 
 // ─────────────────────────── DAILY OVERLAY (popup) ────────────
+// Reward icon mapping (small SVG glyph)
+function _rewardIconFor(reward) {
+    if (reward.gold || /gold/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd14d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="9,9 15,9 12,15 15,15"/></svg>';
+    if (reward.gems || /gems/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#bc13fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,11 12,22 2,11"/><polyline points="2,11 22,11"/></svg>';
+    if (reward.packKey || /pack/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#ff67ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,9 22,17 12,23 2,17 2,9"/></svg>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>';
+}
+
 window.openDailyOverlay = function() {
     const overlay = document.getElementById('daily-overlay');
     const grid = document.getElementById('daily-overlay-grid');
@@ -3472,16 +4902,25 @@ window.openDailyOverlay = function() {
     if (!overlay || !grid) return;
     const cycleDay = Math.max(1, save.daily?.cycleDay || 1);
     const claimedToday = save.daily?.lastClaimKey === getTodayKey();
-    if (status) status.textContent = claimedToday ? `Tag ${cycleDay} schon eingesammelt — komm morgen wieder.` : `Tag ${cycleDay} bereit. Reward: ${DAILY_LOGIN_REWARDS[cycleDay - 1]?.label || ''}`;
+    const streak = save.daily?.streak || 0;
+
+    if (status) {
+        status.innerHTML = claimedToday
+            ? `<span style="color:#1eff8c">✓ Tag ${cycleDay} eingesammelt</span> · komm morgen wieder · Streak <strong style="color:#ffd14d">${streak}</strong>`
+            : `<span style="color:#67d4ff">Tag ${cycleDay} bereit</span> · Streak <strong style="color:#ffd14d">${streak}</strong>`;
+    }
+
     grid.innerHTML = DAILY_LOGIN_REWARDS.map((reward, index) => {
         const day = index + 1;
-        const status = day < cycleDay ? 'claimed' : day === cycleDay ? (claimedToday ? 'claimed today' : 'today') : 'upcoming';
-        const statusText = day < cycleDay ? 'Done' : day === cycleDay ? (claimedToday ? 'Heute' : 'Jetzt') : 'Spaeter';
+        const stateClass = day < cycleDay ? 'past' : day === cycleDay ? (claimedToday ? 'past' : 'today') : 'future';
+        const statusText = day < cycleDay ? '✓' : day === cycleDay ? (claimedToday ? '✓' : 'JETZT') : `+${day - cycleDay}d`;
+        const isToday = day === cycleDay && !claimedToday;
         return `
-            <div class="daily-card ${status}">
-                <div class="daily-day">Tag ${day}</div>
-                <div class="daily-reward">${reward.label}</div>
-                <div class="daily-status">${statusText}</div>
+            <div class="lb-daily-card state-${stateClass} ${isToday ? 'highlight' : ''}">
+                <div class="lb-daily-day">Tag ${day}</div>
+                <div class="lb-daily-icon">${_rewardIconFor(reward)}</div>
+                <div class="lb-daily-reward">${reward.label}</div>
+                <div class="lb-daily-status">${statusText}</div>
             </div>
         `;
     }).join('');
@@ -3497,24 +4936,45 @@ window.closeDailyOverlay = function(event) {
 
 // ─────────────────────────── CHALLENGES (popup) ───────────────
 const DAILY_CHALLENGES = [
-    { id: 'kill100',   title: 'Kill 100 enemies', reward: '120 Gold' },
-    { id: 'wave5',     title: 'Reach wave 5 in Endless', reward: '12 Gems' },
-    { id: 'evolve',    title: 'Evolve any ability twice in a run', reward: '1 Pack II' },
-    { id: 'noHit',     title: 'Clear a mission without losing a heart', reward: '20 Gems' }
+    { id: 'kill100', title: 'Eliminate 100 enemies',         goal: 100, reward: { gold: 120, label: '120 Gold' },   tier: 'common' },
+    { id: 'wave5',   title: 'Reach wave 5 in Endless',       goal: 5,   reward: { gems: 12, label: '12 Gems' },     tier: 'rare' },
+    { id: 'evolve',  title: 'Evolve an ability twice in a run', goal: 2, reward: { packKey: 'strike', label: '1 Pack II' }, tier: 'epic' },
+    { id: 'noHit',   title: 'Clear a mission without damage', goal: 1,  reward: { gems: 20, label: '20 Gems' },     tier: 'epic' },
+    { id: 'kills500',title: 'Eliminate 500 enemies (weekly)', goal: 500, reward: { gold: 800, label: '800 Gold' },  tier: 'legendary' }
 ];
+
+function getChallengeProgress(c) {
+    const p = save.challengeProgress || {};
+    const v = Math.min(c.goal, p[c.id] || 0);
+    return { value: v, pct: Math.min(1, v / c.goal) };
+}
+
 window.openChallengesOverlay = function() {
     const overlay = document.getElementById('challenges-overlay');
     const list = document.getElementById('challenges-list');
     if (!overlay || !list) return;
-    list.innerHTML = DAILY_CHALLENGES.map((c) => `
-        <div class="mission-card" style="padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <div>
-                <div class="card-title" style="font-size:12px; letter-spacing:1.2px;">${c.title}</div>
-                <div class="card-meta" style="margin-top:4px; font-size:10px;">Reward: ${c.reward}</div>
+    list.innerHTML = DAILY_CHALLENGES.map((c) => {
+        const p = getChallengeProgress(c);
+        const done = p.value >= c.goal;
+        const tierClass = `tier-${c.tier}`;
+        return `
+            <div class="lb-quest-card ${tierClass} ${done ? 'done' : ''}">
+                <div class="lb-quest-icon">${_rewardIconFor(c.reward)}</div>
+                <div class="lb-quest-body">
+                    <div class="lb-quest-head">
+                        <span class="lb-quest-title">${c.title}</span>
+                        <span class="rarity-tag ${tierClass}">${(c.tier || 'common').toUpperCase()}</span>
+                    </div>
+                    <div class="lb-quest-progress">
+                        <div class="lb-quest-bar"><div class="lb-quest-fill" style="width:${(p.pct * 100).toFixed(0)}%"></div></div>
+                        <span class="lb-quest-pct">${p.value}/${c.goal}</span>
+                    </div>
+                </div>
+                <div class="lb-quest-reward">${c.reward.label}</div>
+                <button class="lb-quest-claim ${done ? '' : 'locked'}" type="button" ${done ? '' : 'disabled'}>${done ? 'CLAIM' : 'LOCKED'}</button>
             </div>
-            <span class="rarity-tag tier-rare">DAILY</span>
-        </div>
-    `).join('');
+        `;
+    }).join('');
     overlay.classList.add('active');
     playSfx('peekOpen', 0.85);
     playHaptic('peek');
@@ -3617,6 +5077,27 @@ function refreshMapRail() {
         const owned = !!save.premium?.noAds;
         noAdsBtn.classList.toggle('owned', owned);
         if (noAdsLabel) noAdsLabel.textContent = owned ? 'Active' : 'No Ads';
+    }
+    refreshRailBadges();
+}
+
+// The `!` rail badges are intentionally only visible when something is
+// actually pending: the Daily Login resets at midnight, so the badge appears
+// when today's reward hasn't been claimed; Quests only badge when at least
+// one quest is completed and ready to collect.
+function refreshRailBadges() {
+    const dailyClaimable = save.daily?.lastClaimKey !== getTodayKey();
+    const rewardsBadge = document.getElementById('rewards-badge');
+    if (rewardsBadge) rewardsBadge.style.display = dailyClaimable ? 'inline-flex' : 'none';
+
+    // Quests: stub today — badge if any auto-completed quest pending.
+    // Heuristic: if the player just leveled past a milestone OR has unread daily
+    // quests we'd flag here. Right now we just treat "daily claimable" as the
+    // proxy until quest data lands; the badge is hidden otherwise.
+    const questsBadge = document.getElementById('quests-badge');
+    if (questsBadge) {
+        const hasOpenQuests = !!save.questsCompleted; // populated by gameplay
+        questsBadge.style.display = hasOpenQuests ? 'inline-flex' : 'none';
     }
 }
 
@@ -3878,13 +5359,13 @@ function renderLoadout() {
     const legendaryEquipped = save.equippedCards.filter((cardId) => isLegendaryCard(cardId));
 
     summary.innerHTML = `
-        <p class="eyebrow">Slot Progression</p>
-        <h2>Normal ${normalEquipped.length}/${caps.normal} | Legendary ${legendaryEquipped.length}/${caps.legendary}</h2>
-        <p>Level 30 unlocks the first legendary slot. Premium purchases can extend slots to the cap.</p>
+        <p class="eyebrow">${t('equipment.slotProgression')}</p>
+        <h2>Normal ${normalEquipped.length}/${caps.normal} (max ${SLOT_HARD_CAPS.normal}) · Legendary ${legendaryEquipped.length}/${caps.legendary} (max ${SLOT_HARD_CAPS.legendary})</h2>
+        <p>${t('equipment.maxNote')}</p>
     `;
 
-    normal.innerHTML = `<p class="eyebrow">Normal Slots</p><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped)}</div>`;
-    legendary.innerHTML = `<p class="eyebrow">Legendary Slots</p><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped)}</div>`;
+    normal.innerHTML = `<p class="eyebrow">${t('equipment.normalSlots')}</p><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped)}</div>`;
+    legendary.innerHTML = `<p class="eyebrow">${t('equipment.legendarySlots')}</p><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped)}</div>`;
 
     cardsGrid.innerHTML = '';
     const counts = save.inventory.reduce((acc, cardId) => {
@@ -3974,20 +5455,44 @@ function describeCardEffect(type, def) {
 }
 
 function buildSlotMarkup(type, total, equipped) {
-    if (total <= 0) {
-        return `<div class="loadout-slot empty locked-slot">Unlock later</div>`;
-    }
-
+    const hardCap = type === 'legendary' ? SLOT_HARD_CAPS.legendary : SLOT_HARD_CAPS.normal;
     const slots = [];
+
+    // 1) Already-unlocked slots: show equipped card or "Empty"
     for (let i = 0; i < total; i++) {
         const cardId = equipped[i];
         if (!cardId) {
-            slots.push(`<div class="loadout-slot empty">Empty</div>`);
+            slots.push(`<div class="loadout-slot empty">${t('equipment.empty')}</div>`);
             continue;
         }
         const card = INVENTORY_CARDS[cardId];
         slots.push(`<button class="loadout-slot rarity-${card.rarity}" type="button" onclick="unequipCard('${type}', ${i})"><strong>${card.icon}</strong><span>${card.name}</span></button>`);
     }
+
+    // 2) Locked slots up to the hard cap — show the level they unlock at,
+    //    or "PAID" for the last paid-tier slot so users know it's a shop unlock.
+    for (let i = total; i < hardCap; i++) {
+        let lockLabel;
+        if (type === 'normal') {
+            // Last 2 normal slots are paid expansions (cap 5 base + 2 paid)
+            if (i >= 5) {
+                lockLabel = `${t('equipment.slotLockedAt')} 60 · PAID`;
+            } else {
+                lockLabel = `${t('equipment.slotLockedAt')} ${getNormalSlotUnlockLevel(i)}`;
+            }
+        } else {
+            // Legendary: 0->lvl 30, 1->lvl 60, 2->paid
+            if (i >= 2) {
+                lockLabel = `${t('equipment.slotLockedAt')} 60 · PAID`;
+            } else {
+                lockLabel = `${t('equipment.slotLockedAt')} ${getLegendarySlotUnlockLevel(i)}`;
+            }
+        }
+        slots.push(`<div class="loadout-slot empty locked-slot" title="${lockLabel}">
+            <span class="lock-pill">🔒 ${lockLabel}</span>
+        </div>`);
+    }
+
     return slots.join('');
 }
 
@@ -4062,50 +5567,122 @@ window.showFight = function() {
     playHaptic('soft');
 };
 
-// Build the vertical level path: current node centered, 1-2 nodes below (past),
-// 2-3 nodes above (future), with chest icons next to the future ones.
+// Spiral level roadmap. Each node sits on a hand-rolled spiral; nodes are
+// connected by a line; every 3rd level above current shows a reward chest
+// (gold + gems + a level-appropriate pack); levels that unlock a new ability
+// get a "skill" tag pinned to the LEFT side of the node.
 function renderLevelRoadmap() {
     const host = document.getElementById('level-roadmap');
     if (!host) return;
     const cur = Math.max(1, save.unlocked || 1);
-    // Show 8 future levels + current + 1 past (reading top → bottom).
-    // Container is scrollable so player can scroll up to peek at later levels.
+
+    // 12 future + current + 1 past, top → bottom (scrollable). Spiral coordinates
+    // are computed in the host's local box; the host is given an explicit height
+    // so we get smooth scrolling instead of cramming everything.
+    const future = 12;
+    const past = 1;
     const items = [];
-    for (let i = 8; i >= -1; i--) {
+    for (let i = future; i >= -past; i--) {
         const lvl = cur + i;
         if (lvl < 1) continue;
         let state = 'future';
         if (lvl === cur) state = 'current';
         else if (lvl === cur + 1) state = 'future-soon';
         else if (lvl < cur) state = 'locked';
-        // Chest icon every 3 levels above current as a reward teaser
-        const chest = lvl > cur && (lvl - cur) % 3 === 0;
-        items.push({ lvl, state, chest });
+        const reward = lvl > 0 && lvl % 3 === 0;
+        const ability = ABILITIES.find((a) => (a.unlockLevel || 1) === lvl);
+        items.push({ lvl, state, reward, ability });
     }
 
+    // Spiral params — tuned for a mobile portrait viewport (~380px wide).
+    // We reverse the items so that lower index sits at the BOTTOM of the
+    // viewport (i.e. closest to current), which is how Clash-Royale-style
+    // roadmaps read.
+    const ordered = items.slice().reverse(); // index 0 = past/current, last = far-future
+    const cx = 50; // center column in %
+    const stepY = 96; // px between consecutive nodes
+    const radius = 78; // px sideways amplitude
+    const turn = 0.55; // how tight the spiral coils per step (radians)
+
+    const totalHeight = stepY * (ordered.length + 1);
+    host.style.minHeight = `${totalHeight}px`;
+    host.style.position = 'relative';
+
     const chestSvg = `<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18"/><path d="M9 8c0-2 6-2 6 0"/></svg>`;
+    const sparkSvg = `<svg viewBox="0 0 24 24"><polygon points="12,3 14,10 21,12 14,14 12,21 10,14 3,12 10,10"/></svg>`;
 
-    let html = '';
-    items.forEach((it, i) => {
-        html += `<div class="lr-node ${it.state}" data-lvl="${it.lvl}">
-            ${it.lvl}
-            ${it.chest ? `<div class="lr-chest">${chestSvg}</div>` : ''}
-        </div>`;
-        if (i < items.length - 1) {
-            // Line is "active" (green) when both endpoints are at-or-below current
-            const lineActive = (items[i + 1].state === 'current' || items[i + 1].state === 'locked') ? 'line-active' : '';
-            html += `<div class="lr-line ${lineActive}"></div>`;
-        }
+    // Compute per-node coordinates so the connecting SVG line + reward + skill
+    // markers can attach to the same positions.
+    const positions = ordered.map((it, i) => {
+        const t = i;
+        const offsetX = Math.sin(t * turn) * radius; // px
+        // y measured from the BOTTOM of the host so the current node anchors near the bottom
+        const yFromBottom = stepY * (i + 1);
+        return { ...it, x: offsetX, yFromBottom };
     });
-    host.innerHTML = html;
 
-    // Scroll so the CURRENT node sits in the lower-middle of the viewport
-    // (so the user sees both their level and the next 2-3 levels above)
+    // Connecting spiral line as an SVG polyline with a subtle gradient
+    let pathPoints = positions.map((p) => `calc(50% + ${p.x}px) calc(100% - ${p.yFromBottom}px)`);
+    // We can't put `calc()` directly into SVG points, so render the line as a
+    // stack of CSS-positioned div segments (each segment is a 2px line between
+    // two adjacent nodes).
+    let segmentsHtml = '';
+    for (let i = 0; i < positions.length - 1; i++) {
+        const a = positions[i];
+        const b = positions[i + 1];
+        const dx = b.x - a.x;
+        const dy = -(b.yFromBottom - a.yFromBottom); // y grows upward in our system
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+        const lineActive = (a.state === 'current' || a.state === 'locked') && (b.state === 'current' || b.state === 'locked');
+        segmentsHtml += `<div class="lr-segment ${lineActive ? 'line-active' : ''}" style="
+            left: calc(50% + ${a.x}px);
+            bottom: ${a.yFromBottom}px;
+            width: ${len}px;
+            transform: rotate(${-angleDeg}deg);
+        "></div>`;
+    }
+
+    let nodesHtml = '';
+    positions.forEach((p) => {
+        const skillBadge = p.ability ? `
+            <div class="lr-skill-link" title="${t('roadmap.skillUnlock')}">
+                <span class="lr-skill-arm"></span>
+                <span class="lr-skill-tag rarity-tier-${(p.ability.rarity || 'common').toLowerCase()}">
+                    ${sparkSvg}
+                    <span>${p.ability.name}</span>
+                </span>
+            </div>` : '';
+        const rewardBadge = p.reward ? `
+            <div class="lr-reward" title="${t('roadmap.reward')}">
+                ${chestSvg}
+                <span class="lr-reward-loot">+G/◆/Pack</span>
+            </div>` : '';
+        nodesHtml += `<div class="lr-node ${p.state}" data-lvl="${p.lvl}" style="
+            left: calc(50% + ${p.x}px);
+            bottom: ${p.yFromBottom}px;
+        ">
+            <span class="lr-node-num">${p.lvl}</span>
+            ${rewardBadge}
+            ${skillBadge}
+        </div>`;
+    });
+
+    host.innerHTML = `
+        <div class="lr-segments">${segmentsHtml}</div>
+        <div class="lr-nodes">${nodesHtml}</div>
+    `;
+
+    // Scroll so the CURRENT node sits in the lower-middle of the viewport.
     requestAnimationFrame(() => {
         const currentEl = host.querySelector('.lr-node.current');
         if (currentEl) {
-            const target = currentEl.offsetTop - host.clientHeight * 0.6;
+            const rect = currentEl.getBoundingClientRect();
+            const hostRect = host.getBoundingClientRect();
+            const target = (currentEl.offsetTop - host.clientHeight * 0.55);
             host.scrollTop = Math.max(0, target);
+        } else {
+            host.scrollTop = host.scrollHeight; // bottom of list (current is at bottom)
         }
     });
 }
@@ -4113,7 +5690,7 @@ function renderLevelRoadmap() {
 function refreshLevelCta() {
     const label = document.getElementById('primary-cta-label');
     const btn = document.getElementById('battle-button');
-    if (label) label.textContent = `EBENE ${save.unlocked || 1}`;
+    if (label) label.textContent = `${t('cta.level')} ${save.unlocked || 1}`;
     if (btn) btn.setAttribute('aria-label', `Start level ${save.unlocked || 1}`);
 }
 
@@ -4261,12 +5838,13 @@ function choosePackReward(packKey) {
 
 function createPackCardMarkup(cardId) {
     const card = INVENTORY_CARDS[cardId];
+    if (!card) return '';
     return `
-        <div class="pack-card rarity-${card.rarity}">
-            ${getCardVisualMarkup(cardId, true)}
-            <div class="pack-tier">${getRarityLabel(card.rarity).toUpperCase()}</div>
-            <div class="pack-name">${card.name}</div>
-            <div class="pack-desc">${card.sigil}</div>
+        <div class="pack-card pack-card-reel rarity-${card.rarity}">
+            <div class="pack-reel-tier-badge tier-${card.rarity}">${getRarityLabel(card.rarity).toUpperCase()}</div>
+            <div class="pack-reel-art">${getRewardArtSvg(cardId, 'chip')}</div>
+            <div class="pack-reel-name">${card.name}</div>
+            <div class="pack-reel-sigil">${card.sigil || ''}</div>
         </div>
     `;
 }
@@ -4296,12 +5874,13 @@ function createInventorySection(title, copy = '') {
 
 function createSkinPackMarkup(skinId) {
     const skin = SKIN_DEFINITIONS[skinId];
+    if (!skin) return '';
     return `
-        <div class="pack-card rarity-${skin.rarity}">
-            ${getSkinVisualMarkup(skinId, true)}
-            <div class="pack-tier">${getRarityLabel(skin.rarity).toUpperCase()}</div>
-            <div class="pack-name">${skin.name}</div>
-            <div class="pack-desc">${skin.sigil}</div>
+        <div class="pack-card pack-card-reel rarity-${skin.rarity}">
+            <div class="pack-reel-tier-badge tier-${skin.rarity}">${getRarityLabel(skin.rarity).toUpperCase()}</div>
+            <div class="pack-reel-art">${getRewardArtSvg(skinId, 'skin')}</div>
+            <div class="pack-reel-name">${skin.name}</div>
+            <div class="pack-reel-sigil">${skin.sigil || ''}</div>
         </div>
     `;
 }
@@ -4791,233 +6370,8 @@ function getAbilityIconMarkup(id, fallback) {
 // at lines ~2117 and ~2165 are now the active versions, with the colored
 // rarity-tier picker and the rank-tier-aware effect logic.)
 
-function update(dt) {
-    updatePlayerMovement(dt);
-    updateAutoFire(dt);
-    updateProjectiles(dt);
-    updateEnemies(dt);
-    updatePickups(dt);
-    updateOrbiters(dt);
-    updateHazards(dt);
-    updateLightningBolts(dt);
-    updateFxTexts(dt);
-    updateParticles(dt);
-    player.invulnerable = Math.max(0, player.invulnerable - dt);
-    player.phoenixCooldown = Math.max(0, (player.phoenixCooldown || 0) - dt);
-    screenShake = Math.max(0, screenShake - dt * 3.2);
-    powerPulse = Math.max(0, powerPulse - dt * 1.6);
-    killStreakTimer = Math.max(0, killStreakTimer - dt);
-    if (killStreakTimer <= 0) killStreak = 0;
-    checkWaveProgress();
-}
-
-function updateAutoFire(dt) {
-    player.shootTimer = Math.max(0, player.shootTimer - dt);
-    const nearest = findNearestEnemy(player.range);
-    if (!nearest) return;
-
-    player.angle = Math.atan2(nearest.y - player.y, nearest.x - player.x) + Math.PI / 2;
-    if (player.shootTimer > 0) return;
-
-    player.shootTimer = player.atkCooldown;
-    player.shotCounter += 1;
-
-    const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-    const spreadStep = 0.14;
-    const start = -spreadStep * (player.multishot - 1) / 2;
-
-    for (let i = 0; i < player.multishot; i++) {
-        addP(player.x, player.y - 12, '#00f2ff', 5, 140, 0.18, 2);
-        spawnProjectile({
-            x: player.x,
-            y: player.y,
-            angle: baseAngle + start + (spreadStep * i),
-            speed: 760,
-            life: 1.1,
-            radius: 5,
-            damage: player.dmg * player.damageMultiplier,
-            pierce: player.pierce,
-            canChain: player.chainLightning,
-            color: '#f5fbff'
-        });
-    }
-
-    playSfx('shoot', Math.min(1.2, 0.7 + player.multishot * 0.08));
-
-    if (player.echoShot && player.shotCounter % 4 === 0) {
-        const echoRank = getAbilityRank('echo_shot');
-        addP(player.x, player.y - 12, '#7be8ff', 8, 170, 0.2, 2);
-        spawnProjectile({
-            x: player.x,
-            y: player.y,
-            angle: baseAngle,
-            speed: 860,
-            life: 1.25,
-            radius: 6,
-            damage: player.dmg * player.damageMultiplier * (0.52 + (echoRank * 0.08)),
-            pierce: player.pierce + 1,
-            canChain: false,
-            color: '#7be8ff'
-        });
-        playSfx('ability', 0.8);
-    }
-
-    if (player.ionRound && player.shotCounter % 5 === 0) {
-        const ionRank = getAbilityRank('ion_round');
-        addP(player.x, player.y - 12, '#ffcf4d', 10, 210, 0.2, 3);
-        spawnProjectile({
-            x: player.x,
-            y: player.y,
-            angle: baseAngle,
-            speed: 940,
-            life: 1.18,
-            radius: 8,
-            damage: player.dmg * player.damageMultiplier * (1.45 + (ionRank * 0.25)),
-            pierce: player.pierce + 1,
-            canChain: true,
-            color: '#ffcf4d'
-        });
-        playSfx('ability', 1);
-    }
-
-    if (player.tornadoShot && player.shotCounter % 3 === 0) {
-        powerPulse = Math.min(1.5, powerPulse + 0.45);
-        screenShake = Math.min(1.5, screenShake + 0.22);
-        spawnTornadoVolley(baseAngle, getAbilityRank('tornado_shot'));
-        playSfx('tornado', 1);
-    }
-
-    if (player.singularity && player.shotCounter % 8 === 0) {
-        releaseSingularity(nearest.x, nearest.y, getAbilityRank('singularity'));
-    }
-
-    screenShake = Math.min(1.5, screenShake + 0.08);
-}
-
-function releasePhoenixBurst() {
-    const rank = Math.max(1, getAbilityRank('phoenix_drive'));
-    addP(player.x, player.y, '#ff9d00', 54, 300, 0.58, 5);
-    addP(player.x, player.y, '#ff375f', 28, 220, 0.32, 3);
-    addFxText(player.x, player.y - 24, 'PHOENIX', '#ff9d00', 0.45, 22);
-    powerPulse = Math.min(2.5, powerPulse + 0.6);
-    screenShake = Math.min(3.2, screenShake + 0.55);
-    enemies.forEach((enemy) => {
-        if (!enemy.alive) return;
-        const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
-        if (distance > 130 + rank * 18) return;
-        enemy.hp -= player.dmg * player.damageMultiplier * (0.9 + rank * 0.22);
-        enemy.hitFlash = 0.16;
-        if (enemy.hp <= 0) triggerKill(enemy);
-    });
-}
-
-function releaseSingularity(x, y, rank) {
-    hazards.push({
-        id: nextHazardId++,
-        type: 'gravity',
-        x,
-        y,
-        radius: 24,
-        maxRadius: 110 + rank * 10,
-        speed: 0,
-        life: 1.5 + rank * 0.18,
-        color: '#7be8ff',
-        rank
-    });
-    addP(x, y, '#7be8ff', 24, 180, 0.36, 3);
-    addFxText(x, y - 18, 'VOID', '#7be8ff', 0.36, 18);
-    playSfx('ability', 0.95);
-}
-
-function updateHazards(dt) {
-    hazards.forEach((hazard) => {
-        hazard.life -= dt;
-        if (hazard.type === 'ring') {
-            hazard.radius += hazard.speed * dt;
-            const distance = Math.hypot(player.x - hazard.x, player.y - hazard.y);
-            if (!hazard.hit && Math.abs(distance - hazard.radius) < 14) {
-                hazard.hit = true;
-                damagePlayer('boss');
-            }
-            return;
-        }
-
-        if (hazard.type === 'gravity') {
-            hazard.radius = Math.min(hazard.maxRadius, hazard.radius + dt * 80);
-            enemies.forEach((enemy) => {
-                if (!enemy.alive) return;
-                const dx = hazard.x - enemy.x;
-                const dy = hazard.y - enemy.y;
-                const dist = Math.max(0.001, Math.hypot(dx, dy));
-                if (dist > hazard.radius) return;
-                const pull = (1 - dist / hazard.radius) * (170 + hazard.rank * 24);
-                enemy.x += (dx / dist) * pull * dt;
-                enemy.y += (dy / dist) * pull * dt;
-                enemy.hp -= dt * player.dmg * player.damageMultiplier * (0.18 + hazard.rank * 0.04);
-                enemy.hitFlash = 0.08;
-                if (enemy.hp <= 0) triggerKill(enemy);
-            });
-        }
-    });
-    hazards = hazards.filter((hazard) => hazard.life > 0 && (hazard.type !== 'ring' || hazard.radius < hazard.maxRadius));
-}
-
-function damagePlayer(source) {
-    if (player.invulnerable > 0) return;
-    const hpBefore = player.hp;
-    player.hp -= 1;
-    player.invulnerable = 0.9;
-
-    // STRONGER heart-loss feedback: red full-screen flash, harder shake, particle burst,
-    // HUD-heart shake animation flag, big -1 text, body class for CSS pulse.
-    addP(player.x, player.y, source === 'boss' ? '#ff375f' : '#ffffff', 28, 220, 0.45, 4);
-    addP(player.x, player.y, '#ff375f', 12, 320, 0.35, 5); // extra red splash
-    addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.7, 30);
-    screenShake = Math.min(3.6, screenShake + (source === 'boss' ? 1.4 : 0.95));
-    powerPulse = Math.min(2.6, powerPulse + 0.4);
-    playSfx('hit', source === 'boss' ? 1.25 : 1.1);
-    playSfx('death', 0.4); // small ominous low note layered on every -1
-    playHaptic(source === 'boss' ? 'hard' : 'hard');
-
-    // Trigger HUD heart shake/lost animation
-    window.__heartDamageTime = performance.now();
-    window.__heartLostIdx = hpBefore - 1; // the heart that just got depleted
-    // Body class for CSS-driven full-screen flash
-    document.body.classList.add('hp-flash');
-    if (window.__hpFlashTimer) clearTimeout(window.__hpFlashTimer);
-    window.__hpFlashTimer = setTimeout(() => document.body.classList.remove('hp-flash'), 400);
-
-    syncHpDangerFlair();
-
-    if (player.phoenixDrive && player.phoenixCooldown <= 0) {
-        player.phoenixCooldown = Math.max(4, 7 - getAbilityRank('phoenix_drive'));
-        releasePhoenixBurst();
-    }
-
-    if (player.hp > 0) return;
-
-    if (source === 'boss' && !player.bossReviveUsed && save.bossRevive > 0) {
-        save.bossRevive -= 1;
-        player.bossReviveUsed = true;
-        player.hp = 1;
-        player.invulnerable = 1.2;
-        saveSave();
-        updateMetaHud();
-        return;
-    }
-
-    if (!player.reviveUsed && save.reviveCharges > 0) {
-        save.reviveCharges -= 1;
-        player.reviveUsed = true;
-        player.hp = 1;
-        player.invulnerable = 1.2;
-        saveSave();
-        updateMetaHud();
-        return;
-    }
-
-    gameOver();
-}
+// (Removed duplicate update/updateAutoFire/updateHazards/damagePlayer —
+// the active versions with full ability support are defined earlier.)
 
 window.showAbilities = function() {
     showScreen('abilities-screen');
@@ -5267,11 +6621,296 @@ window.addEventListener('keyup', (event) => {
     keys[event.code] = false;
 });
 
+// ══════════════════════════════════════════════════════════════
+//  TEST ARENA — Debug mode for testing all abilities
+// ══════════════════════════════════════════════════════════════
+
+let _testArenaActive = false;
+let _testGodMode = false;
+let _testOneShotMode = false;
+let _testAbilityQueue = {};
+
+window.openTestArena = function() {
+    const overlay = document.getElementById('test-overlay');
+    if (!overlay) return;
+    overlay.classList.add('active');
+    renderTestGrid();
+    updateTestBuffs();
+};
+
+window.closeTestArena = function(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('test-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
+
+window.testStartArena = function() {
+    _testArenaActive = true;
+    currentMode = 'endless';
+    currentLevel = 1;
+    currentLevelWaves = [];
+
+    gameRunning = true;
+    abilityPicking = false;
+    levelClearHandled = false;
+    currentWave = 0;
+    endlessWaveRewardGold = 0;
+    enemies = [];
+    projectiles = [];
+    pickups = [];
+    particles = [];
+    clearHpDangerFlair();
+    hazards = [];
+    fxTexts = [];
+    lightningBolts = [];
+    keys = {};
+
+    window.canvas = document.getElementById('game-canvas');
+    if (!window.canvas) return;
+    window.ctx = window.canvas.getContext('2d');
+    document.body.classList.add('in-run');
+    resizeCanvas();
+    configureArena();
+    
+    _applyTestStateToPlayer();
+    
+    clampCamera();
+    attachPointerControls();
+    showScreen('game-canvas');
+    updateMetaHud();
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+
+    const overlay = document.getElementById('test-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
+
+window.testStopArena = function() {
+    _testArenaActive = false;
+    gameRunning = false;
+    document.body.classList.remove('in-run');
+    showScreen('fight-screen');
+    if (window.canvas) window.canvas.style.display = 'none';
+};
+
+window.testResetAbilities = function() {
+    _testAbilityQueue = {};
+    if (_testArenaActive && player) {
+        _applyTestStateToPlayer(true);
+    }
+    renderTestGrid();
+    updateTestBuffs();
+    showToast('Abilities reset!');
+};
+
+function _applyTestStateToPlayer(preservePosition = false) {
+    let oldX = arena ? arena.width / 2 : 0;
+    let oldY = arena ? arena.height / 2 : 0;
+    if (preservePosition && player) {
+        oldX = player.x;
+        oldY = player.y;
+    }
+    
+    player = createPlayer();
+    player.x = oldX;
+    player.y = oldY;
+    
+    // Apply queued abilities
+    for (const [id, rank] of Object.entries(_testAbilityQueue)) {
+        for (let i = 0; i < rank; i++) {
+            // Apply silently to prevent massive sound overlap
+            const origPlaySfx = window.playSfx;
+            window.playSfx = () => {};
+            applyAbility(id);
+            window.playSfx = origPlaySfx;
+        }
+    }
+    
+    if (_testGodMode) {
+        player.maxHp = 999;
+        player.hp = 999;
+    }
+    if (_testOneShotMode) {
+        player.dmg = 99999;
+        player.damageMultiplier = 100;
+    }
+    syncHpDangerFlair();
+}
+
+window.testSpawnEnemies = function(type, count) {
+    if (!_testArenaActive || !player) {
+        showToast('Start arena first!');
+        return;
+    }
+    const level = Math.max(1, currentLevel);
+    for (let i = 0; i < count; i++) {
+        const spawn = getArenaSpawnEdgePoint();
+        let typeKey = type;
+        if (type === 'boss') typeKey = 'boss';
+        else if (type === 'heavy') typeKey = 'tank';
+        const scaledType = getEnemyLevelStats(typeKey, level);
+        enemies.push(createEnemy(scaledType, spawn.x, spawn.y));
+    }
+    showToast(`+${count} ${type}`);
+};
+
+window.testGodMode = function(enabled) {
+    _testGodMode = enabled;
+    if (_testArenaActive && player) {
+        if (enabled) {
+            player.maxHp = 999;
+            player.hp = 999;
+        } else {
+            player.maxHp = 5;
+            player.hp = Math.min(player.hp, player.maxHp);
+        }
+        syncHpDangerFlair();
+    }
+};
+
+window.testOneShotMode = function(enabled) {
+    _testOneShotMode = enabled;
+    if (_testArenaActive && player) {
+        _applyTestStateToPlayer(true);
+    }
+};
+
+function renderTestGrid() {
+    const grid = document.getElementById('test-ability-grid');
+    if (!grid) return;
+
+    grid.innerHTML = ABILITIES.map((ability) => {
+        const rank = _testAbilityQueue[ability.id] || 0;
+        const rankClass = rank > 0 ? `rank-${Math.min(rank, 4)}` : '';
+        const rankLabel = rank > 0 ? `R${rank}` : '';
+        const tierNames = ['', 'Common', 'Rare', 'Epic', 'Legendary'];
+        const tierName = rank > 0 && rank <= 4 ? tierNames[rank] : '';
+
+        return `
+            <button class="test-ability-btn ${rankClass}" onclick="testApplyAbility('${ability.id}')" title="${ability.name}\n${tierName}">
+                <span class="ta-rank">${rankLabel}</span>
+                <span class="ta-name">${ability.name || ability.id}</span>
+            </button>
+        `;
+    }).join('');
+}
+
+window.testApplyAbility = function(id) {
+    const currentRank = _testAbilityQueue[id] || 0;
+    if (currentRank >= 4) {
+        showToast(`${id} already max rank!`);
+        return;
+    }
+    
+    _testAbilityQueue[id] = currentRank + 1;
+    
+    if (_testArenaActive && player) {
+        applyAbility(id); 
+    } else {
+        const ability = ABILITIES.find((a) => a.id === id);
+        const rankDef = getAbilityRankDef(ability, currentRank);
+        const tier = rankDef.tier || ability?.rarity || 'common';
+        const intensity = tier === 'legendary' ? 1.6 : tier === 'epic' ? 1.25 : tier === 'rare' ? 1.0 : 0.85;
+        if (window.playSfx) playSfx('ability', intensity);
+    }
+    
+    renderTestGrid();
+    updateTestBuffs();
+    
+    const newRank = _testAbilityQueue[id];
+    const tierNames = ['', 'Common', 'Rare', 'Epic', 'Legendary'];
+    showToast(`${id} → Rank ${newRank} (${tierNames[newRank] || ''})`);
+};
+
+function updateTestBuffs() {
+    const el = document.getElementById('test-active-buffs');
+    if (!el) return;
+
+    let p = player;
+    
+    if (!_testArenaActive || !p) {
+        const oldPlayer = player;
+        player = createPlayer(); 
+        for (const [id, rank] of Object.entries(_testAbilityQueue)) {
+            for (let i = 0; i < rank; i++) {
+                const origPlaySfx = window.playSfx;
+                window.playSfx = () => {};
+                applyAbility(id);
+                window.playSfx = origPlaySfx;
+            }
+        }
+        p = player;
+        player = oldPlayer;
+    }
+
+    const buffs = [];
+
+    if (p.critChance > 0) buffs.push(`Crit ${(p.critChance*100).toFixed(0)}%`);
+    if (p.critMultiplier > 2) buffs.push(`Crit ×${p.critMultiplier}`);
+    if (p.lifesteal > 0) buffs.push(`Lifesteal ${(p.lifesteal*100).toFixed(0)}%`);
+    if (p.pierce > 0) buffs.push(`Pierce ${p.pierce}`);
+    if (p.multishot > 1) buffs.push(`Multi ×${p.multishot}`);
+    if (p.chainLightning) buffs.push(`Chain ${p.chainCount}`);
+    if (p.tornadoShot) buffs.push('Tornado');
+    if (p.echoShot) buffs.push('Echo');
+    if (p.ionRound) buffs.push('Ion');
+    if (p.shockNova) buffs.push('Nova');
+    if (p.singularity) buffs.push('Singularity');
+    if (p.phoenixDrive) buffs.push('Phoenix');
+    if (p.frostOnHit) buffs.push(`Frost ${(p.frostStrength*100).toFixed(0)}%`);
+    if (p.poisonOnHit) buffs.push('Poison');
+    if (p.clusterBomb) buffs.push('Cluster');
+    if (p.bulletsRicochet) buffs.push(`Ricochet ${p.ricochetCount || 1}`);
+    if (p.bulletsHome > 0) buffs.push(`Homing ${(p.bulletsHome*100).toFixed(0)}%`);
+    if (p.boomerangShot) buffs.push('Boomerang');
+    if (p.bulletFork) buffs.push(`Fork ${p.bulletForkCount}`);
+    if (p.shardsOnHit) buffs.push(`Shards ×${p.shardCount}`);
+    if (p.arcOnHit) buffs.push(`Arc /${p.arcEvery}`);
+    if (p.critExplode) buffs.push('Crit Bomb');
+    if (p.frenzyOnKill) buffs.push('Frenzy');
+    if (p.killSpeedBoost) buffs.push('Trigger');
+    if (p.comboBuff) buffs.push('Combo');
+    if (p.firstLethalBlock) buffs.push('Spirit');
+    if (p.shieldEvery > 0) buffs.push('Shield');
+    if (p.blankChance > 0) buffs.push(`Blank ${(p.blankChance*100).toFixed(0)}%`);
+    if (p.healOnKillChance > 0) buffs.push(`Kill Heal ${(p.healOnKillChance*100).toFixed(0)}%`);
+    if (p.goldBonus > 0) buffs.push(`Gold +${(p.goldBonus*100).toFixed(0)}%`);
+    if (p.platinumStack) buffs.push('Platinum');
+    if (p.markOnHit) buffs.push('Mark');
+    if (p.multiSpread > 0) buffs.push(`Spread +${(p.multiSpread*100).toFixed(0)}%`);
+    if (p.damageMultiplier > 1.1) buffs.push(`DMG ×${p.damageMultiplier.toFixed(2)}`);
+    if (p.atkCooldown < 0.3) buffs.push(`AtkSpd ${p.atkCooldown.toFixed(3)}s`);
+    if (p.orbiters && p.orbiters.length > 0) buffs.push(`Orbiters ×${p.orbiters.length}`);
+
+    if (buffs.length === 0) {
+        el.innerHTML = 'Keine';
+    } else {
+        el.innerHTML = buffs.map(b => `<span class="buff-tag">${b}</span>`).join('');
+    }
+}
+
+// T key shortcut to toggle test overlay
+window.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyT' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        // Don't trigger in text inputs
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+        const overlay = document.getElementById('test-overlay');
+        if (!overlay) return;
+        if (overlay.classList.contains('active')) {
+            closeTestArena();
+        } else {
+            openTestArena();
+        }
+    }
+});
+
 window.addEventListener('load', () => {
     loadSave();
+    applyI18nToDom();
     buildRoadmap();
     showFight();
     installSwipeNavigation();
+    refreshRailBadges();
     document.addEventListener('pointerdown', ensureMusicEngine, { once: true });
     window.addEventListener('resize', resizeCanvas);
 });

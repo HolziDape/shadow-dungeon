@@ -3691,24 +3691,28 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .level-roadmap {
   position: relative;
   z-index: 2;
-  margin: 18px auto 12px;
-  width: min(320px, 84%);
-  /* Scrollable vertical viewport so user can peek at upcoming levels */
-  max-height: calc(100vh - 320px);
+  margin: 8px auto 0;
+  /* Stay narrow enough that even at radius=46 nodes don't reach the rails */
+  width: min(220px, 64%);
+  /* Scrollable vertical viewport. We reserve ~210px for HUD + ~190px for
+     the FIGHT/ENDLESS CTA + bottom nav, so the spiral never tucks behind
+     either. */
+  max-height: calc(100vh - 380px);
   overflow-y: auto;
   scrollbar-width: none;
   scroll-behavior: smooth;
-  padding: 14px 0 24px;
+  padding: 0;
   /* Soft fade on edges so the scroll feels natural */
-  mask-image: linear-gradient(180deg, transparent 0%, black 14%, black 88%, transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 14%, black 88%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, black 12%, black 92%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 12%, black 92%, transparent 100%);
 }
 .level-roadmap::-webkit-scrollbar { display: none; }
 .lr-segments, .lr-nodes {
   position: absolute; inset: 0;
   pointer-events: none;
 }
-.lr-nodes { pointer-events: auto; }
+.lr-segments { z-index: 1; }
+.lr-nodes { z-index: 2; pointer-events: auto; }
 .lr-segment {
   position: absolute;
   height: 3px;
@@ -3766,48 +3770,54 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   0%,100% { box-shadow: 0 0 28px rgba(0,255,140,0.7),  inset 0 0 22px rgba(0,255,140,0.18); }
   50%     { box-shadow: 0 0 42px rgba(0,255,140,0.95), inset 0 0 26px rgba(0,255,140,0.3); }
 }
-/* Reward chip pinned to the right of nodes that are every-3rd. */
+/* Reward marker — compact chest pinned to the upper-right of the node. */
 .lr-reward {
   position: absolute;
-  right: -42px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; align-items: center;
-  gap: 2px;
-  color: rgba(255,209,77,0.95);
+  right: -8px; top: -8px;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, rgba(255,209,77,0.6), rgba(255,209,77,0.12));
+  border: 1px solid rgba(255,209,77,0.6);
+  color: #ffd14d;
   text-shadow: 0 0 6px rgba(255,209,77,0.5);
+  filter: drop-shadow(0 0 6px rgba(255,209,77,0.45));
+  pointer-events: auto;
 }
 .lr-reward svg {
-  width: 22px; height: 22px;
-  fill: none; stroke: currentColor; stroke-width: 1.7;
-  filter: drop-shadow(0 0 6px rgba(255,209,77,0.6));
+  width: 13px; height: 13px;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
 }
-.lr-reward-loot {
-  font-family: var(--font-ui);
-  font-size: 8px;
-  letter-spacing: 0.6px;
-  white-space: nowrap;
-  color: rgba(255,255,255,0.85);
-  background: rgba(255,209,77,0.18);
-  border: 1px solid rgba(255,209,77,0.4);
-  padding: 1px 5px;
-  border-radius: 999px;
-}
-/* Skill-unlock branch on the LEFT side of any level that unlocks an ability. */
+/* Skill-unlock branch — compact star pill on the side opposite the spiral
+   curve so it never bleeds under a side rail. */
 .lr-skill-link {
   position: absolute;
-  left: -10px; top: 50%; transform: translate(-100%, -50%);
+  top: 50%;
   display: flex; align-items: center;
   gap: 0;
 }
+.lr-skill-link.side-right {
+  left: 100%;
+  transform: translate(0, -50%);
+}
+.lr-skill-link.side-left {
+  right: 100%;
+  transform: translate(0, -50%);
+  flex-direction: row-reverse;
+}
 .lr-skill-arm {
-  width: 18px; height: 2px;
+  width: 14px; height: 2px;
   background: linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.45));
   border-radius: 999px;
 }
+.lr-skill-link.side-left .lr-skill-arm {
+  background: linear-gradient(270deg, rgba(255,255,255,0.05), rgba(255,255,255,0.45));
+}
 .lr-skill-tag {
-  display: inline-flex; align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  padding: 0;
+  border-radius: 50%;
   font-family: var(--font-ui);
   font-size: 9px;
   letter-spacing: 0.6px;
@@ -3816,15 +3826,16 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   color: rgba(255,255,255,0.85);
   white-space: nowrap;
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 .lr-skill-tag svg {
-  width: 11px; height: 11px;
+  width: 12px; height: 12px;
   fill: currentColor; stroke: none;
 }
-.lr-skill-tag.rarity-tier-common    { color: #9bd3ff; border-color: rgba(120,200,255,0.5); }
-.lr-skill-tag.rarity-tier-rare      { color: #8c9bff; border-color: rgba(140,160,255,0.55); }
-.lr-skill-tag.rarity-tier-epic      { color: #d68cff; border-color: rgba(220,160,255,0.55); }
-.lr-skill-tag.rarity-tier-legendary { color: #ffd14d; border-color: rgba(255,209,77,0.6); }
+.lr-skill-tag.rarity-tier-common    { color: #9bd3ff; border-color: rgba(120,200,255,0.7); box-shadow: 0 0 8px rgba(120,200,255,0.45); }
+.lr-skill-tag.rarity-tier-rare      { color: #8c9bff; border-color: rgba(140,160,255,0.7); box-shadow: 0 0 8px rgba(140,160,255,0.5); }
+.lr-skill-tag.rarity-tier-epic      { color: #d68cff; border-color: rgba(220,160,255,0.7); box-shadow: 0 0 10px rgba(220,160,255,0.55); }
+.lr-skill-tag.rarity-tier-legendary { color: #ffd14d; border-color: rgba(255,209,77,0.75); box-shadow: 0 0 12px rgba(255,209,77,0.6); }
 
 /* LEFT side rail — pinned vertically center-left */
 .left-rail {
@@ -3972,14 +3983,13 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   .rail-tile .tile-icon { width: 32px; height: 32px; }
   .rail-tile .tile-icon svg { width: 24px; height: 24px; }
   .rail-tile .tile-label { font-size: 7.5px; }
-  .level-roadmap { width: 240px; }
+  .level-roadmap { width: 200px; }
   .lr-node { width: 56px; height: 56px; font-size: 18px; }
-  .lr-node.current { width: 70px; height: 70px; font-size: 22px; }
-  .lr-skill-tag { font-size: 8px; padding: 3px 6px; }
-  .lr-skill-tag svg { width: 9px; height: 9px; }
-  .lr-reward { right: -38px; }
-  .lr-reward svg { width: 18px; height: 18px; }
-  .lr-reward-loot { font-size: 7px; padding: 1px 4px; }
+  .lr-node.current { width: 68px; height: 68px; font-size: 22px; }
+  .lr-skill-tag { width: 20px; height: 20px; }
+  .lr-skill-tag svg { width: 10px; height: 10px; }
+  .lr-reward { width: 20px; height: 20px; }
+  .lr-reward svg { width: 11px; height: 11px; }
   .primary-cta { width: calc(100% - 200px); }
   .btn-level { font-size: 18px; padding: 16px 14px; }
 }

@@ -135,6 +135,70 @@ function drawProjectiles() {
         ctx.save();
         ctx.translate(projectile.x, projectile.y);
         ctx.rotate(projectile.spin || 0);
+
+        // ── Saw shot: spinning toothed disc ──
+        if (projectile.isSawShot) {
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = '#7be8ff';
+            ctx.strokeStyle = '#a8eaff';
+            ctx.lineWidth = 1.6;
+            const r = projectile.r;
+            const teeth = 10;
+            ctx.beginPath();
+            for (let i = 0; i < teeth * 2; i++) {
+                const a = (Math.PI / teeth) * i;
+                const rad = i % 2 === 0 ? r : r * 0.65;
+                const x = Math.cos(a) * rad;
+                const y = Math.sin(a) * rad;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            // Inner hub
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.32, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+
+        // ── Boomerang shot: V-shaped boomerang silhouette ──
+        if (projectile.isBoomShot) {
+            ctx.shadowBlur = 16;
+            ctx.shadowColor = '#ffd14d';
+            ctx.strokeStyle = '#ffe698';
+            ctx.fillStyle = 'rgba(255,209,77,0.20)';
+            ctx.lineWidth = 2;
+            const r = projectile.r;
+            ctx.beginPath();
+            ctx.moveTo(-r * 1.2, 0);
+            ctx.quadraticCurveTo(0, -r * 1.4, r * 1.2, 0);
+            ctx.quadraticCurveTo(0, -r * 0.4, -r * 1.2, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+
+        // ── Ion shot: bigger glow ring ──
+        if (projectile.isIon) {
+            ctx.shadowBlur = 22;
+            ctx.shadowColor = '#ffd14d';
+            ctx.strokeStyle = '#ffe698';
+            ctx.fillStyle = 'rgba(255,209,77,0.35)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, projectile.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(0, 0, projectile.r * 0.55, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+
         ctx.shadowBlur = projectile.tornado ? 18 : 12;
         ctx.shadowColor = glowColor;
         ctx.strokeStyle = shotColor;
@@ -171,6 +235,10 @@ function drawEnemies() {
         ctx.strokeStyle = neonColor;
         ctx.lineWidth = enemy.isBoss ? 2 : 1.5;
 
+        // Wraith fades out while phasing.
+        const phaseAlpha = enemy.phasing ? 0.35 : 1;
+        ctx.globalAlpha = phaseAlpha;
+
         ctx.beginPath();
         if (enemy.isBoss) {
             ctx.moveTo(0, -enemy.r);
@@ -180,15 +248,75 @@ function drawEnemies() {
             ctx.lineTo(-enemy.r, enemy.r * 0.2);
             ctx.lineTo(-enemy.r * 0.7, -enemy.r * 0.2);
             ctx.closePath();
-        } else if (enemy.ai === 'heavy') {
-            ctx.rect(-enemy.r, -enemy.r, enemy.r * 2, enemy.r * 2);
+        } else if (enemy.ai === 'heavy' || enemy.ai === 'crusher') {
+            const r = enemy.r;
+            ctx.rect(-r, -r, r * 2, r * 2);
         } else if (enemy.ai === 'strafe') {
             ctx.moveTo(0, -enemy.r);
             ctx.lineTo(enemy.r, 0);
             ctx.lineTo(0, enemy.r);
             ctx.lineTo(-enemy.r, 0);
             ctx.closePath();
+        } else if (enemy.ai === 'brute') {
+            // Hexagon
+            const r = enemy.r;
+            for (let i = 0; i < 6; i++) {
+                const a = (Math.PI / 3) * i - Math.PI / 2;
+                const x = Math.cos(a) * r;
+                const y = Math.sin(a) * r;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+        } else if (enemy.ai === 'sniper') {
+            // Forward triangle pointing at the player
+            const a = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+            ctx.rotate(a);
+            ctx.moveTo(enemy.r, 0);
+            ctx.lineTo(-enemy.r * 0.7, -enemy.r * 0.85);
+            ctx.lineTo(-enemy.r * 0.7, enemy.r * 0.85);
+            ctx.closePath();
+        } else if (enemy.ai === 'bomber') {
+            // 5-spike star
+            const r = enemy.r;
+            const inner = r * 0.55;
+            for (let i = 0; i < 10; i++) {
+                const a = (Math.PI / 5) * i - Math.PI / 2;
+                const rad = i % 2 === 0 ? r : inner;
+                const x = Math.cos(a) * rad;
+                const y = Math.sin(a) * rad;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+        } else if (enemy.ai === 'healer') {
+            // Plus / cross
+            const r = enemy.r;
+            const t = r * 0.4;
+            ctx.moveTo(-t, -r);
+            ctx.lineTo(t, -r);
+            ctx.lineTo(t, -t);
+            ctx.lineTo(r, -t);
+            ctx.lineTo(r, t);
+            ctx.lineTo(t, t);
+            ctx.lineTo(t, r);
+            ctx.lineTo(-t, r);
+            ctx.lineTo(-t, t);
+            ctx.lineTo(-r, t);
+            ctx.lineTo(-r, -t);
+            ctx.lineTo(-t, -t);
+            ctx.closePath();
+        } else if (enemy.ai === 'shielder') {
+            // Shielder body = square; shield ring drawn after.
+            ctx.rect(-enemy.r, -enemy.r, enemy.r * 2, enemy.r * 2);
+        } else if (enemy.ai === 'wraith') {
+            ctx.arc(0, 0, enemy.r, 0, Math.PI * 2);
+        } else if (enemy.ai === 'berserker') {
+            // Aggressive triangle
+            ctx.moveTo(0, -enemy.r);
+            ctx.lineTo(enemy.r * 0.95, enemy.r * 0.85);
+            ctx.lineTo(-enemy.r * 0.95, enemy.r * 0.85);
+            ctx.closePath();
         } else {
+            // swarmling, drone fallback, etc.
             ctx.arc(0, 0, enemy.r, 0, Math.PI * 2);
         }
         ctx.stroke();
@@ -196,6 +324,22 @@ function drawEnemies() {
             ctx.fillStyle = `rgba(255, 255, 255, 0.25)`;
             ctx.fill();
         }
+
+        // Shielder shield ring
+        if (enemy.shieldHp > 0 && enemy.shieldMax > 0) {
+            const pct = Math.max(0, Math.min(1, enemy.shieldHp / enemy.shieldMax));
+            ctx.globalAlpha = phaseAlpha * (0.55 + 0.35 * pct);
+            ctx.strokeStyle = '#7ee2ff';
+            ctx.shadowColor = '#7ee2ff';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, enemy.r + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+            ctx.stroke();
+            ctx.globalAlpha = phaseAlpha;
+        }
+
+        ctx.globalAlpha = 1;
 
         ctx.font = enemy.isBoss ? '700 18px Rajdhani' : '700 14px Rajdhani';
         ctx.textAlign = 'center';
@@ -214,6 +358,48 @@ function drawOrbiters() {
     if (!player || !player.orbiters) return;
 
     player.orbiters.forEach((orbiter) => {
+        // Combat drone: distinct look. While respawning, render a faint countdown ring on the player.
+        if (orbiter.isDrone) {
+            if (!orbiter.alive) {
+                // Respawn timer indicator floating above the player
+                ctx.save();
+                ctx.translate(player.x, player.y);
+                ctx.globalAlpha = 0.55;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#ff8030';
+                ctx.strokeStyle = 'rgba(255, 128, 48, 0.6)';
+                ctx.lineWidth = 1.5;
+                const pct = Math.max(0, Math.min(1, 1 - orbiter.respawnTimer / Math.max(0.001, orbiter.respawnDuration || 15)));
+                const arcStart = -Math.PI / 2 + (orbiter.slot || 0) * (Math.PI * 2 / Math.max(1, orbiter.totalSlots || 1));
+                ctx.beginPath();
+                ctx.arc(0, 0, 36, arcStart, arcStart + Math.PI * 2 * pct * 0.3);
+                ctx.stroke();
+                ctx.restore();
+                return;
+            }
+            // Live drone: tri-filled body with cyan ring + tiny barrel toward target
+            ctx.save();
+            ctx.translate(orbiter.x, orbiter.y);
+            ctx.shadowBlur = 14;
+            ctx.shadowColor = '#7be8ff';
+            ctx.strokeStyle = '#a8eaff';
+            ctx.fillStyle = 'rgba(123, 232, 255, 0.20)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.arc(0, 0, orbiter.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            // crosshair to read as "gun"
+            ctx.beginPath();
+            ctx.moveTo(-orbiter.r * 0.6, 0);
+            ctx.lineTo(orbiter.r * 0.6, 0);
+            ctx.moveTo(0, -orbiter.r * 0.6);
+            ctx.lineTo(0, orbiter.r * 0.6);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+        // Legacy generic orbiter
         ctx.save();
         ctx.translate(orbiter.x, orbiter.y);
         ctx.shadowBlur = 14;
@@ -231,6 +417,34 @@ function drawPlayer() {
     if (!player) return;
     const equippedSkin = (save && SKIN_DEFINITIONS && SKIN_DEFINITIONS[save.equippedSkin]) ? SKIN_DEFINITIONS[save.equippedSkin] : SKIN_DEFINITIONS.stock;
     const style = equippedSkin.style;
+
+    // ── Phoenix Aura: pulsating fire ring around the player ──
+    if (player.phoenixAura && player.phoenixAuraRadius > 0) {
+        const t = (performance.now() / 1000) % 1000;
+        const r = player.phoenixAuraRadius;
+        const wobble = 1 + Math.sin(t * 4.2) * 0.04;
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.globalAlpha = 0.18 + Math.sin(t * 5) * 0.04;
+        const grad = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * wobble);
+        grad.addColorStop(0, 'rgba(255, 160, 60, 0.0)');
+        grad.addColorStop(0.55, 'rgba(255, 110, 40, 0.45)');
+        grad.addColorStop(1, 'rgba(255, 50, 20, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * wobble, 0, Math.PI * 2);
+        ctx.fill();
+        // Outer crackling ring
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = 'rgba(255, 180, 80, 0.7)';
+        ctx.lineWidth = 1.4;
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = '#ff7035';
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
     // VFX intensity climbs with rarity (blue=1, dark=2, purple=3, red=4, gold=5)
     const rarityVfx = ({ blue: 1, dark: 2, purple: 3, red: 4, gold: 5 })[equippedSkin.rarity] || 1;
 
@@ -631,6 +845,11 @@ function drawInGameHud(width) {
 
     drawHearts(24, safeTop + 8, player.hp);
 
+    // ── Extra hearts (Patch Heart) — drawn after the regular hearts ──
+    if (player.extraHearts && player.extraHearts > 0) {
+        drawExtraHearts(24 + 3 * 34, safeTop + 8, player.extraHearts);
+    }
+
     const topPills = [
         { text: `WAVE ${waveLabel}`, color: '#ffffff' },
         { text: `ZONE ${currentLevel}`, color: '#ffffff' }
@@ -717,4 +936,126 @@ function drawInGameHud(width) {
     ctx.moveTo(12, safeTop + 96);
     ctx.lineTo(width - 12, safeTop + 96);
     ctx.stroke();
+
+    drawBossBars(width, safeTop);
+    drawFrenzyIndicator(width, safeTop);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boss bars — one big top-of-screen bar per living boss. Stacked if multiple.
+// ─────────────────────────────────────────────────────────────────────────────
+function drawBossBars(width, safeTop) {
+    const bosses = enemies.filter((e) => e && e.alive && e.isBoss);
+    if (bosses.length === 0) return;
+
+    const barW = Math.min(560, width - 80);
+    const barH = 18;
+    const gapY = 8;
+    const startY = safeTop + 110;
+    const x = (width - barW) / 2;
+
+    bosses.forEach((boss, i) => {
+        const y = startY + i * (barH + gapY + 14);
+        const pct = Math.max(0, Math.min(1, boss.hp / Math.max(1, boss.maxHp)));
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(8, 12, 26, 0.78)';
+        ctx.strokeStyle = 'rgba(255, 55, 95, 0.45)';
+        ctx.lineWidth = 1.5;
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = 'rgba(255, 55, 95, 0.55)';
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, barH, 9);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        const grad = ctx.createLinearGradient(x, y, x + barW, y);
+        grad.addColorStop(0, '#ff8198');
+        grad.addColorStop(1, '#ff375f');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(x + 2, y + 2, Math.max(2, (barW - 4) * pct), barH - 4, 7);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.font = '700 11px Orbitron';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffe1e8';
+        const name = boss.bossName || 'BOSS';
+        ctx.fillText(name, x + 2, y - 4);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(255, 225, 232, 0.92)';
+        const hpLabel = `${formatCompactNumber(Math.max(0, Math.ceil(boss.hp)))} / ${formatCompactNumber(boss.maxHp)}`;
+        ctx.fillText(hpLabel, x + barW - 2, y - 4);
+
+        ctx.restore();
+    });
+}
+
+// ── Frenzy indicator: shows how many stacks of Frenzy are active ──
+function drawFrenzyIndicator(width, safeTop) {
+    if (!player) return;
+    const stack = player.frenzyStack || 0;
+    if (stack <= 0) return;
+    const cap = player.frenzyCap > 0 && player.frenzyCap !== 99 ? player.frenzyCap : 1;
+    const pct = Math.max(0, Math.min(1, stack / cap));
+    const w = 180;
+    const h = 12;
+    const x = (width - w) / 2;
+    const y = safeTop + 80;
+    ctx.save();
+    ctx.fillStyle = 'rgba(8, 12, 26, 0.78)';
+    ctx.strokeStyle = 'rgba(255, 157, 0, 0.6)';
+    ctx.shadowBlur = 14;
+    ctx.shadowColor = '#ff9d00';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    const fillGrad = ctx.createLinearGradient(x, y, x + w, y);
+    fillGrad.addColorStop(0, '#ffe1a0');
+    fillGrad.addColorStop(1, '#ff5a1c');
+    ctx.fillStyle = fillGrad;
+    ctx.beginPath();
+    ctx.roundRect(x + 1, y + 1, Math.max(2, (w - 2) * pct), h - 2, 5);
+    ctx.fill();
+    ctx.font = '700 10px Orbitron';
+    ctx.fillStyle = '#ffe698';
+    ctx.textAlign = 'center';
+    ctx.fillText(`FRENZY +${(stack * 100).toFixed(0)}%`, width / 2, y - 3);
+    ctx.restore();
+}
+
+// ── Extra hearts (Patch Heart) — golden hearts to the right of normal ones ──
+function drawExtraHearts(x, y, count) {
+    const max = Math.min(8, count);
+    for (let i = 0; i < max; i++) {
+        ctx.save();
+        ctx.translate(x + i * 30, y);
+        ctx.scale(1.1, 1.1);
+        ctx.shadowColor = '#ffd14d';
+        ctx.shadowBlur = 14;
+        ctx.strokeStyle = '#ffd14d';
+        ctx.fillStyle = 'rgba(255, 209, 77, 0.25)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, 10);
+        ctx.bezierCurveTo(12, 2, 12, -10, 0, -4);
+        ctx.bezierCurveTo(-12, -10, -12, 2, 0, 10);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+    if (count > max) {
+        ctx.save();
+        ctx.font = '700 11px Orbitron';
+        ctx.fillStyle = '#ffd14d';
+        ctx.textAlign = 'left';
+        ctx.fillText(`+${count - max}`, x + max * 30 + 4, y + 4);
+        ctx.restore();
+    }
 }

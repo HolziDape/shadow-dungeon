@@ -282,6 +282,10 @@ let lightningBolts = [];
 let keys = {};
 let lastTime = 0;
 let currentLevelWaves = [];
+// ── Per-wave staggered spawn queue ──────────────────────────────────────────
+// Each entry: { type, remaining, batch, interval, timer }.
+// processWaveSpawnQueue() trickles enemies in instead of dropping them all at once.
+let waveSpawnQueue = [];
 let touchState = { active: false, x: 0, y: 0, lastX: 0, lastY: 0, dragVX: 0, dragVY: 0 };
 let activeAbilityChoices = [];
 let lastUpgradeId = '';
@@ -1844,7 +1848,36 @@ function createPlayer() {
         pulsarBurst: false,
         sentinelHalo: false,
         sawWaves: false,
-        sawPull: false
+        sawPull: false,
+        // ── Reworked / new abilities ──
+        extraHearts: 0,           // Patch Heart stack
+        extraHeartHealPerKills: 0,
+        extraHeartKillCounter: 0,
+        echoOnHit: false,         // Echo Shock
+        echoEveryHits: 4,
+        echoHitCounter: 0,
+        echoRadius: 80,
+        echoDmgMult: 0.6,
+        phoenixAura: false,       // Phoenix Aura
+        phoenixAuraRadius: 0,
+        phoenixAuraDps: 0,
+        phoenixAuraTick: 0,
+        ionSplash: false,         // Ion Round splash
+        ionSplashRadius: 0,
+        ionSplashMult: 0,
+        ionPiercing: false,
+        ionVaporize: false,
+        sawShoot: false,          // Saw projectile launcher
+        sawShootCooldown: 0,
+        sawShootInterval: 1.6,
+        sawShootCount: 1,
+        sawShootDmgMult: 0.6,
+        boomerangLaunch: false,   // Real boomerang projectile
+        boomerangLaunchCooldown: 0,
+        boomerangLaunchInterval: 2.5,
+        boomerangLaunchCount: 1,
+        boomerangLaunchDmgMult: 1.4,
+        alwaysCenterShot: false   // Spread Volley center guarantee
     };
 }
 
@@ -1862,6 +1895,7 @@ function startLevel() {
     hazards = [];
     fxTexts = [];
     lightningBolts = [];
+    waveSpawnQueue = [];
     keys = {};
     save.bonusAbilityXp = 0;
 
@@ -1976,6 +2010,17 @@ function createEnemy(type, x, y) {
         strafeDir: Math.random() > 0.5 ? 1 : -1,
         abilityCooldown: type.isBoss ? 4 : 0,
         lastHitBy: 0,
+        // ── New-enemy per-type state ──
+        attackCooldown: 1.4 + Math.random() * 0.6, // sniper / bomber / brute attack timing
+        healCooldown: 2.0 + Math.random() * 0.8,    // healer pulse
+        shieldHp: type.shieldHp ? Math.max(1, Math.round(type.shieldHp * Math.max(0.4, hp / Math.max(1, type.hp)))) : 0,
+        shieldMax: type.shieldHp ? Math.max(1, Math.round(type.shieldHp * Math.max(0.4, hp / Math.max(1, type.hp)))) : 0,
+        phaseTimer: 0,            // wraith
+        phasing: false,           // wraith
+        chargeTimer: 0,           // crusher dash windup
+        charging: false,          // crusher mid-dash
+        chargeDirX: 0,
+        chargeDirY: 0,
         // ── Status Effects ──
         frostSlow: 0,
         frostTimer: 0,
@@ -1988,19 +2033,53 @@ function createEnemy(type, x, y) {
     };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave spawning. We don't drop the whole wave at once anymore; we queue the
+// spawn entries and trickle them in over time via processWaveSpawnQueue(dt).
+// Bosses still fire on their first batch immediately so the boss bar pops up
+// the moment the boss wave starts.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildSpawnQueue(waveEntries, options = {}) {
+    const fillMultiplier = options.fillMultiplier || 1;
+    return waveEntries.map((entry) => {
+        const isBossEntry = entry.t === 'boss';
+        const scaledN = isBossEntry ? entry.n : Math.max(1, Math.round(entry.n * fillMultiplier));
+        return {
+            type: entry.t,
+            remaining: scaledN,
+            batch: Math.max(1, entry.batch || 1),
+            interval: typeof entry.interval === 'number' ? entry.interval : 0.7,
+            timer: 0 // first batch fires on the next process tick
+        };
+    });
+}
+
+function processWaveSpawnQueue(dt) {
+    if (!waveSpawnQueue || waveSpawnQueue.length === 0) return;
+    waveSpawnQueue.forEach((slot) => {
+        if (slot.remaining <= 0) return;
+        slot.timer -= dt;
+        if (slot.timer <= 0) {
+            const batch = Math.min(slot.batch, slot.remaining);
+            const scaledType = getEnemyLevelStats(slot.type, currentLevel);
+            for (let i = 0; i < batch; i++) {
+                const spawn = getArenaSpawnEdgePoint();
+                enemies.push(createEnemy(scaledType, spawn.x, spawn.y));
+            }
+            slot.remaining -= batch;
+            slot.timer = slot.interval;
+        }
+    });
+    waveSpawnQueue = waveSpawnQueue.filter((slot) => slot.remaining > 0);
+}
+
 function spawnWave(index) {
     if (index >= currentLevelWaves.length) return;
     currentWave = index;
     const wave = currentLevelWaves[index];
-
-    wave.forEach((entry) => {
-        const scaledType = getEnemyLevelStats(entry.t, currentLevel);
-        for (let i = 0; i < entry.n; i++) {
-            const spawn = getArenaSpawnEdgePoint();
-            enemies.push(createEnemy(scaledType, spawn.x, spawn.y));
-        }
-    });
-
+    waveSpawnQueue = buildSpawnQueue(wave);
+    // Fire the very first batch instantly so the wave doesn't start empty.
+    processWaveSpawnQueue(0);
     updateMetaHud();
 }
 
@@ -2012,16 +2091,9 @@ function spawnEndlessWave(index) {
     currentLevel = scaledLevel;
     const waveSet = getLevelWaves(scaledLevel);
     const templateWave = waveSet[index % waveSet.length] || waveSet[0] || [{ t: 'drone', n: 8 }];
-    const wave = templateWave.map((entry) => ({ ...entry }));
-
-    wave.forEach((entry) => {
-        const scaledType = getEnemyLevelStats(entry.t, scaledLevel);
-        const count = entry.t === 'boss' ? entry.n : Math.max(1, Math.floor(entry.n * (1 + Math.min(0.45, index * 0.02))));
-        for (let i = 0; i < count; i++) {
-            const spawn = getArenaSpawnEdgePoint();
-            enemies.push(createEnemy(scaledType, spawn.x, spawn.y));
-        }
-    });
+    const fillMultiplier = 1 + Math.min(0.45, index * 0.02);
+    waveSpawnQueue = buildSpawnQueue(templateWave, { fillMultiplier });
+    processWaveSpawnQueue(0);
 
     endlessWaveRewardGold += Math.max(1, Math.floor(Math.min(6, 1 + (index * 0.15))));
     updateMetaHud();
@@ -2045,6 +2117,9 @@ function loop(time) {
 function update(dt) {
     updatePlayerMovement(dt);
     updateAutoFire(dt);
+    updateSawLauncher(dt);
+    updateBoomerangLauncher(dt);
+    updatePhoenixAura(dt);
     updateProjectiles(dt);
     updateEnemies(dt);
     updatePickups(dt);
@@ -2060,7 +2135,34 @@ function update(dt) {
     powerPulse = Math.max(0, powerPulse - dt * 1.6);
     killStreakTimer = Math.max(0, killStreakTimer - dt);
     if (killStreakTimer <= 0 && !player.comboPermanent) killStreak = 0;
+    processWaveSpawnQueue(dt);
     checkWaveProgress();
+}
+
+// ── Phoenix Aura — passive damage ring around the player ──
+function updatePhoenixAura(dt) {
+    if (!player.phoenixAura) return;
+    player.phoenixAuraTick = (player.phoenixAuraTick || 0) + dt;
+    if (player.phoenixAuraTick < 0.18) return;
+    const tickDt = player.phoenixAuraTick;
+    player.phoenixAuraTick = 0;
+    const radius = player.phoenixAuraRadius || 90;
+    const dps = player.phoenixAuraDps || 0.22;
+    const tickDmg = player.dmg * player.damageMultiplier * dps * tickDt;
+    enemies.forEach((e) => {
+        if (!e.alive) return;
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        if (d > radius) return;
+        e.hp -= tickDmg;
+        e.hitFlash = Math.max(e.hitFlash || 0, 0.06);
+        if (Math.random() < 0.5) addP(e.x, e.y, '#ff6b35', 1, 60, 0.12, 1);
+        if (e.hp <= 0) triggerKill(e);
+    });
+    // Subtle aura ring particles
+    if (Math.random() < 0.6) {
+        const a = Math.random() * Math.PI * 2;
+        addP(player.x + Math.cos(a) * radius, player.y + Math.sin(a) * radius, '#ff8030', 1, 40, 0.25, 1);
+    }
 }
 
 function updateLightningBolts(dt) {
@@ -2175,23 +2277,23 @@ function updateAutoFire(dt) {
     const baseBulletDmg = player.dmg * player.damageMultiplier * comboDmg * platDmg;
 
     const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
-    const spreadStep = 0.14 + (player.multiSpread || 0);
+    // Lower base spread so multishot stays tight/centered. Spread Volley adds explicit spread.
+    const baseSpreadStep = 0.06;
+    const spreadStep = baseSpreadStep + (player.multiSpread || 0);
     const start = -spreadStep * (player.multishot - 1) / 2;
 
-    for (let i = 0; i < player.multishot; i++) {
-        // ── Lucky Seven ──
+    const fireOne = (offsetAngle, opts = {}) => {
         let shotDmg = baseBulletDmg;
-        const isLucky = player.luckyEvery > 0 && player.shotCounter % player.luckyEvery === 0;
+        const isLucky = !opts.skipLucky && player.luckyEvery > 0 && player.shotCounter % player.luckyEvery === 0;
         if (isLucky) {
             shotDmg *= (player.luckyMult || 5);
             addFxText(player.x, player.y - 28, 'LUCKY!', '#ffd14d', 0.5, 20);
         }
-
         addP(player.x, player.y - 12, isLucky ? '#ffd14d' : '#00f2ff', isLucky ? 8 : 5, 140, 0.18, 2);
         spawnProjectile({
             x: player.x,
             y: player.y,
-            angle: baseAngle + start + (spreadStep * i),
+            angle: baseAngle + offsetAngle,
             speed: 760,
             life: 1.1,
             radius: isLucky ? 7 : 5,
@@ -2199,12 +2301,20 @@ function updateAutoFire(dt) {
             pierce: player.pierce,
             canChain: player.chainLightning,
             color: isLucky ? '#ffd14d' : '#f5fbff',
-            isBoomerang: player.boomerangShot && player.shotCounter % (player.boomerangEvery || 5) === 0,
             bouncesLeft: player.ricochetCount || 0,
             homingStrength: player.bulletsHome || 0,
-            forkTimer: player.bulletFork ? 0.4 : 0,
+            forkTimer: player.bulletFork ? 0.18 : 0, // Lich-Auge: split sooner
             forkCount: player.bulletForkCount || 0
         });
+    };
+
+    for (let i = 0; i < player.multishot; i++) {
+        fireOne(start + (spreadStep * i));
+    }
+
+    // ── Spread Volley: always include one perfectly straight bullet ──
+    if (player.alwaysCenterShot && player.multishot % 2 === 0) {
+        fireOne(0, { skipLucky: true });
     }
 
     playSfx('shoot', Math.min(1.2, 0.7 + player.multishot * 0.08));
@@ -2258,11 +2368,14 @@ function updateAutoFire(dt) {
             angle: baseAngle,
             speed: 940,
             life: 1.18,
-            radius: 8,
-            damage: baseBulletDmg * (1.45 + (ionRank * 0.25)),
-            pierce: player.pierce + 1,
-            canChain: true,
-            color: '#ffcf4d'
+            radius: 9,
+            damage: baseBulletDmg * (player.ionSplashMult || 1.8),
+            pierce: player.ionPiercing ? 99 : 0,    // pierce only for rank ≥ 3
+            canChain: false,                         // no chain — distinct from Kettenblitz
+            color: '#ffcf4d',
+            isIon: true,
+            ionSplashRadius: player.ionSplashRadius || 70,
+            ionVaporize: player.ionVaporize
         });
         playSfx('ability', 1);
     }
@@ -2280,6 +2393,74 @@ function updateAutoFire(dt) {
     }
 
     screenShake = Math.min(1.5, screenShake + 0.08);
+}
+
+// ── Saw projectile launcher (Saege-Klinge rework) ──
+function updateSawLauncher(dt) {
+    if (!player.sawShoot) return;
+    player.sawShootCooldown -= dt;
+    if (player.sawShootCooldown > 0) return;
+    player.sawShootCooldown = player.sawShootInterval || 1.6;
+    const nearest = findNearestEnemy(player.range || 800);
+    const baseAngle = nearest
+        ? Math.atan2(nearest.y - player.y, nearest.x - player.x)
+        : (player.angle || 0) - Math.PI / 2;
+    const count = Math.max(1, player.sawShootCount || 1);
+    const fan = (count - 1) * 0.18;
+    for (let i = 0; i < count; i++) {
+        const offset = -fan / 2 + i * 0.18;
+        spawnProjectile({
+            x: player.x,
+            y: player.y,
+            angle: baseAngle + offset,
+            speed: 320,
+            life: 1.6,
+            radius: 14,
+            damage: player.dmg * player.damageMultiplier * (player.sawShootDmgMult || 0.6),
+            pierce: 999,
+            canChain: false,
+            color: '#7be8ff',
+            isSawShot: true,
+            sawHitMap: {},
+            sawHitInterval: 0.18
+        });
+    }
+    playSfx('ability', 0.85);
+}
+
+// ── Boomerang launcher (Bumerang rework) ──
+function updateBoomerangLauncher(dt) {
+    if (!player.boomerangLaunch) return;
+    player.boomerangLaunchCooldown -= dt;
+    if (player.boomerangLaunchCooldown > 0) return;
+    player.boomerangLaunchCooldown = player.boomerangLaunchInterval || 2.5;
+    const nearest = findNearestEnemy(player.range || 900);
+    const baseAngle = nearest
+        ? Math.atan2(nearest.y - player.y, nearest.x - player.x)
+        : (player.angle || 0) - Math.PI / 2;
+    const count = Math.max(1, player.boomerangLaunchCount || 1);
+    const fan = (count - 1) * 0.30;
+    for (let i = 0; i < count; i++) {
+        const offset = -fan / 2 + i * 0.30;
+        const curveDir = i % 2 === 0 ? 1 : -1; // alternating arc directions
+        spawnProjectile({
+            x: player.x,
+            y: player.y,
+            angle: baseAngle + offset,
+            speed: 540,
+            life: 4.2,
+            radius: 9,
+            damage: player.dmg * player.damageMultiplier * (player.boomerangLaunchDmgMult || 1.4),
+            pierce: 999,
+            canChain: false,
+            color: '#ffd14d',
+            isBoomShot: true,
+            boomCurveDir: curveDir,
+            boomHitMap: {},
+            boomHitInterval: 0.25
+        });
+    }
+    playSfx('ability', 0.95);
 }
 
 // ── Singularity pull field ──
@@ -2331,7 +2512,18 @@ function spawnProjectile(config) {
         bombSplitCount: config.bombSplitCount || 0,
         bombChain: !!config.bombChain,
         isShard: !!config.isShard,
-        speed: config.speed || 760
+        speed: config.speed || 760,
+        // ── New: Ion splash, saw projectile, boomerang projectile ──
+        isIon: !!config.isIon,
+        ionSplashRadius: config.ionSplashRadius || 0,
+        ionVaporize: !!config.ionVaporize,
+        isSawShot: !!config.isSawShot,
+        sawHitMap: config.sawHitMap || null,
+        sawHitInterval: config.sawHitInterval || 0,
+        isBoomShot: !!config.isBoomShot,
+        boomCurveDir: config.boomCurveDir || 0,
+        boomHitMap: config.boomHitMap || null,
+        boomHitInterval: config.boomHitInterval || 0
     });
 }
 
@@ -2381,20 +2573,62 @@ function updateProjectiles(dt) {
             }
         }
 
-        // ── Boomerang return ──
+        // ── Boomerang return (legacy, no longer triggered from auto-fire) ──
         if (projectile.isBoomerang) {
             projectile.boomerangTime += dt;
             if (projectile.boomerangTime > 0.35 && projectile.boomerangPhase === 0) {
                 projectile.boomerangPhase = 1;
-                // Reverse toward player
                 const toPlayerX = player.x - projectile.x;
                 const toPlayerY = player.y - projectile.y;
                 const mag = Math.max(0.01, Math.hypot(toPlayerX, toPlayerY));
                 const spd = Math.hypot(projectile.vx, projectile.vy) * 1.2;
                 projectile.vx = (toPlayerX / mag) * spd;
                 projectile.vy = (toPlayerY / mag) * spd;
-                projectile.life = 2.0; // extend life for return trip
-                projectile.pierce = 99; // pierce everything on return
+                projectile.life = 2.0;
+                projectile.pierce = 99;
+            }
+        }
+
+        // ── New Boomerang projectile: big curving arc, dies on wall hit ──
+        if (projectile.isBoomShot) {
+            // apply centripetal turn perpendicular to current velocity
+            const turnRate = 1.4 * (projectile.boomCurveDir || 1) * dt; // rad / frame
+            const cur = Math.atan2(projectile.vy, projectile.vx);
+            const newAngle = cur + turnRate;
+            const spd = Math.hypot(projectile.vx, projectile.vy);
+            projectile.vx = Math.cos(newAngle) * spd;
+            projectile.vy = Math.sin(newAngle) * spd;
+            // small spinning trail
+            if (Math.random() < 0.5) addP(projectile.x, projectile.y, '#ffd14d', 1, 30, 0.18, 1);
+            // tick down per-target hit cooldowns
+            if (projectile.boomHitMap) {
+                for (const k in projectile.boomHitMap) {
+                    projectile.boomHitMap[k] -= dt;
+                    if (projectile.boomHitMap[k] <= 0) delete projectile.boomHitMap[k];
+                }
+            }
+        }
+
+        // ── Saw projectile: slow flying saw, infinite pierce, can re-hit same enemy ──
+        if (projectile.isSawShot) {
+            projectile.spin += dt * 14;
+            if (Math.random() < 0.4) addP(projectile.x, projectile.y, '#7be8ff', 1, 30, 0.16, 1);
+            if (projectile.sawHitMap) {
+                for (const k in projectile.sawHitMap) {
+                    projectile.sawHitMap[k] -= dt;
+                    if (projectile.sawHitMap[k] <= 0) delete projectile.sawHitMap[k];
+                }
+            }
+            // Sawpull: drag enemies toward saw if rank ≥ 4
+            if (player.sawPull) {
+                enemies.forEach((e) => {
+                    if (!e.alive) return;
+                    const d = Math.hypot(e.x - projectile.x, e.y - projectile.y);
+                    if (d < 90 && d > 0.5) {
+                        e.x += ((projectile.x - e.x) / d) * 30 * dt;
+                        e.y += ((projectile.y - e.y) / d) * 30 * dt;
+                    }
+                });
             }
         }
 
@@ -2455,6 +2689,15 @@ function updateProjectiles(dt) {
             }
         }
 
+        // ── Boomerang projectile dies when it hits a wall ──
+        if (projectile.isBoomShot) {
+            if (projectile.x <= WALL + projectile.r || projectile.x >= arena.width - WALL - projectile.r ||
+                projectile.y <= arena.top + projectile.r || projectile.y >= arena.height - WALL - projectile.r) {
+                projectile.life = 0;
+                addP(projectile.x, projectile.y, '#ffd14d', 12, 100, 0.25, 3);
+            }
+        }
+
         if (projectile.tornado) {
             addP(projectile.x, projectile.y, '#bc13fe', 2, 40, 0.12, 2);
         } else if (projectile.isBomb) {
@@ -2469,6 +2712,9 @@ function updateProjectiles(dt) {
             const distance = Math.hypot(enemy.x - projectile.x, enemy.y - projectile.y);
             if (distance >= enemy.r + projectile.r) continue;
             if (projectile.tornado && enemy.lastHitBy === projectile.id) continue;
+            // ── Saw / Boomerang per-enemy hit cooldown ──
+            if (projectile.isSawShot && projectile.sawHitMap && projectile.sawHitMap[enemy.id] > 0) continue;
+            if (projectile.isBoomShot && projectile.boomHitMap && projectile.boomHitMap[enemy.id] > 0) continue;
 
             player.hitCounter += 1;
 
@@ -2551,11 +2797,28 @@ function updateProjectiles(dt) {
                 if (player.frostDoT && !enemy.frozen) {
                     enemy.hp -= player.dmg * 0.05;
                 }
+                // Crisper frost VFX: sparkles + impact ring
+                addP(enemy.x, enemy.y, '#a8eaff', 6, 70, 0.28, 2);
+                addP(projectile.x, projectile.y, '#7be8ff', 4, 90, 0.16, 2);
+                hazards.push({
+                    id: nextHazardId++,
+                    type: 'ring',
+                    x: enemy.x, y: enemy.y,
+                    radius: 4, maxRadius: 22, speed: 90,
+                    life: 0.22, color: 'rgba(123,232,255,0.0)', hit: true // visual only (hit=true ⇒ skip damage)
+                });
                 if (player.freezeChance > 0 && Math.random() < player.freezeChance) {
                     enemy.frozen = true;
                     enemy.frozenTimer = 1.0;
                     addFxText(enemy.x, enemy.y - 14, 'FROZEN', '#7be8ff', 0.45, 14);
-                    addP(enemy.x, enemy.y, '#7be8ff', 12, 80, 0.3, 3);
+                    addP(enemy.x, enemy.y, '#7be8ff', 18, 110, 0.4, 3);
+                    hazards.push({
+                        id: nextHazardId++,
+                        type: 'ring',
+                        x: enemy.x, y: enemy.y,
+                        radius: 8, maxRadius: 50, speed: 140,
+                        life: 0.45, color: 'rgba(123,232,255,0.0)', hit: true
+                    });
                 }
             }
 
@@ -2602,9 +2865,33 @@ function updateProjectiles(dt) {
 
             // ── Arc Pulse ──
             if (player.arcOnHit && !projectile.tornado && !projectile.isShard) {
-                if (player.hitCounter % (player.arcEvery || 6) === 0) {
+                player.arcHitCounter = (player.arcHitCounter || 0) + 1;
+                if (player.arcHitCounter >= (player.arcEvery || 6)) {
+                    player.arcHitCounter = 0;
                     triggerArcPulse(enemy);
                 }
+            }
+
+            // ── Echo Shock (rework): every Nth hit fires a damage shockwave ──
+            if (player.echoOnHit && !projectile.tornado && !projectile.isShard) {
+                player.echoHitCounter = (player.echoHitCounter || 0) + 1;
+                if (player.echoHitCounter >= (player.echoEveryHits || 4)) {
+                    player.echoHitCounter = 0;
+                    triggerEchoShock(enemy.x, enemy.y);
+                }
+            }
+
+            // ── Ion splash on impact ──
+            if (projectile.isIon) {
+                triggerIonSplash(projectile);
+            }
+
+            // ── Saw / Boomerang: register per-enemy hit cooldown so they can re-hit ──
+            if (projectile.isSawShot && projectile.sawHitMap) {
+                projectile.sawHitMap[enemy.id] = projectile.sawHitInterval || 0.18;
+            }
+            if (projectile.isBoomShot && projectile.boomHitMap) {
+                projectile.boomHitMap[enemy.id] = projectile.boomHitInterval || 0.25;
             }
 
             if (projectile.canChain) {
@@ -2612,7 +2899,8 @@ function updateProjectiles(dt) {
                 projectile.canChain = false;
             }
 
-            if (!projectile.tornado) {
+            // Saws and boomerangs do NOT consume pierce — they keep flying.
+            if (!projectile.tornado && !projectile.isSawShot && !projectile.isBoomShot) {
                 projectile.pierce -= 1;
             }
 
@@ -2644,6 +2932,60 @@ function updateProjectiles(dt) {
     for (const np of newProjectiles) projectiles.push(np);
 
     projectiles = projectiles.filter((projectile) => projectile.life > 0);
+}
+
+// ── Echo Shock — small AOE on impact, replaces old "echo bullet" mechanic ──
+function triggerEchoShock(cx, cy) {
+    const radius = player.echoRadius || 80;
+    const dmgMult = player.echoDmgMult || 0.6;
+    const dmg = player.dmg * player.damageMultiplier * dmgMult;
+    addP(cx, cy, '#7be8ff', 18, 160, 0.32, 4);
+    addP(cx, cy, '#ffffff', 8, 100, 0.18, 2);
+    hazards.push({
+        id: nextHazardId++,
+        type: 'ring',
+        x: cx, y: cy,
+        radius: 12, maxRadius: radius, speed: 380,
+        life: 0.35, color: 'rgba(123,232,255,0.0)', hit: true // visual only — damage applied immediately
+    });
+    enemies.forEach((e) => {
+        if (!e.alive) return;
+        const d = Math.hypot(e.x - cx, e.y - cy);
+        if (d > radius) return;
+        e.hp -= dmg;
+        e.hitFlash = 0.1;
+        if (e.hp <= 0) triggerKill(e);
+    });
+    addFxText(cx, cy - 18, 'ECHO', '#7be8ff', 0.3, 14);
+    playSfx('chain', 0.7);
+}
+
+// ── Ion splash on projectile impact ──
+function triggerIonSplash(projectile) {
+    const radius = projectile.ionSplashRadius || 70;
+    const dmg = projectile.dmg * 0.55;
+    addP(projectile.x, projectile.y, '#ffd14d', 22, 200, 0.4, 5);
+    addP(projectile.x, projectile.y, '#ffe698', 10, 140, 0.25, 3);
+    screenShake = Math.min(2.5, screenShake + 0.25);
+    hazards.push({
+        id: nextHazardId++,
+        type: 'ring',
+        x: projectile.x, y: projectile.y,
+        radius: 10, maxRadius: radius, speed: 540,
+        life: 0.35, color: 'rgba(255,209,77,0.0)', hit: true // visual only
+    });
+    enemies.forEach((e) => {
+        if (!e.alive) return;
+        const d = Math.hypot(e.x - projectile.x, e.y - projectile.y);
+        if (d > radius) return;
+        if (projectile.ionVaporize && !e.isBoss) {
+            e.hp = 0;
+        } else {
+            e.hp -= dmg;
+        }
+        e.hitFlash = 0.14;
+        if (e.hp <= 0) triggerKill(e);
+    });
 }
 
 // ── Crit Bomb Explosion ──
@@ -2769,6 +3111,23 @@ function updateEnemies(dt) {
     enemies.forEach((enemy) => {
         if (!enemy.alive) return;
 
+        // ── Damage gating: wraith phase i-frames + shielder absorbs ──
+        // We diff against the previous-frame HP so we intercept any source of damage.
+        if (enemy._prevHp == null) enemy._prevHp = enemy.hp;
+        if (enemy.hp < enemy._prevHp) {
+            let drop = enemy._prevHp - enemy.hp;
+            if (enemy.phasing) {
+                enemy.hp = enemy._prevHp; // phased = invulnerable
+                drop = 0;
+            }
+            if (enemy.shieldHp > 0 && drop > 0) {
+                const absorbed = Math.min(enemy.shieldHp, drop);
+                enemy.shieldHp -= absorbed;
+                enemy.hp = Math.min(enemy.maxHp, enemy.hp + absorbed);
+            }
+        }
+        enemy._prevHp = enemy.hp;
+
         enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
         enemy.aiClock += dt;
         enemy.sprintCooldown -= dt;
@@ -2821,6 +3180,119 @@ function updateEnemies(dt) {
             moveX = enemy.moveX;
             moveY = enemy.moveY;
             speed = enemy.moveSpeed;
+        } else if (enemy.ai === 'swarm') {
+            // Tight chase with twitchy zig-zag.
+            moveX = nx * 0.92 + px * 0.34 * Math.sin(enemy.aiClock * 6.0);
+            moveY = ny * 0.92 + py * 0.34 * Math.sin(enemy.aiClock * 6.0);
+        } else if (enemy.ai === 'brute') {
+            // Slow, relentless straight-line chaser.
+            moveX = nx;
+            moveY = ny;
+            speed *= 0.85;
+        } else if (enemy.ai === 'sniper') {
+            // Holds at ~280px and shoots ring projectiles.
+            const desired = 280;
+            if (distance < desired - 30) {
+                moveX = -nx * 0.72 + px * 0.5 * enemy.strafeDir;
+                moveY = -ny * 0.72 + py * 0.5 * enemy.strafeDir;
+            } else if (distance > desired + 30) {
+                moveX = nx * 0.6 + px * 0.4 * enemy.strafeDir;
+                moveY = ny * 0.6 + py * 0.4 * enemy.strafeDir;
+                speed *= 0.7;
+            } else {
+                moveX = px * enemy.strafeDir;
+                moveY = py * enemy.strafeDir;
+                speed *= 0.55;
+            }
+            enemy.attackCooldown -= dt;
+            if (enemy.attackCooldown <= 0 && distance < 600) {
+                enemy.attackCooldown = 2.4 + Math.random() * 0.6;
+                hazards.push({
+                    id: nextHazardId++,
+                    type: 'ring',
+                    x: enemy.x,
+                    y: enemy.y,
+                    radius: 6,
+                    maxRadius: 90,
+                    speed: 360,
+                    life: 0.9,
+                    color: '#ff5dad',
+                    hit: false
+                });
+                addP(enemy.x, enemy.y, '#ff5dad', 6, 60, 0.18, 2);
+            }
+        } else if (enemy.ai === 'bomber') {
+            // Charges at the player; explosion is in triggerKill().
+            moveX = nx;
+            moveY = ny;
+        } else if (enemy.ai === 'healer') {
+            // Stays back and pulses healing.
+            if (distance < 240) {
+                moveX = -nx;
+                moveY = -ny;
+                speed *= 0.85;
+            } else {
+                moveX = nx * 0.55 + px * 0.45 * enemy.strafeDir;
+                moveY = ny * 0.55 + py * 0.45 * enemy.strafeDir;
+                speed *= 0.6;
+            }
+            enemy.healCooldown -= dt;
+            if (enemy.healCooldown <= 0) {
+                enemy.healCooldown = 2.6;
+                const healAmt = Math.max(2, Math.round(enemy.maxHp * 0.05));
+                for (const ally of enemies) {
+                    if (!ally.alive || ally === enemy) continue;
+                    if (Math.hypot(ally.x - enemy.x, ally.y - enemy.y) < 200) {
+                        ally.hp = Math.min(ally.maxHp, ally.hp + healAmt);
+                    }
+                }
+                addP(enemy.x, enemy.y, '#34ffae', 10, 130, 0.45, 3);
+            }
+        } else if (enemy.ai === 'shielder') {
+            // Slow tank with a damage-absorbing shield (handled above).
+            moveX = nx;
+            moveY = ny;
+            speed *= 0.85;
+        } else if (enemy.ai === 'wraith') {
+            // Periodically phases — invulnerable while phasing.
+            enemy.phaseTimer -= dt;
+            if (enemy.phaseTimer <= 0) {
+                enemy.phasing = !enemy.phasing;
+                enemy.phaseTimer = enemy.phasing ? 0.5 : 1.6;
+                if (enemy.phasing) addP(enemy.x, enemy.y, '#9f57ff', 6, 80, 0.25, 2);
+            }
+            moveX = nx * 1.05 + px * 0.45 * Math.sin(enemy.aiClock * 3.5);
+            moveY = ny * 1.05 + py * 0.45 * Math.sin(enemy.aiClock * 3.5);
+        } else if (enemy.ai === 'crusher') {
+            // Heavy tank that periodically charges at the player.
+            if (enemy.charging) {
+                enemy.chargeTimer -= dt;
+                moveX = enemy.chargeDirX;
+                moveY = enemy.chargeDirY;
+                speed *= 2.4;
+                if (enemy.chargeTimer <= 0) enemy.charging = false;
+            } else {
+                enemy.chargeTimer -= dt;
+                moveX = nx;
+                moveY = ny;
+                speed *= 0.7;
+                if (enemy.chargeTimer <= 0 && distance > 110 && distance < 520) {
+                    enemy.charging = true;
+                    enemy.chargeDirX = nx;
+                    enemy.chargeDirY = ny;
+                    enemy.chargeTimer = 0.7;
+                    addP(enemy.x, enemy.y, '#ff5040', 12, 150, 0.4, 3);
+                } else if (enemy.chargeTimer <= 0) {
+                    enemy.chargeTimer = 1.8;
+                }
+            }
+        } else if (enemy.ai === 'berserker') {
+            // Speeds up as HP drops (up to ~1.9x).
+            const hpFrac = Math.max(0, enemy.hp / Math.max(1, enemy.maxHp));
+            const rage = 1 + (1 - hpFrac) * 0.9;
+            moveX = nx;
+            moveY = ny;
+            speed *= rage;
         }
 
         const moveMag = Math.max(0.001, Math.hypot(moveX, moveY));
@@ -2949,15 +3421,72 @@ function updatePickups(dt) {
 
 function updateOrbiters(dt) {
     player.orbiters.forEach((orbiter, index) => {
+        // ── Combat Drone (rework) ──
+        if (orbiter.isDrone) {
+            // Dead drones tick down respawn timer.
+            if (!orbiter.alive) {
+                orbiter.respawnTimer -= dt;
+                if (orbiter.respawnTimer <= 0) {
+                    orbiter.alive = true;
+                    orbiter.shootTimer = orbiter.shootInterval || 1.4;
+                    addP(player.x, player.y, '#7be8ff', 14, 120, 0.3, 3);
+                    addFxText(player.x, player.y - 26, 'DRONE READY', '#7be8ff', 0.4, 14);
+                }
+                return;
+            }
+            // Orbit around the player at fixed slot.
+            orbiter.angle += dt * 1.6;
+            orbiter.x = player.x + Math.cos(orbiter.angle) * orbiter.distance;
+            orbiter.y = player.y + Math.sin(orbiter.angle) * orbiter.distance;
+
+            // Auto-fire at nearest enemy.
+            orbiter.shootTimer -= dt;
+            if (orbiter.shootTimer <= 0) {
+                orbiter.shootTimer = orbiter.shootInterval || 1.4;
+                const target = findNearestEnemyToPoint(orbiter.x, orbiter.y, 600);
+                if (target) {
+                    const angle = Math.atan2(target.y - orbiter.y, target.x - orbiter.x);
+                    spawnProjectile({
+                        x: orbiter.x,
+                        y: orbiter.y,
+                        angle: angle,
+                        speed: 720,
+                        life: 0.9,
+                        radius: 4,
+                        damage: player.dmg * player.damageMultiplier * (orbiter.dmgMult || 0.3),
+                        pierce: 0,
+                        canChain: false,
+                        color: '#7be8ff'
+                    });
+                    addP(orbiter.x, orbiter.y, '#7be8ff', 2, 60, 0.12, 1);
+                }
+            }
+
+            // Die on enemy contact, schedule respawn.
+            for (const enemy of enemies) {
+                if (!enemy.alive) continue;
+                const d = Math.hypot(enemy.x - orbiter.x, enemy.y - orbiter.y);
+                if (d < enemy.r + orbiter.r + 1) {
+                    orbiter.alive = false;
+                    orbiter.respawnTimer = orbiter.respawnDuration || 15;
+                    addP(orbiter.x, orbiter.y, '#ff6b35', 14, 130, 0.3, 3);
+                    addFxText(orbiter.x, orbiter.y - 14, 'DRONE DOWN', '#ff6b35', 0.4, 14);
+                    break;
+                }
+            }
+            return;
+        }
+
+        // ── Saw orbiter (legacy: no longer added by saw_blade rework, but
+        //    safe-guarded in case of leftover state from another source) ──
         orbiter.angle += dt * (1.8 + index * 0.08);
         orbiter.x = player.x + Math.cos(orbiter.angle) * orbiter.distance;
         orbiter.y = player.y + Math.sin(orbiter.angle) * orbiter.distance;
-
         enemies.forEach((enemy) => {
             if (!enemy.alive) return;
             const distance = Math.hypot(enemy.x - orbiter.x, enemy.y - orbiter.y);
             if (distance < enemy.r + orbiter.r) {
-                enemy.hp -= orbiter.damage * dt;
+                enemy.hp -= (orbiter.damage || 0) * dt;
                 enemy.hitFlash = 0.04;
                 if (enemy.hp <= 0) triggerKill(enemy);
             }
@@ -3129,6 +3658,8 @@ function updateParticles(dt) {
 }
 
 function checkWaveProgress() {
+    // Don't advance while there are still enemies queued to spawn for this wave.
+    if (waveSpawnQueue && waveSpawnQueue.length > 0) return;
     if (enemies.some((enemy) => enemy.alive)) return;
     if (currentMode === 'endless') {
         spawnEndlessWave(currentWave + 1);
@@ -3147,6 +3678,25 @@ function checkWaveProgress() {
 function triggerKill(enemy) {
     if (!enemy.alive) return;
     enemy.alive = false;
+
+    // ── Bomber: explosion on death (damages player + nearby enemies) ──
+    if (enemy.ai === 'bomber') {
+        hazards.push({
+            id: nextHazardId++,
+            type: 'ring',
+            x: enemy.x,
+            y: enemy.y,
+            radius: 8,
+            maxRadius: 130,
+            speed: 420,
+            life: 0.7,
+            color: '#ff7035',
+            hit: false
+        });
+        addP(enemy.x, enemy.y, '#ff7035', 22, 170, 0.4, 4);
+        screenShake = Math.min(2.5, screenShake + 0.35);
+    }
+
     const economy = getEconomyMultiplier();
     const killGoldBase = currentMode === 'endless' ? (enemy.isBoss ? 2 : 0) : (enemy.isBoss ? 10 : 1);
     // ── Fortune Coin gold bonus ──
@@ -3185,6 +3735,16 @@ function triggerKill(enemy) {
             player.healPerKillCounter = 0;
             player.hp = Math.min(player.maxHp, player.hp + 1);
             addFxText(player.x, player.y - 20, '+1 HP', '#00ff9d', 0.4, 16);
+            syncHpDangerFlair();
+        }
+    }
+    // ── Patch Heart: extra-heart recharge per N kills (rank 3+) ──
+    if (player.extraHeartHealPerKills > 0) {
+        player.extraHeartKillCounter = (player.extraHeartKillCounter || 0) + 1;
+        if (player.extraHeartKillCounter >= player.extraHeartHealPerKills) {
+            player.extraHeartKillCounter = 0;
+            player.extraHearts = (player.extraHearts || 0) + 1;
+            addFxText(player.x, player.y - 32, '+1 EXTRA', '#ffd14d', 0.5, 18);
             syncHpDangerFlair();
         }
     }
@@ -3281,21 +3841,45 @@ function triggerKill(enemy) {
 
 function releaseShockNova() {
     const rank = Math.max(1, getAbilityRank('shock_nova'));
-    addP(player.x, player.y, '#7be8ff', 46, 290, 0.52, 5);
-    addP(player.x, player.y, '#ffffff', 18, 170, 0.22, 3);
-    addFxText(player.x, player.y - 26, 'NOVA', '#7be8ff', 0.42, 22);
-    playSfx('chain', 1.15);
-    powerPulse = Math.min(2.4, powerPulse + 0.5);
-    screenShake = Math.min(3, screenShake + 0.45);
-    playHaptic('medium');
+    const radius = 170 + rank * 16;
+
+    // ── Atom-bomb VFX: bright flash core, three concentric expanding rings,
+    //    huge particle burst, white-out screen pulse, heavy shake. ──
+    addP(player.x, player.y, '#ffffff', 80, 480, 0.55, 9);   // bright core flash
+    addP(player.x, player.y, '#ffe698', 56, 340, 0.50, 7);   // golden mid-burst
+    addP(player.x, player.y, '#ff7035', 42, 290, 0.55, 6);   // fire ring
+    addP(player.x, player.y, '#bc13fe', 28, 220, 0.42, 5);   // shock outer
+    // Three expanding "shock rings" for the atom-bomb feel.
+    [0, 0.06, 0.12].forEach((delay, i) => {
+        setTimeout(() => {
+            if (!hazards) return;
+            hazards.push({
+                id: nextHazardId++,
+                type: 'ring',
+                x: player.x, y: player.y,
+                radius: 6,
+                maxRadius: radius * (0.7 + i * 0.25),
+                speed: 540 + i * 80,
+                life: 0.55,
+                color: 'rgba(255,209,77,0.0)',
+                hit: true // visual only
+            });
+        }, delay * 1000);
+    });
+    addFxText(player.x, player.y - 30, 'NOVA', '#ffe698', 0.55, 28);
+    playSfx('chain', 1.4);
+    playSfx('hit', 1.3);
+    powerPulse = Math.min(3.0, powerPulse + 1.1);
+    screenShake = Math.min(4.0, screenShake + 1.2);
+    playHaptic('hard');
 
     enemies.forEach((enemy) => {
         if (!enemy.alive) return;
         const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
-        if (distance > 170 + rank * 16) return;
+        if (distance > radius) return;
         enemy.hp -= player.dmg * player.damageMultiplier * (0.36 + rank * 0.12);
-        enemy.hitFlash = 0.14;
-        addLightningBolt(player.x, player.y, enemy.x, enemy.y, '#7be8ff', 0.16, 3);
+        enemy.hitFlash = 0.18;
+        addLightningBolt(player.x, player.y, enemy.x, enemy.y, '#ffe698', 0.20, 4);
         if (enemy.hp <= 0) triggerKill(enemy);
     });
 }
@@ -3503,9 +4087,9 @@ function applyAbility(id) {
             break;
         }
         case 'multi': {
+            // Twin Volley stays CENTERED — no extra spread from this ability.
             const add = [1, 2, 3, 4][rank - 1] || 1;
             player.multishot += add;
-            if (rank >= 3) player.multiSpread = (player.multiSpread || 0) + 0.10;
             if (rank >= 4) player.pulsarBurst = true;
             break;
         }
@@ -3529,16 +4113,19 @@ function applyAbility(id) {
             if (rank >= 4) player.permaTornado = true;
             break;
         case 'echo_shot':
-            player.echoShot = true;
-            player.echoEvery = [4, 3, 3, 1][rank - 1] || 4;
-            player.echoCount = [1, 2, 2, 1][rank - 1] || 1;
-            if (rank >= 3) player.echoSplit = true;
-            if (rank >= 4) player.phantomChance = 0.25;
+            // ── Echo SHOCK rework: shockwave on Nth hit (not extra projectile) ──
+            player.echoShot = true; // legacy flag for buff list
+            player.echoOnHit = true;
+            player.echoEveryHits = [4, 3, 2, 1][rank - 1] || 4;
+            player.echoRadius    = [80, 100, 130, 110][rank - 1] || 80;
+            player.echoDmgMult   = [0.6, 0.9, 1.2, 0.5][rank - 1] || 0.6;
             break;
         case 'ion_round':
             player.ionRound = true;
             player.ionEvery = [5, 5, 4, 4][rank - 1] || 5;
-            player.ionRadiusMult = [1.0, 1.5, 1.8, 2.4][rank - 1] || 1.0;
+            player.ionSplash = true;
+            player.ionSplashRadius = [70, 100, 130, 160][rank - 1] || 70;
+            player.ionSplashMult = [1.8, 2.3, 3.2, 3.8][rank - 1] || 1.8;
             if (rank >= 3) player.ionPiercing = true;
             if (rank >= 4) player.ionVaporize = true;
             break;
@@ -3555,33 +4142,60 @@ function applyAbility(id) {
             if (rank >= 4) player.permaSingularity = true;
             break;
         case 'phoenix_drive':
-            player.phoenixDrive = true;
-            if (rank >= 2) player.phoenixBurning = true;
-            if (rank >= 3) player.phoenixDouble = true;
+            // ── Phoenix AURA: permanent damage ring around player ──
+            player.phoenixDrive = true; // legacy flag kept for buff list rendering
+            player.phoenixAura = true;
+            player.phoenixAuraRadius = [90, 130, 180, 240][rank - 1] || 90;
+            player.phoenixAuraDps   = [0.22, 0.35, 0.55, 0.90][rank - 1] || 0.22;
+            if (rank >= 3) player.phoenixDouble = true;       // 3s i-frames on hp loss kept
             if (rank >= 4) player.phoenixRevive = true;
             break;
         case 'heal_heart':
-            player.hp = Math.min(player.maxHp, player.hp + 1);
-            if (rank >= 2) { player.maxHp += 1; player.hp = Math.min(player.maxHp, player.hp + 1); }
-            if (rank >= 3) { player.maxHp += 1; player.healPerKills = 25; }
-            if (rank >= 4) { player.firstLethalBlock = true; }
+            // ── Patch Heart REWORK: stacking extra hearts, no max-hp grant ──
+            player.extraHearts = (player.extraHearts || 0) + [1, 2, 3, 4][rank - 1];
+            if (rank >= 3) player.extraHeartHealPerKills = 25;
+            if (rank >= 4) player.firstLethalBlock = true;
             syncHpDangerFlair();
             break;
         case 'orbiter':
-            // rank 1 = 1 drone, 2 = +1 (total 2), 3 = +2 (total 4), 4 = +2 (total 6)
-            const adds = [1, 1, 2, 2][rank - 1] || 1;
-            for (let n = 0; n < adds; n++) {
-                player.orbiters.push({
-                    id: nextOrbiterId++,
-                    angle: Math.random() * Math.PI * 2,
-                    distance: 50 + player.orbiters.length * 10,
-                    r: rank >= 3 ? 5 : 7,
-                    damage: 18 + rank * 4,
-                    x: player.x,
-                    y: player.y
+            // ── Combat Drone REWORK: shoot, die on contact, respawn 15s ──
+            {
+                const totals     = [1, 2, 4, 6][rank - 1] || 1;
+                const respawnSec = rank >= 4 ? 8 : 15;
+                const dmgMult    = rank >= 4 ? 0.40 : 0.30;
+                const fireRate   = [1.4, 1.2, 1.0, 0.8][rank - 1] || 1.4;
+                const need = Math.max(0, totals - player.orbiters.length);
+                for (let n = 0; n < need; n++) {
+                    const slot = player.orbiters.length;
+                    player.orbiters.push({
+                        id: nextOrbiterId++,
+                        slot,
+                        totalSlots: totals,
+                        angle: (slot / Math.max(1, totals)) * Math.PI * 2,
+                        distance: 70,
+                        r: 7,
+                        isDrone: true,
+                        alive: true,
+                        respawnTimer: 0,
+                        respawnDuration: respawnSec,
+                        shootTimer: Math.random() * fireRate,
+                        shootInterval: fireRate,
+                        dmgMult,
+                        x: player.x,
+                        y: player.y
+                    });
+                }
+                // Re-tune existing drones (e.g. on rank up) to match the new totals.
+                player.orbiters.forEach((o, i) => {
+                    if (!o.isDrone) return;
+                    o.totalSlots = totals;
+                    o.respawnDuration = respawnSec;
+                    o.dmgMult = dmgMult;
+                    o.shootInterval = fireRate;
+                    o.angle = (i / Math.max(1, totals)) * Math.PI * 2;
                 });
+                if (rank >= 4) player.sentinelHalo = true;
             }
-            if (rank >= 4) player.sentinelHalo = true;
             break;
         // ────────────── 25+ NEW ABILITIES (effect logic) ──────────
         case 'cluster_bomb': {
@@ -3600,7 +4214,8 @@ function applyAbility(id) {
             break;
         }
         case 'vampire': {
-            player.lifesteal = [0.02, 0.04, 0.08, 0.15][rank - 1] || 0.02;
+            // Lifesteal NERF (was [0.02, 0.04, 0.08, 0.15] — felt absurd in late-game).
+            player.lifesteal = [0.01, 0.02, 0.04, 0.08][rank - 1] || 0.01;
             if (rank >= 2) player.magnetFlat = (player.magnetFlat || 0) + 20;
             if (rank >= 3) player.heartDropOnKill = 0.05;
             if (rank >= 4) player.bossFullHeal = true;
@@ -3647,13 +4262,21 @@ function applyAbility(id) {
             break;
         }
         case 'glass_cannon': {
+            // ── Glass Cannon: lost heart is GONE for the run ──
+            // No canister drop, no lifesteal restore (lifesteal already caps at maxHp).
+            // Only Patch Heart's extra hearts can stack on top of what's left.
             const dmgMult = [1.6, 1.9, 2.5, 3.0][rank - 1] || 1.6;
             player.damageMultiplier *= dmgMult;
-            player.maxHp = Math.max(1, player.maxHp - (rank === 4 ? 0 : 1));
+            // Drop max-hp permanently (rank 4 caps at 2 max).
+            if (rank === 4) {
+                player.maxHp = 2;
+            } else {
+                player.maxHp = Math.max(1, player.maxHp - 1);
+            }
             player.hp = Math.min(player.hp, player.maxHp);
+            player.glassCannonLocked = true; // signal: no max-hp regrants this run
             if (rank === 2) player.atkCooldown *= 0.77;
             if (rank >= 3) player.firstLethalBlock = true;
-            if (rank >= 4) player.maxHp = 2;
             break;
         }
         case 'lich_bullets': {
@@ -3671,10 +4294,11 @@ function applyAbility(id) {
             break;
         }
         case 'blank_burst': {
-            player.blankChance = [0.05, 0.10, 0.20, 1.0][rank - 1] || 0.05;
+            // Rank 4 was effectively immortality — now capped at 30%.
+            player.blankChance = [0.05, 0.10, 0.18, 0.30][rank - 1] || 0.05;
             if (rank >= 2) player.blankPulse = true;
             if (rank >= 3) player.blankRadius = 2;
-            if (rank >= 4) player.permanentBlankAura = true;
+            if (rank >= 4) player.blankRadius = 3; // bigger radius instead of perma-aura
             break;
         }
         case 'strong_spirit': {
@@ -3685,13 +4309,7 @@ function applyAbility(id) {
             if (rank >= 4) player.shieldEachWave = true;
             break;
         }
-        case 'bloodlust': {
-            player.healOnKillChance = [0.25, 0.40, 0.60, 1.0][rank - 1] || 0.25;
-            if (rank >= 2) player.killDamageBuff = 0.05;
-            if (rank >= 3) player.healPerKills = 5;
-            if (rank >= 4) player.everyKillHeal = 0.5;
-            break;
-        }
+        // 'bloodlust' removed — overlapped with Vampire's lifesteal.
         case 'trigger_fingers': {
             player.killSpeedBoost = true;
             player.killSpeedPct = [0.005, 0.01, 0.02, 0.001][rank - 1] || 0.005;
@@ -3714,36 +4332,32 @@ function applyAbility(id) {
             break;
         }
         case 'saw_blade': {
-            const sawCount = [1, 2, 3, 4][rank - 1] || 1;
-            for (let n = 0; n < sawCount; n++) {
-                player.orbiters.push({
-                    id: nextOrbiterId++,
-                    angle: (n / sawCount) * Math.PI * 2,
-                    distance: 60 + (rank * 4),
-                    r: 8 + rank * 1.5,
-                    damage: 22 + rank * 6,
-                    x: player.x,
-                    y: player.y,
-                    isSaw: true
-                });
-            }
+            // ── Saw blade REWORK: shoots flying saws instead of orbiters ──
+            player.sawShoot = true;
+            player.sawShootInterval = [1.6, 1.4, 1.1, 0.9][rank - 1] || 1.6;
+            player.sawShootCount    = [1, 2, 2, 3][rank - 1] || 1;
+            player.sawShootDmgMult  = [0.6, 0.8, 1.2, 1.8][rank - 1] || 0.6;
             if (rank >= 3) player.sawWaves = true;
             if (rank >= 4) player.sawPull = true;
             break;
         }
         case 'boomerang': {
+            // ── Bumerang REWORK: real arcing boomerang projectile, dies on wall ──
+            player.boomerangLaunch = true;
+            player.boomerangLaunchInterval = [2.5, 2.0, 1.5, 1.0][rank - 1] || 2.5;
+            player.boomerangLaunchCount    = [1, 2, 3, 4][rank - 1] || 1;
+            player.boomerangLaunchDmgMult  = [1.4, 1.5, 1.6, 2.0][rank - 1] || 1.4;
+            // legacy flag for buff list rendering only
             player.boomerangShot = true;
-            player.boomerangEvery = [5, 4, 3, 1][rank - 1] || 5;
-            if (rank >= 2) player.boomerangSpawnsClone = true;
-            if (rank >= 3) player.boomerangCount = 3;
-            if (rank >= 4) player.boomerangPendulum = 5;
             break;
         }
         case 'spread_volley': {
-            player.multiSpread = (player.multiSpread || 0) + [0.15, 0.30, 0.50, 0.90][rank - 1];
-            if (rank >= 2) player.multishot = (player.multishot || 1) + 1;
+            // ── Streufeuer REWORK: rank 1 already adds a bullet AND keeps a centered shot ──
+            player.alwaysCenterShot = true;
+            player.multishot = (player.multishot || 1) + [1, 2, 3, 5][rank - 1];
+            player.multiSpread = (player.multiSpread || 0) + [0.18, 0.30, 0.50, 0.85][rank - 1];
             if (rank >= 3) player.closeRangeBonus = 0.30;
-            if (rank >= 4) { player.multishot += 3; player.pointBlankMult = 4; }
+            if (rank >= 4) player.pointBlankMult = 4;
             break;
         }
         case 'crit_bomb': {
@@ -3871,6 +4485,20 @@ function damagePlayer(source) {
         return;
     }
 
+    // ── Patch Heart: extra hearts soak the hit BEFORE normal HP ──
+    if (player.extraHearts && player.extraHearts > 0) {
+        player.extraHearts -= 1;
+        player.invulnerable = 0.9;
+        addP(player.x, player.y, '#ffd14d', 22, 200, 0.45, 4);
+        addP(player.x, player.y, '#ff8030', 10, 160, 0.32, 3);
+        addFxText(player.x, player.y - 22, '-1 EXTRA', '#ffd14d', 0.5, 22);
+        screenShake = Math.min(2.4, screenShake + 0.55);
+        playSfx('hit', source === 'boss' ? 1.0 : 0.9);
+        playHaptic('medium');
+        syncHpDangerFlair();
+        return;
+    }
+
     const hpBefore = player.hp;
     player.hp -= 1;
     player.invulnerable = 0.9;
@@ -3886,25 +4514,11 @@ function damagePlayer(source) {
     playSfx('death', 0.4); // small ominous low note layered on every -1
     playHaptic(source === 'boss' ? 'hard' : 'hard');
 
-    // ── Phoenix Drive — fire-wave on heart loss ──
-    if (player.phoenixDrive) {
-        const waveRadius = 180;
-        addP(player.x, player.y, '#ff6b35', 30, 280, 0.45, 6);
-        addFxText(player.x, player.y - 30, 'PHOENIX!', '#ff6b35', 0.5, 20);
-        playSfx('ability', 1.2);
-        enemies.forEach((e) => {
-            if (!e.alive) return;
-            const d = Math.hypot(e.x - player.x, e.y - player.y);
-            if (d < waveRadius) {
-                e.hp -= player.dmg * player.damageMultiplier * (player.phoenixDouble ? 3 : 1.5);
-                e.hitFlash = 0.2;
-                addP(e.x, e.y, '#ff6b35', 8, 100, 0.2, 3);
-                if (e.hp <= 0) triggerKill(e);
-            }
-        });
-        if (player.phoenixDouble) {
-            player.invulnerable = Math.max(player.invulnerable, 3);
-        }
+    // ── Phoenix Aura — passive ring instead of revenge wave ──
+    // (rank 3 still grants 3s i-frames on hp loss, kept as a defensive perk.)
+    if (player.phoenixDouble) {
+        player.invulnerable = Math.max(player.invulnerable, 3);
+        addFxText(player.x, player.y - 30, 'PHOENIX!', '#ff6b35', 0.45, 20);
     }
 
     // Trigger HUD heart shake/lost animation
@@ -5576,10 +6190,10 @@ function renderLevelRoadmap() {
     if (!host) return;
     const cur = Math.max(1, save.unlocked || 1);
 
-    // 12 future + current + 1 past, top → bottom (scrollable). Spiral coordinates
+    // 8 future + current + 1 past, top → bottom (scrollable). Spiral coordinates
     // are computed in the host's local box; the host is given an explicit height
     // so we get smooth scrolling instead of cramming everything.
-    const future = 12;
+    const future = 8;
     const past = 1;
     const items = [];
     for (let i = future; i >= -past; i--) {
@@ -5595,16 +6209,20 @@ function renderLevelRoadmap() {
     }
 
     // Spiral params — tuned for a mobile portrait viewport (~380px wide).
-    // We reverse the items so that lower index sits at the BOTTOM of the
-    // viewport (i.e. closest to current), which is how Clash-Royale-style
-    // roadmaps read.
+    // The horizontal radius has to stay clear of the left/right rails (each
+    // ~92px wide); a radius of ~46 keeps the nodes inside the central lane.
     const ordered = items.slice().reverse(); // index 0 = past/current, last = far-future
     const cx = 50; // center column in %
-    const stepY = 96; // px between consecutive nodes
-    const radius = 78; // px sideways amplitude
-    const turn = 0.55; // how tight the spiral coils per step (radians)
+    const stepY = 92; // px between consecutive nodes
+    const radius = 46; // px sideways amplitude — was 78, now stays inside the rails
+    const turn = 0.7; // how tight the spiral coils per step (radians)
 
-    const totalHeight = stepY * (ordered.length + 1);
+    // Bottom padding ensures the CURRENT node sits ABOVE the FIGHT/ENDLESS
+    // CTA instead of being pushed behind it. Top padding gives the highest
+    // node room to breathe.
+    const bottomPad = 24;
+    const topPad = 24;
+    const totalHeight = bottomPad + topPad + stepY * ordered.length;
     host.style.minHeight = `${totalHeight}px`;
     host.style.position = 'relative';
 
@@ -5616,47 +6234,58 @@ function renderLevelRoadmap() {
     const positions = ordered.map((it, i) => {
         const t = i;
         const offsetX = Math.sin(t * turn) * radius; // px
-        // y measured from the BOTTOM of the host so the current node anchors near the bottom
-        const yFromBottom = stepY * (i + 1);
-        return { ...it, x: offsetX, yFromBottom };
+        // y measured from the BOTTOM of the host so the current node anchors
+        // near the bottom (just above the CTA, not behind it).
+        const yFromBottom = bottomPad + stepY * i;
+        // Skill / reward badges are pinned to the side OPPOSITE the spiral
+        // curve so they never bleed under the left or right rail.
+        const badgeSide = offsetX <= 0 ? 'right' : 'left';
+        return { ...it, x: offsetX, yFromBottom, badgeSide };
     });
 
-    // Connecting spiral line as an SVG polyline with a subtle gradient
-    let pathPoints = positions.map((p) => `calc(50% + ${p.x}px) calc(100% - ${p.yFromBottom}px)`);
-    // We can't put `calc()` directly into SVG points, so render the line as a
-    // stack of CSS-positioned div segments (each segment is a 2px line between
-    // two adjacent nodes).
+    // Connecting spiral line as a stack of CSS-rotated segments. Each
+    // segment is anchored at the LEFT-MIDDLE (transform-origin: 0 50%) so we
+    // offset its `bottom` by half its 3 px height to make the pivot land on
+    // the node center exactly.
+    const SEG_H = 3;
     let segmentsHtml = '';
     for (let i = 0; i < positions.length - 1; i++) {
         const a = positions[i];
         const b = positions[i + 1];
         const dx = b.x - a.x;
-        const dy = -(b.yFromBottom - a.yFromBottom); // y grows upward in our system
-        const len = Math.sqrt(dx * dx + dy * dy);
-        const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+        // CSS y grows DOWN, our yFromBottom grows UP — when b is higher than
+        // a, dyCss is negative (the segment needs to tilt upward in CSS).
+        const dyCss = -(b.yFromBottom - a.yFromBottom);
+        const len = Math.sqrt(dx * dx + dyCss * dyCss);
+        // CSS rotate() is clockwise-positive, which matches atan2(dyCss, dx)
+        // for a y-down coordinate system. No sign flip needed.
+        const angleDeg = Math.atan2(dyCss, dx) * 180 / Math.PI;
         const lineActive = (a.state === 'current' || a.state === 'locked') && (b.state === 'current' || b.state === 'locked');
         segmentsHtml += `<div class="lr-segment ${lineActive ? 'line-active' : ''}" style="
             left: calc(50% + ${a.x}px);
-            bottom: ${a.yFromBottom}px;
+            bottom: ${a.yFromBottom - SEG_H / 2}px;
             width: ${len}px;
-            transform: rotate(${-angleDeg}deg);
+            transform: rotate(${angleDeg}deg);
         "></div>`;
     }
 
     let nodesHtml = '';
     positions.forEach((p) => {
+        // Skill tag goes on the OPPOSITE side from the spiral curve so it
+        // can't get clipped by a side rail. The label is short-circuited to
+        // keep the pill compact (full name shown on tap in tooltip).
         const skillBadge = p.ability ? `
-            <div class="lr-skill-link" title="${t('roadmap.skillUnlock')}">
+            <div class="lr-skill-link side-${p.badgeSide}" title="${t('roadmap.skillUnlock')}: ${p.ability.name}">
                 <span class="lr-skill-arm"></span>
                 <span class="lr-skill-tag rarity-tier-${(p.ability.rarity || 'common').toLowerCase()}">
                     ${sparkSvg}
-                    <span>${p.ability.name}</span>
                 </span>
             </div>` : '';
+        // Reward marker is now a tight chest icon that sits ON the node
+        // corner instead of an oversized "+G/◆/Pack" text pill.
         const rewardBadge = p.reward ? `
             <div class="lr-reward" title="${t('roadmap.reward')}">
                 ${chestSvg}
-                <span class="lr-reward-loot">+G/◆/Pack</span>
             </div>` : '';
         nodesHtml += `<div class="lr-node ${p.state}" data-lvl="${p.lvl}" style="
             left: calc(50% + ${p.x}px);
@@ -5673,16 +6302,17 @@ function renderLevelRoadmap() {
         <div class="lr-nodes">${nodesHtml}</div>
     `;
 
-    // Scroll so the CURRENT node sits in the lower-middle of the viewport.
+    // Scroll so the CURRENT node sits in the BOTTOM 25% of the viewport. The
+    // future levels then read upward from there.
     requestAnimationFrame(() => {
         const currentEl = host.querySelector('.lr-node.current');
         if (currentEl) {
-            const rect = currentEl.getBoundingClientRect();
-            const hostRect = host.getBoundingClientRect();
-            const target = (currentEl.offsetTop - host.clientHeight * 0.55);
+            // offsetTop of the current node, minus an offset that lands the
+            // node ~80% of the way down the visible area.
+            const target = currentEl.offsetTop + currentEl.offsetHeight - host.clientHeight * 0.92;
             host.scrollTop = Math.max(0, target);
         } else {
-            host.scrollTop = host.scrollHeight; // bottom of list (current is at bottom)
+            host.scrollTop = host.scrollHeight;
         }
     });
 }
@@ -6305,8 +6935,40 @@ function createPlayer() {
         singularityCounter: 0,
         shockNovaCounter: 0,
         shotCounter: 0,
+        hitCounter: 0,
         trailPoints: [],
-        trailBudget: 0
+        trailBudget: 0,
+        // ── Reworked / new abilities ──
+        extraHearts: 0,
+        extraHeartHealPerKills: 0,
+        extraHeartKillCounter: 0,
+        echoOnHit: false,
+        echoEveryHits: 4,
+        echoHitCounter: 0,
+        echoRadius: 80,
+        echoDmgMult: 0.6,
+        phoenixAura: false,
+        phoenixAuraRadius: 0,
+        phoenixAuraDps: 0,
+        phoenixAuraTick: 0,
+        ionSplash: false,
+        ionSplashRadius: 0,
+        ionSplashMult: 0,
+        ionPiercing: false,
+        ionVaporize: false,
+        sawShoot: false,
+        sawShootCooldown: 0,
+        sawShootInterval: 1.6,
+        sawShootCount: 1,
+        sawShootDmgMult: 0.6,
+        boomerangLaunch: false,
+        boomerangLaunchCooldown: 0,
+        boomerangLaunchInterval: 2.5,
+        boomerangLaunchCount: 1,
+        boomerangLaunchDmgMult: 1.4,
+        alwaysCenterShot: false,
+        // ── HP/aux ──
+        damageMultiplier: 1
     };
 }
 

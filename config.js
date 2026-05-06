@@ -79,33 +79,33 @@ const ABILITIES = [
         ]
     },
     {
-        id: 'orbiter', name: 'Defense Drone', icon: 'ORB', rarity: 'rare', unlockLevel: 6,
-        desc: 'A drone orbits and protects you.',
+        id: 'orbiter', name: 'Combat Drone', icon: 'ORB', rarity: 'rare', unlockLevel: 6,
+        desc: 'Auto-shooting drone (30% Damage). Stirbt bei Beruehrung, respawn in 15s.',
         tree: [
-            { name: 'Defense Drone',  tier: 'rare',      desc: 'One drone orbits and shoots automatically.' },
-            { name: 'Twin Drones',    tier: 'epic',      desc: 'Two drones, faster orbit, each shoots individually.' },
-            { name: 'Drone Swarm',    tier: 'epic',      desc: 'Four drones at half size each, full coverage.' },
-            { name: 'Sentinel Halo',  tier: 'legendary', desc: 'Six drones + ring of micro-shots every 3s.' }
+            { name: 'Combat Drone',   tier: 'rare',      desc: '1 Drohne schiesst automatisch (30% Damage). Stirbt bei Kontakt, respawn 15s.' },
+            { name: 'Twin Drones',    tier: 'epic',      desc: '2 Drohnen, schnellere Schussrate, je 30% Damage.' },
+            { name: 'Drone Swarm',    tier: 'epic',      desc: '4 Drohnen mit voller Coverage rund um dich.' },
+            { name: 'Sentinel Halo',  tier: 'legendary', desc: '6 Drohnen + 25% Damage und respawn in 8s.' }
         ]
     },
     {
-        id: 'echo_shot', name: 'Echo Shot', icon: 'ECH', rarity: 'rare', unlockLevel: 8,
-        desc: 'Every 4th volley fires a delayed echo.',
+        id: 'echo_shot', name: 'Echo Shock', icon: 'ECH', rarity: 'rare', unlockLevel: 8,
+        desc: 'Jeder 4. Treffer erzeugt eine Schockwelle am Einschlag.',
         tree: [
-            { name: 'Echo Shot',     tier: 'rare',      desc: 'Every 4th volley fires a delayed echo.' },
-            { name: 'Double Echo',   tier: 'epic',      desc: 'Every 3rd volley fires two echoes.' },
-            { name: 'Resonance',     tier: 'epic',      desc: 'Every echo also splits sideways into two extra bullets.' },
-            { name: 'Phantom Salvo', tier: 'legendary', desc: 'Every shot has a 25% ghost echo. Stacks insanely.' }
+            { name: 'Echo Shock',    tier: 'rare',      desc: 'Jeder 4. Treffer = Schockwelle (60% Damage, 80px).' },
+            { name: 'Double Echo',   tier: 'epic',      desc: 'Jeder 3. Treffer = Schockwelle (90% Damage, 100px).' },
+            { name: 'Resonance',     tier: 'epic',      desc: 'Jeder 2. Treffer = Schockwelle (120% Damage, 130px).' },
+            { name: 'Phantom Salvo', tier: 'legendary', desc: 'Jeder Treffer = kleine Schockwelle (50% Damage, 110px).' }
         ]
     },
     {
         id: 'heal_heart', name: 'Patch Heart', icon: 'HP+', rarity: 'rare', unlockLevel: 10,
-        desc: 'Restores one heart immediately.',
+        desc: 'Stackt Extra-Herzen ueber den normalen Herzen.',
         tree: [
-            { name: 'Patch Heart',     tier: 'rare',      desc: 'Restore one heart now.' },
-            { name: 'Field Surgeon',   tier: 'epic',      desc: 'Restore +1 max heart and one heart now.' },
-            { name: 'Lifeline',        tier: 'epic',      desc: '+2 max hearts. Killing 25 enemies heals 1 heart.' },
-            { name: 'Crimson Aegis',   tier: 'legendary', desc: '+2 hearts. First lethal hit per run is blocked.' }
+            { name: 'Patch Heart',     tier: 'rare',      desc: '+1 Extra-Herz. Wird zuerst zerstoert. Kein Lifesteal-Heal.' },
+            { name: 'Field Surgeon',   tier: 'epic',      desc: '+2 Extra-Herzen.' },
+            { name: 'Lifeline',        tier: 'epic',      desc: '+3 Extra-Herzen. 25 Kills = +1 Extra-Herz nachladen.' },
+            { name: 'Crimson Aegis',   tier: 'legendary', desc: '+4 Extra-Herzen. Erster letzter Treffer wird geblockt.' }
         ]
     },
     {
@@ -129,23 +129,23 @@ const ABILITIES = [
         ]
     },
     {
-        id: 'phoenix_drive', name: 'Phoenix Drive', icon: 'PHX', rarity: 'epic', unlockLevel: 16,
-        desc: 'Lose a heart → fire wave revenge.',
+        id: 'phoenix_drive', name: 'Phoenix Aura', icon: 'PHX', rarity: 'epic', unlockLevel: 16,
+        desc: 'Permanente Hitze-Aura die nahe Gegner verbrennt.',
         tree: [
-            { name: 'Phoenix Drive',     tier: 'epic',      desc: 'On heart-loss, explode in a fire wave.' },
-            { name: 'Ash Bloom',         tier: 'epic',      desc: 'Fire wave leaves burning ground for 4s.' },
-            { name: 'Solar Halo',        tier: 'legendary', desc: 'Wave hits twice and grants 3s i-frames.' },
-            { name: 'Eternal Phoenix',   tier: 'legendary', desc: 'On lethal damage: revive once with full hearts (per run).' }
+            { name: 'Phoenix Aura',     tier: 'epic',      desc: 'Aura (90px) brennt Gegner fuer 22% DMG/s.' },
+            { name: 'Ash Bloom',        tier: 'epic',      desc: 'Aura (130px), 35% DMG/s, leichte Burn-DoT.' },
+            { name: 'Solar Halo',       tier: 'legendary', desc: 'Aura (180px), 55% DMG/s, +3s I-frames bei HP-Verlust.' },
+            { name: 'Eternal Phoenix',  tier: 'legendary', desc: 'Aura (240px), 90% DMG/s, einmal Revive pro Run.' }
         ]
     },
     {
         id: 'ion_round', name: 'Ion Round', icon: 'ION', rarity: 'epic', unlockLevel: 20,
-        desc: 'Every 5th volley charges a heavy ion shot.',
+        desc: 'Jeder 5. Schuss = schwerer Splash-Bolt (kein Chain).',
         tree: [
-            { name: 'Ion Round',     tier: 'epic',      desc: 'Every 5th volley fires a heavy ion shot.' },
-            { name: 'Plasma Round',  tier: 'epic',      desc: 'Ion shot splash radius +50%.' },
-            { name: 'Ion Cannon',    tier: 'legendary', desc: 'Ion shot becomes a piercing beam.' },
-            { name: 'Antimatter Bolt', tier: 'legendary', desc: 'Ion bolt vaporizes anything that isn\'t a boss.' }
+            { name: 'Ion Round',     tier: 'epic',      desc: 'Heavy splash bolt (180% DMG, 70px Splash).' },
+            { name: 'Plasma Round',  tier: 'epic',      desc: 'Splash 100px, 230% DMG, leichter Burn.' },
+            { name: 'Ion Cannon',    tier: 'legendary', desc: 'Splash 130px, 320% DMG, durchschlaegt Pierce.' },
+            { name: 'Antimatter Bolt', tier: 'legendary', desc: 'Splash 160px, vaporisiert nicht-Boss-Gegner.' }
         ]
     },
     {
@@ -193,12 +193,12 @@ const ABILITIES = [
     },
     {
         id: 'vampire', name: 'Vampir-Round', icon: 'VAM', rarity: 'rare', unlockLevel: 6,
-        desc: 'Heilt 2% des verursachten Schadens.',
+        desc: 'Heilt einen kleinen % des verursachten Schadens.',
         tree: [
-            { name: 'Vampir-Round',     tier: 'rare',      desc: 'Heilt 2% Lifesteal pro Treffer.' },
-            { name: 'Blut-Magnet',      tier: 'rare',      desc: 'Heilt 4% Lifesteal + Pickup-Range +20%.' },
-            { name: 'Lebens-Sauger',    tier: 'epic',      desc: 'Heilt 8% Lifesteal + chance auf Heart-Drop bei Kill.' },
-            { name: 'Eternal Bloodlust',tier: 'legendary', desc: 'Heilt 15% Lifesteal + jeder Boss heilt voll.' }
+            { name: 'Vampir-Round',     tier: 'rare',      desc: 'Heilt 1% Lifesteal pro Treffer.' },
+            { name: 'Blut-Magnet',      tier: 'rare',      desc: 'Heilt 2% Lifesteal + Pickup-Range +20%.' },
+            { name: 'Lebens-Sauger',    tier: 'epic',      desc: 'Heilt 4% Lifesteal + Chance auf Heart-Drop bei Kill.' },
+            { name: 'Eternal Bloodlust',tier: 'legendary', desc: 'Heilt 8% Lifesteal + Boss-Kill heilt voll.' }
         ]
     },
     {
@@ -287,8 +287,8 @@ const ABILITIES = [
         tree: [
             { name: 'Platzpatronen',    tier: 'rare',      desc: '5% Chance pro Schuss = clear nearby enemy bullets.' },
             { name: 'Static Wave',      tier: 'rare',      desc: '10% Blank-Chance + Pulse stoppt 0.3s Gegner-Schuss.' },
-            { name: 'Bullet Eraser',    tier: 'epic',      desc: '20% Blank-Chance, blank radius x2, drops gold.' },
-            { name: 'Nullification',    tier: 'legendary', desc: 'Permanente Blank-Aura. Gegner-Schuesse loeschen sich.' }
+            { name: 'Bullet Eraser',    tier: 'epic',      desc: '18% Blank-Chance, blank radius x2, drops gold.' },
+            { name: 'Nullification',    tier: 'legendary', desc: '30% Blank-Chance + groesserer Radius. Kein perma-Aura.' }
         ]
     },
     {
@@ -299,16 +299,6 @@ const ABILITIES = [
             { name: 'Phoenix-Geist',    tier: 'epic',      desc: 'Reset bei Vollheilung. 3s Invul + Burst.' },
             { name: 'Eternal Spirit',   tier: 'legendary', desc: 'Reset alle 60s. 5s Invul + heilt 2 HP.' },
             { name: 'Goettlicher Schild',tier: 'legendary',desc: '1 freier Schild pro Welle. Permanent.' }
-        ]
-    },
-    {
-        id: 'bloodlust', name: 'Blutrausch', icon: 'BLD', rarity: 'rare', unlockLevel: 9,
-        desc: 'Kills haben 25% Chance, dich um 1 HP zu heilen.',
-        tree: [
-            { name: 'Blutrausch',       tier: 'rare',      desc: '25% Heal-Chance pro Kill (max HP).' },
-            { name: 'Carnage',          tier: 'rare',      desc: '40% Heal-Chance + Kills geben +5% kurz Damage.' },
-            { name: 'Massaker',         tier: 'epic',      desc: '60% Chance, +1 HP per 5 kills garantiert.' },
-            { name: 'Apex Slaughter',   tier: 'legendary', desc: 'Jeder Kill = +0.5 HP (rundet, garantiert).' }
         ]
     },
     {
@@ -333,32 +323,32 @@ const ABILITIES = [
     },
     {
         id: 'saw_blade', name: 'Saege-Klinge', icon: 'SAW', rarity: 'rare', unlockLevel: 11,
-        desc: 'Eine rotierende Saege orbitiert um dein Schiff.',
+        desc: 'Wirft langsame Saege-Projektile die alles durchschneiden.',
         tree: [
-            { name: 'Saege-Klinge',     tier: 'rare',      desc: 'Saege rotiert um dich (Damage on contact).' },
-            { name: 'Doppelsaege',      tier: 'rare',      desc: '2 Saegen + 30% schneller + groesser.' },
-            { name: 'Buzz-Saw',         tier: 'epic',      desc: '3 Saegen, schicken Mini-Wellen aus.' },
-            { name: 'Death Saws',       tier: 'legendary', desc: '4 Riesensaegen + ziehen Gegner an.' }
+            { name: 'Saege-Klinge',     tier: 'rare',      desc: 'Alle 1.6s eine Saege (60% DMG, durchschlaegt alles, kann mehrfach treffen).' },
+            { name: 'Doppelsaege',      tier: 'rare',      desc: '2 Saegen pro Wurf, 80% DMG, alle 1.4s.' },
+            { name: 'Buzz-Saw',         tier: 'epic',      desc: '2 Saegen, 120% DMG, alle 1.1s + groesserer Radius.' },
+            { name: 'Death Saws',       tier: 'legendary', desc: '3 Riesen-Saegen, 180% DMG, alle 0.9s + Pull-Effekt.' }
         ]
     },
     {
         id: 'boomerang', name: 'Bumerang', icon: 'BMR', rarity: 'rare', unlockLevel: 8,
-        desc: 'Jeder 5. Schuss kommt zurueck und macht den Schaden nochmal.',
+        desc: 'Periodischer Bumerang mit grossem Bogenflug bis zur Wand.',
         tree: [
-            { name: 'Bumerang',         tier: 'rare',      desc: 'Jeder 5. Schuss returns mit 100% Damage.' },
-            { name: 'Twin Boomer',      tier: 'rare',      desc: 'Jeder 4. Schuss returns + spawnt Klon.' },
-            { name: 'Returning Storm',  tier: 'epic',      desc: 'Jeder 3. Schuss returns 3x mit +50% Damage.' },
-            { name: 'Eternal Return',   tier: 'legendary', desc: 'Alle Schuesse returns. Schuesse pendeln 5x.' }
+            { name: 'Bumerang',         tier: 'rare',      desc: 'Alle 2.5s ein Bumerang (140% DMG, fliegt grossen Bogen).' },
+            { name: 'Twin Boomer',      tier: 'rare',      desc: 'Alle 2.0s, +1 Bumerang (Doppel-Wurf).' },
+            { name: 'Returning Storm',  tier: 'epic',      desc: 'Alle 1.5s, 3 Bumerangs faecherfoermig.' },
+            { name: 'Eternal Return',   tier: 'legendary', desc: 'Alle 1.0s, 4 Bumerangs, +50% DMG, kuerzere Cooldowns.' }
         ]
     },
     {
         id: 'spread_volley', name: 'Streufeuer', icon: 'SPR', rarity: 'common', unlockLevel: 3,
-        desc: 'Volleys feuern in einem 15° Bogen.',
+        desc: '+1 Projektil und garantierter Mittel-Schuss + Spread.',
         tree: [
-            { name: 'Streufeuer',       tier: 'common',    desc: 'Volleys mit 15° Spread-Winkel.' },
-            { name: 'Schrotflinte',     tier: 'rare',      desc: '30° Spread, +1 Projektil.' },
-            { name: 'Buckshot',         tier: 'epic',      desc: '50° Spread, Schuesse machen 30% mehr Damage close-range.' },
-            { name: 'Death Cone',       tier: 'legendary', desc: '90° Spread, +3 Projektile, point-blank x4 dmg.' }
+            { name: 'Streufeuer',       tier: 'common',    desc: '+1 Projektil + zentraler Schuss bleibt gerade.' },
+            { name: 'Schrotflinte',     tier: 'rare',      desc: '+2 Projektile, breiterer Spread, Mittel-Schuss bleibt.' },
+            { name: 'Buckshot',         tier: 'epic',      desc: '+3 Projektile, +30% Close-Range Damage.' },
+            { name: 'Death Cone',       tier: 'legendary', desc: '+5 Projektile, 90° Spread, point-blank x4 Damage.' }
         ]
     },
     {
@@ -440,11 +430,28 @@ function getAbilityRankDef(ability, rank) {
     return ability.tree[idx];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ENEMY TYPES — original four PLUS nine new types that unlock at later levels.
+// Tank HP is significantly increased (10 → 38) so they actually feel like tanks.
+// `unlockLevel` is used by getLevelWaves() to gate enemies into later levels.
+// ─────────────────────────────────────────────────────────────────────────────
 const ENEMY_TYPES = {
-    drone: { hp: 5, spd: 1.55, r: 13, color: '#00f2ff', glow: '#00f2ff', exp: 1, ai: 'strafe' },
-    chaser: { hp: 8, spd: 1.95, r: 12, color: '#bc13fe', glow: '#bc13fe', exp: 2, ai: 'sprint' },
-    tank: { hp: 10, spd: 0.95, r: 20, color: '#ff9d00', glow: '#ff9d00', exp: 3, ai: 'heavy' },
-    boss: { hp: 26, spd: 1.08, r: 50, color: '#ff375f', glow: '#ff375f', exp: 10, ai: 'boss', isBoss: true }
+    // ── Original ──
+    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#00f2ff', glow: '#00f2ff', exp: 1, ai: 'strafe',  unlockLevel: 1 },
+    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#bc13fe', glow: '#bc13fe', exp: 2, ai: 'sprint',  unlockLevel: 4 },
+    tank:      { hp: 38, spd: 0.95, r: 20, color: '#ff9d00', glow: '#ff9d00', exp: 4, ai: 'heavy',   unlockLevel: 12 },
+    boss:      { hp: 26, spd: 1.08, r: 50, color: '#ff375f', glow: '#ff375f', exp: 10, ai: 'boss',   isBoss: true, unlockLevel: 1 },
+
+    // ── New enemy types (8-9), gated to later levels ──
+    swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#7be8ff', glow: '#7be8ff', exp: 1, ai: 'swarm',     unlockLevel: 1 },
+    brute:     { hp: 22, spd: 0.85, r: 17, color: '#ffaa00', glow: '#ffaa00', exp: 4, ai: 'brute',     unlockLevel: 8 },
+    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#ff5dad', glow: '#ff5dad', exp: 3, ai: 'sniper',    unlockLevel: 12 },
+    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#ff7035', glow: '#ff7035', exp: 4, ai: 'bomber',    unlockLevel: 15 },
+    healer:    { hp: 14, spd: 1.05, r: 14, color: '#34ffae', glow: '#34ffae', exp: 5, ai: 'healer',    unlockLevel: 18 },
+    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#5cc1ff', glow: '#5cc1ff', exp: 5, ai: 'shielder',  unlockLevel: 22, shieldHp: 30 },
+    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9f57ff', glow: '#9f57ff', exp: 5, ai: 'wraith',    unlockLevel: 26 },
+    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#ff5040', glow: '#ff5040', exp: 8, ai: 'crusher',   unlockLevel: 30 },
+    berserker: { hp: 16, spd: 1.20, r: 13, color: '#ff2030', glow: '#ff2030', exp: 6, ai: 'berserker', unlockLevel: 35 }
 };
 
 function getEnemyLevelStats(typeKey, level) {
@@ -527,37 +534,92 @@ function getLevelGoldReward(level) {
     return Math.round(6200 * Math.pow(1.115, level - 50));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LEVEL WAVES
+// Each wave is an array of spawn entries. Each entry now carries:
+//   { t: 'type', n: total count, batch: per-spawn count, interval: seconds }
+// → spawnWave() in game.js queues these so enemies trickle in instead of all
+//   appearing at once. Early waves are intentionally weak (a handful of swarmlings
+//   + drones); harder enemy types unlock the deeper you push.
+// ─────────────────────────────────────────────────────────────────────────────
 function getLevelWaves(level) {
     const waves = [];
     let count = 0;
 
-    if (level <= 4) count = 2;
-    else if (level <= 10) count = 3;
-    else if (level <= 18) count = 4;
-    else if (level <= 28) count = 5;
-    else if (level <= 40) count = 6;
+    // How many sub-waves per level — fewer in early levels, more later.
+    if (level <= 3) count = 2;
+    else if (level <= 7) count = 3;
+    else if (level <= 14) count = 4;
+    else if (level <= 22) count = 5;
+    else if (level <= 35) count = 6;
     else count = 7;
 
     for (let i = 0; i < count; i++) {
         const wave = [];
-        const difficulty = level + i;
 
-        if (difficulty < 4) {
-            wave.push({ t: 'drone', n: 7 + i * 2 });
-        } else if (difficulty < 9) {
-            wave.push({ t: 'drone', n: 8 + i * 2 });
-            wave.push({ t: 'chaser', n: 2 + i });
-        } else if (difficulty < 15) {
-            wave.push({ t: 'drone', n: 7 + i });
-            wave.push({ t: 'chaser', n: 4 + i });
-            wave.push({ t: 'tank', n: 1 + Math.floor((i + 1) / 2) });
+        // ── Tier-based wave composition ──
+        if (level <= 2) {
+            // Tutorial-soft: a tiny swarm, very forgiving.
+            wave.push({ t: 'swarmling', n: 4 + i * 2,   batch: 2, interval: 0.8 });
+            if (i > 0) wave.push({ t: 'drone', n: 2 + i, batch: 1, interval: 1.0 });
+        } else if (level <= 4) {
+            wave.push({ t: 'swarmling', n: 5 + i * 2,   batch: 2, interval: 0.7 });
+            wave.push({ t: 'drone',     n: 3 + i,       batch: 1, interval: 0.9 });
+        } else if (level <= 7) {
+            wave.push({ t: 'drone',     n: 6 + i * 2,   batch: 2, interval: 0.65 });
+            wave.push({ t: 'chaser',    n: 1 + i,       batch: 1, interval: 1.0  });
+        } else if (level <= 11) {
+            wave.push({ t: 'drone',     n: 6 + i,                 batch: 2, interval: 0.6 });
+            wave.push({ t: 'chaser',    n: 3 + i,                 batch: 1, interval: 0.85 });
+            wave.push({ t: 'brute',     n: 1 + Math.floor(i / 2), batch: 1, interval: 1.6 });
+        } else if (level <= 14) {
+            wave.push({ t: 'chaser',    n: 4 + i,                 batch: 2, interval: 0.6 });
+            wave.push({ t: 'brute',     n: 1 + Math.floor(i / 2), batch: 1, interval: 1.4 });
+            wave.push({ t: 'tank',      n: 1 + Math.floor(i / 3), batch: 1, interval: 1.8 });
+            if (level >= 12 && i >= 1) wave.push({ t: 'sniper', n: 1 + Math.floor(i / 2), batch: 1, interval: 1.0 });
+        } else if (level <= 17) {
+            wave.push({ t: 'chaser',    n: 5 + i,                 batch: 2, interval: 0.55 });
+            wave.push({ t: 'tank',      n: 1 + Math.floor(i / 2), batch: 1, interval: 1.5 });
+            wave.push({ t: 'sniper',    n: 2 + Math.floor(i / 2), batch: 1, interval: 0.95 });
+            wave.push({ t: 'bomber',    n: 1 + Math.floor(i / 3), batch: 1, interval: 1.2 });
+        } else if (level <= 21) {
+            wave.push({ t: 'chaser',    n: 5 + i,                 batch: 2, interval: 0.5 });
+            wave.push({ t: 'tank',      n: 1 + Math.floor(i / 2), batch: 1, interval: 1.4 });
+            wave.push({ t: 'sniper',    n: 2 + Math.floor(i / 2), batch: 1, interval: 0.9 });
+            wave.push({ t: 'bomber',    n: 1 + Math.floor(i / 2), batch: 1, interval: 1.1 });
+            wave.push({ t: 'healer',    n: 1 + Math.floor(i / 3), batch: 1, interval: 1.5 });
+        } else if (level <= 25) {
+            wave.push({ t: 'chaser',    n: 6 + i,                 batch: 2, interval: 0.45 });
+            wave.push({ t: 'brute',     n: 2 + Math.floor(i / 2), batch: 1, interval: 1.1 });
+            wave.push({ t: 'tank',      n: 2 + Math.floor(i / 2), batch: 1, interval: 1.3 });
+            wave.push({ t: 'shielder',  n: 1 + Math.floor(i / 3), batch: 1, interval: 1.4 });
+            wave.push({ t: 'healer',    n: 1,                     batch: 1, interval: 1.5 });
+        } else if (level <= 29) {
+            wave.push({ t: 'chaser',    n: 5 + i,                 batch: 2, interval: 0.4 });
+            wave.push({ t: 'tank',      n: 2 + Math.floor(i / 2), batch: 1, interval: 1.2 });
+            wave.push({ t: 'shielder',  n: 2 + Math.floor(i / 2), batch: 1, interval: 1.2 });
+            wave.push({ t: 'wraith',    n: 1 + Math.floor(i / 2), batch: 1, interval: 1.0 });
+            wave.push({ t: 'bomber',    n: 2,                     batch: 1, interval: 1.0 });
+        } else if (level <= 34) {
+            wave.push({ t: 'chaser',    n: 6 + i,                 batch: 2, interval: 0.4 });
+            wave.push({ t: 'tank',      n: 2 + Math.floor(i / 2), batch: 1, interval: 1.1 });
+            wave.push({ t: 'shielder',  n: 2,                     batch: 1, interval: 1.2 });
+            wave.push({ t: 'wraith',    n: 2 + Math.floor(i / 2), batch: 1, interval: 0.9 });
+            wave.push({ t: 'crusher',   n: 1 + Math.floor(i / 3), batch: 1, interval: 1.6 });
         } else {
-            wave.push({ t: 'chaser', n: 8 + i * 2 });
-            wave.push({ t: 'tank', n: 2 + Math.floor((i + 1) / 2) });
+            // Endgame: full mix.
+            wave.push({ t: 'chaser',    n: 7 + i,                 batch: 3, interval: 0.4  });
+            wave.push({ t: 'tank',      n: 2 + Math.floor(i / 2), batch: 1, interval: 1.1  });
+            wave.push({ t: 'shielder',  n: 2 + Math.floor(i / 2), batch: 1, interval: 1.2  });
+            wave.push({ t: 'wraith',    n: 2 + Math.floor(i / 2), batch: 1, interval: 0.9  });
+            wave.push({ t: 'crusher',   n: 1 + Math.floor(i / 2), batch: 1, interval: 1.5  });
+            wave.push({ t: 'berserker', n: 2 + Math.floor(i / 2), batch: 1, interval: 1.05 });
+            wave.push({ t: 'healer',    n: 1,                     batch: 1, interval: 1.5  });
         }
 
+        // Boss on the last sub-wave of every level.
         if (i === count - 1) {
-            wave.push({ t: 'boss', n: 1 });
+            wave.push({ t: 'boss', n: 1, batch: 1, interval: 0 });
         }
 
         waves.push(wave);

@@ -116,7 +116,46 @@ const I18N = {
         'milestone.unlockedAt': 'Unlocked from Lv',
         'milestone.lockedFrom': 'From Lv',
         'milestone.archiveAvailable': 'AVAILABLE NOW',
-        'pack.subtitle': 'Spin the reel and claim a permanent account card.'
+        'pack.subtitle': 'Spin the reel and claim a permanent account card.',
+        'hud.levelShort': 'LEVEL',
+        'hud.waveShort': 'WAVE',
+        'hud.zone': 'ZONE',
+        'hud.hitRush': 'HIT RUSH',
+        'hud.abilityXp': 'Ability XP',
+        'result.victory': 'VICTORY',
+        'result.defeated': 'DEFEATED',
+        'result.home': 'Home',
+        'result.skills': 'Skills',
+        'result.retry': 'Retry',
+        'result.nextFight': 'Next Fight',
+        'result.runEndless': 'Run Endless',
+        'result.winTitle': 'Level {n} Clear',
+        'result.winCopy': 'Rewards paid out. The next mission is live.',
+        'result.failTitle': 'Mission Failed',
+        'result.failCopy': 'One hit costs one full heart. Upgrade and push again.',
+        'result.endlessOver': 'Endless Run Over',
+        'result.endlessCopy': 'Endless is for pushing builds, not for farming money.',
+        'result.statGold': 'Gold Earned',
+        'result.statGems': 'Gems Earned',
+        'result.statNextMission': 'Next Mission',
+        'result.statMilestone': 'Milestone Bonus',
+        'result.statMission': 'Mission',
+        'result.statBestReach': 'Best Reach',
+        'result.statGoldBank': 'Gold Bank',
+        'result.statSkillsUsed': 'Skills Used',
+        'result.statWaves': 'Waves Survived',
+        'result.statScaled': 'Scaled Level',
+        'result.pack': 'Pack',
+        'result.leaderboardTitle': 'LEADERBOARD',
+        'result.before': 'BEFORE',
+        'result.after': 'AFTER',
+        'result.lbClimbed': 'Climbed {n} place(s) up the league.',
+        'result.lbDropped': 'Slipped {n} place(s) down the league.',
+        'result.lbHeld': 'Held your position in the league.',
+        'settings.leaveTitle': 'Leave Game',
+        'settings.leaveCopy': 'Quit the run and return to the home screen.',
+        'settings.dmgPopups': 'Damage Numbers',
+        'settings.dmgPopupsCopy': 'Show floating damage numbers when you hit enemies.'
     },
     de: {
         'hud.level': 'LEVEL 1',
@@ -203,9 +242,610 @@ const I18N = {
         'milestone.unlockedAt': 'Frei ab Lv',
         'milestone.lockedFrom': 'Ab Lv',
         'milestone.archiveAvailable': 'JETZT VERFÜGBAR',
-        'pack.subtitle': 'Lass die Walze drehen und sichere dir eine permanente Account-Karte.'
+        'pack.subtitle': 'Lass die Walze drehen und sichere dir eine permanente Account-Karte.',
+        'hud.levelShort': 'LEVEL',
+        'hud.waveShort': 'WELLE',
+        'hud.zone': 'ZONE',
+        'hud.hitRush': 'KILLRAUSCH',
+        'hud.abilityXp': 'Skill-XP',
+        'result.victory': 'SIEG',
+        'result.defeated': 'BESIEGT',
+        'result.home': 'Home',
+        'result.skills': 'Skills',
+        'result.retry': 'Erneut',
+        'result.nextFight': 'Nächster Kampf',
+        'result.runEndless': 'Endlos starten',
+        'result.winTitle': 'Level {n} geschafft',
+        'result.winCopy': 'Belohnungen ausgezahlt. Die nächste Mission steht.',
+        'result.failTitle': 'Mission gescheitert',
+        'result.failCopy': 'Ein Treffer kostet ein ganzes Herz. Upgrade und probier es nochmal.',
+        'result.endlessOver': 'Endlos-Run vorbei',
+        'result.endlessCopy': 'Endlos ist zum Builds-Pushen da, nicht zum Farmen.',
+        'result.statGold': 'Gold erhalten',
+        'result.statGems': 'Edelsteine erhalten',
+        'result.statNextMission': 'Nächste Mission',
+        'result.statMilestone': 'Meilenstein-Bonus',
+        'result.statMission': 'Mission',
+        'result.statBestReach': 'Beste Welle',
+        'result.statGoldBank': 'Gold-Konto',
+        'result.statSkillsUsed': 'Genutzte Skills',
+        'result.statWaves': 'Überlebte Wellen',
+        'result.statScaled': 'Skaliertes Level',
+        'result.pack': 'Pack',
+        'result.leaderboardTitle': 'RANGLISTE',
+        'result.before': 'VORHER',
+        'result.after': 'NACHHER',
+        'result.lbClimbed': '{n} Platz/Plätze aufgestiegen.',
+        'result.lbDropped': '{n} Platz/Plätze gefallen.',
+        'result.lbHeld': 'Position in der Liga gehalten.',
+        'settings.leaveTitle': 'Spiel verlassen',
+        'settings.leaveCopy': 'Run beenden und zum Hauptbildschirm zurückkehren.',
+        'settings.dmgPopups': 'Schadenszahlen',
+        'settings.dmgPopupsCopy': 'Zeige fliegende Schadenszahlen bei Treffern.'
     }
 };
+
+// === Bilingual skill table (auto-injected). Localised name + desc per skill
+// AND per tree rank, in en/de. Helper functions tSkill() / tSkillRank() return
+// the right object based on getLang(). ===
+const SKILL_I18N = {
+    damage_boost: {
+        en: { name: 'Damage Core', desc: '+18% base weapon damage with a subtle overcharge glow.', tree: [
+            { name: 'Damage Core',        desc: '+18% damage. Adds a subtle red overcharge glow to every shot.' },
+            { name: 'Power Cell',         desc: '+30% damage. Bullets leave a faint red trail so volleys read at a glance.' },
+            { name: 'Overcharge Reactor', desc: '+55% damage. Every 5th bullet is a guaranteed crit dealing 3x damage.' },
+            { name: 'Singularity Coil',   desc: 'Every bullet crits for 2x damage with a small impact flash on hit.' }
+        ]},
+        de: { name: 'Schadenskern', desc: '+18% Grundschaden mit dezentem Glüh-Effekt.', tree: [
+            { name: 'Schadenskern',         desc: '+18% Schaden. Schüsse leuchten leicht rot überladen.' },
+            { name: 'Energiezelle',         desc: '+30% Schaden. Schüsse hinterlassen eine schwache rote Spur.' },
+            { name: 'Überladener Reaktor',  desc: '+55% Schaden. Jeder 5. Schuss ist ein garantierter Crit (3x).' },
+            { name: 'Singularitäts-Spule',  desc: 'Jeder Schuss crittet für 2x Schaden mit kleinem Aufprall-Blitz.' }
+        ]}
+    },
+    rapid_fire: {
+        en: { name: 'Rapid Barrel', desc: '+22% fire rate so every volley fires noticeably faster.', tree: [
+            { name: 'Rapid Barrel',  desc: '+22% fire rate. Reloads feel snappier between volleys.' },
+            { name: 'Hyper Barrel',  desc: '+38% fire rate with a bigger, brighter muzzle flash.' },
+            { name: 'Auto-Loader',   desc: '+58% fire rate. Each kill grants a 0.5s frenzy buff (+30% extra fire rate).' },
+            { name: 'Minigun Mode',  desc: '2x fire rate. Bullets ricochet once off arena walls.' }
+        ]},
+        de: { name: 'Schnelles Rohr', desc: '+22% Feuerrate — jede Salve ist spürbar schneller.', tree: [
+            { name: 'Schnelles Rohr', desc: '+22% Feuerrate. Salven fühlen sich zackiger an.' },
+            { name: 'Hyper-Rohr',     desc: '+38% Feuerrate mit größerem, hellerem Mündungsblitz.' },
+            { name: 'Auto-Lader',     desc: '+58% Feuerrate. Jeder Kill löst 0.5s Frenzy aus (+30% Feuerrate).' },
+            { name: 'Minigun-Modus',  desc: '2x Feuerrate. Schüsse prallen einmal von Wänden ab.' }
+        ]}
+    },
+    multi: {
+        en: { name: 'Twin Volley', desc: '+1 extra projectile per volley so each shot covers more area.', tree: [
+            { name: 'Twin Volley',   desc: '+1 extra projectile per volley.' },
+            { name: 'Triple Tap',    desc: '+2 extra projectiles with a slight horizontal spread.' },
+            { name: 'Storm Volley',  desc: '+3 extra projectiles in an arc — feels like a shotgun blast.' },
+            { name: 'Pulsar Burst',  desc: 'Every 4th volley fires an additional 360° ring of bullets around you.' }
+        ]},
+        de: { name: 'Doppelsalve', desc: '+1 zusätzliches Projektil pro Salve — größerer Trefferbereich.', tree: [
+            { name: 'Doppelsalve',    desc: '+1 zusätzliches Projektil pro Salve.' },
+            { name: 'Dreifach-Schuss', desc: '+2 zusätzliche Projektile mit leichter Streuung.' },
+            { name: 'Sturmsalve',     desc: '+3 zusätzliche Projektile im Bogen — wirkt wie eine Schrotsalve.' },
+            { name: 'Pulsar-Burst',   desc: 'Jede 4. Salve feuert zusätzlich einen 360°-Ring um dich herum.' }
+        ]}
+    },
+    pierce: {
+        en: { name: 'Pierce Core', desc: 'Bullets pass through one extra enemy before stopping.', tree: [
+            { name: 'Pierce Core',  desc: 'Bullets pierce 1 extra enemy.' },
+            { name: 'Lance Round',  desc: 'Bullets pierce up to 3 enemies and gain +20% damage per pierce.' },
+            { name: 'Railgun Mode', desc: 'Bullets pierce ALL enemies and leave a glowing arc trail.' },
+            { name: 'Void Lance',   desc: 'Pierce all. 35% chance to mark a target — its next hit deals double damage.' }
+        ]},
+        de: { name: 'Durchschlag-Kern', desc: 'Schüsse durchdringen einen zusätzlichen Gegner.', tree: [
+            { name: 'Durchschlag-Kern', desc: 'Schüsse durchdringen +1 Gegner.' },
+            { name: 'Lanzen-Geschoss',   desc: 'Durchdringen +3 Gegner und +20% Schaden je Durchschlag.' },
+            { name: 'Railgun-Modus',     desc: 'Durchdringen alle Gegner mit leuchtender Spur.' },
+            { name: 'Leerlanze',         desc: 'Alle Gegner durchschlagen. 35% Markierung — nächster Treffer = doppelter Schaden.' }
+        ]}
+    },
+    orbiter: {
+        en: { name: 'Combat Drone', desc: 'A drone follows you and auto-fires at enemies for 30% of your damage.', tree: [
+            { name: 'Combat Drone',  desc: '1 drone auto-fires (30% damage). Dies on contact, respawns in 15s.' },
+            { name: 'Twin Drones',   desc: '2 drones with faster fire rate, 30% damage each.' },
+            { name: 'Drone Swarm',   desc: '4 drones giving full coverage all around your ship.' },
+            { name: 'Sentinel Halo', desc: '6 drones, +25% drone damage and respawn time cut to 8s.' }
+        ]},
+        de: { name: 'Kampfdrohne', desc: 'Eine Drohne begleitet dich und schießt automatisch (30% Schaden).', tree: [
+            { name: 'Kampfdrohne',     desc: '1 Drohne (30% Schaden). Stirbt bei Kontakt, respawnt in 15s.' },
+            { name: 'Zwillingsdrohnen', desc: '2 Drohnen mit höherer Feuerrate (je 30% Schaden).' },
+            { name: 'Drohnenschwarm',   desc: '4 Drohnen — volle Rundum-Abdeckung.' },
+            { name: 'Wächter-Halo',     desc: '6 Drohnen, +25% Drohnenschaden, Respawn nach 8s.' }
+        ]}
+    },
+    echo_shot: {
+        en: { name: 'Echo Shock', desc: 'Every 4th hit creates a shockwave at the impact point.', tree: [
+            { name: 'Echo Shock',    desc: 'Every 4th hit fires a shockwave (60% damage, 80px radius).' },
+            { name: 'Double Echo',   desc: 'Every 3rd hit fires a shockwave (90% damage, 100px radius).' },
+            { name: 'Resonance',     desc: 'Every 2nd hit fires a shockwave (120% damage, 130px radius).' },
+            { name: 'Phantom Salvo', desc: 'EVERY hit fires a small shockwave (50% damage, 110px radius).' }
+        ]},
+        de: { name: 'Echo-Schock', desc: 'Jeder 4. Treffer erzeugt eine Schockwelle.', tree: [
+            { name: 'Echo-Schock',     desc: 'Jeder 4. Treffer = Schockwelle (60% Schaden, 80px).' },
+            { name: 'Doppel-Echo',      desc: 'Jeder 3. Treffer = Schockwelle (90% Schaden, 100px).' },
+            { name: 'Resonanz',         desc: 'Jeder 2. Treffer = Schockwelle (120% Schaden, 130px).' },
+            { name: 'Phantom-Salve',    desc: 'JEDER Treffer = kleine Schockwelle (50% Schaden, 110px).' }
+        ]}
+    },
+    heal_heart: {
+        en: { name: 'Patch Heart', desc: 'Adds extra hearts that absorb hits before your real HP.', tree: [
+            { name: 'Patch Heart',    desc: '+1 extra heart. Lost first; does not regenerate during the run.' },
+            { name: 'Field Surgeon',  desc: '+2 extra hearts that soak hits before your real HP.' },
+            { name: 'Lifeline',       desc: '+3 extra hearts. Every 25 kills you regain one extra heart.' },
+            { name: 'Crimson Aegis',  desc: '+4 extra hearts. The first lethal hit per run is fully blocked.' }
+        ]},
+        de: { name: 'Flick-Herz', desc: 'Zusätzliche Herzen die Treffer vor der echten HP abfangen.', tree: [
+            { name: 'Flick-Herz',     desc: '+1 Extra-Herz. Wird zuerst zerstört, lädt im Run nicht nach.' },
+            { name: 'Feldsanitäter',   desc: '+2 Extra-Herzen die Treffer abfangen.' },
+            { name: 'Lebenslinie',     desc: '+3 Extra-Herzen. Alle 25 Kills bekommst du eines zurück.' },
+            { name: 'Karmesin-Ägis',   desc: '+4 Extra-Herzen. Erster tödlicher Treffer pro Run wird geblockt.' }
+        ]}
+    },
+    chain_lightning: {
+        en: { name: 'Chain Lightning', desc: 'Hits jump to nearby enemies as a lightning arc.', tree: [
+            { name: 'Chain Lightning', desc: 'Each hit chains to 1 nearby enemy.' },
+            { name: 'Storm Chain',     desc: 'Chains to 3 enemies with longer reach.' },
+            { name: 'Tesla Net',       desc: 'Chains to 6 enemies and briefly paralyses them.' },
+            { name: "Thor's Will",     desc: 'Every kill triggers a free chain to 4 nearby enemies.' }
+        ]},
+        de: { name: 'Kettenblitz', desc: 'Treffer springen als Blitz auf weitere Gegner.', tree: [
+            { name: 'Kettenblitz', desc: 'Jeder Treffer springt auf 1 nahen Gegner über.' },
+            { name: 'Sturmkette',  desc: 'Springt auf 3 Gegner mit größerer Reichweite.' },
+            { name: 'Tesla-Netz',  desc: 'Springt auf 6 Gegner und lähmt sie kurz.' },
+            { name: 'Thors Wille', desc: 'Jeder Kill löst Gratis-Blitz auf 4 nahe Gegner aus.' }
+        ]}
+    },
+    tornado_shot: {
+        en: { name: 'Tornado Shot', desc: 'Every 3rd volley fires homing tornado bullets.', tree: [
+            { name: 'Tornado Shot',     desc: 'Every 3rd volley fires tornado bullets that curve toward enemies.' },
+            { name: 'Cyclone Volley',   desc: 'Every 2nd volley is a tornado with double the radius.' },
+            { name: 'Maelstrom',        desc: 'Tornadoes pull enemies in and tick damage every 0.2s.' },
+            { name: 'Eye of the Storm', desc: 'A permanent tornado follows your aim and shreds anything close.' }
+        ]},
+        de: { name: 'Tornado-Schuss', desc: 'Jede 3. Salve feuert zielsuchende Tornados.', tree: [
+            { name: 'Tornado-Schuss',  desc: 'Jede 3. Salve feuert Tornados die auf Gegner zusteuern.' },
+            { name: 'Zyklon-Salve',    desc: 'Jede 2. Salve ist ein Tornado mit doppeltem Radius.' },
+            { name: 'Mahlstrom',       desc: 'Tornados ziehen Gegner an und ticken Schaden alle 0.2s.' },
+            { name: 'Auge des Sturms', desc: 'Permanenter Tornado folgt deinem Cursor und zerfetzt alles.' }
+        ]}
+    },
+    phoenix_drive: {
+        en: { name: 'Phoenix Aura', desc: 'A heat aura around you constantly burns nearby enemies.', tree: [
+            { name: 'Phoenix Aura',    desc: '90px aura that burns enemies for 22% damage per second.' },
+            { name: 'Ash Bloom',       desc: '130px aura, 35%/s burn, applies a small DoT on contact.' },
+            { name: 'Solar Halo',      desc: '180px aura, 55%/s burn, +3s invincibility on damage taken.' },
+            { name: 'Eternal Phoenix', desc: '240px aura, 90%/s burn. Revives you once per run.' }
+        ]},
+        de: { name: 'Phönix-Aura', desc: 'Hitze-Aura verbrennt nahe Gegner permanent.', tree: [
+            { name: 'Phönix-Aura',     desc: '90px Aura — 22% Schaden pro Sekunde.' },
+            { name: 'Aschenblüte',      desc: '130px Aura, 35%/s Burn, leichter DoT.' },
+            { name: 'Sonnen-Halo',      desc: '180px Aura, 55%/s Burn, 3s Unverwundbarkeit bei HP-Verlust.' },
+            { name: 'Ewiger Phönix',    desc: '240px Aura, 90%/s Burn, eine Wiederbelebung pro Run.' }
+        ]}
+    },
+    ion_round: {
+        en: { name: 'Ion Round', desc: 'Every 5th bullet becomes a heavy splash bolt.', tree: [
+            { name: 'Ion Round',       desc: 'Heavy splash bolt every 5 shots (180% damage, 70px splash).' },
+            { name: 'Plasma Round',    desc: '100px splash, 230% damage, applies a small burn.' },
+            { name: 'Ion Cannon',      desc: '130px splash, 320% damage, ignores pierce limits.' },
+            { name: 'Antimatter Bolt', desc: '160px splash. Vaporises any non-boss enemy on hit.' }
+        ]},
+        de: { name: 'Ionen-Geschoss', desc: 'Jeder 5. Schuss wird ein schwerer Splash-Bolzen.', tree: [
+            { name: 'Ionen-Geschoss',   desc: 'Schwerer Splash alle 5 Schüsse (180% Schaden, 70px).' },
+            { name: 'Plasma-Geschoss',  desc: '100px Splash, 230% Schaden, leichter Burn.' },
+            { name: 'Ionenkanone',      desc: '130px Splash, 320% Schaden, ignoriert Durchschlag-Limits.' },
+            { name: 'Antimaterie-Bolzen', desc: '160px Splash. Verdampft Nicht-Boss-Gegner sofort.' }
+        ]}
+    },
+    shock_nova: {
+        en: { name: 'Shock Nova', desc: 'Every 12 kills release a damaging lightning ring around you.', tree: [
+            { name: 'Shock Nova',    desc: 'Every 12 kills releases a lightning ring around you.' },
+            { name: 'Pulse Nova',    desc: 'Triggers every 8 kills and the ring is bigger.' },
+            { name: 'Chain Nova',    desc: 'Each nova spawns 6 chain bolts to random enemies.' },
+            { name: 'Eternal Storm', desc: 'Nova every 4 kills + permanent shock aura around you.' }
+        ]},
+        de: { name: 'Schock-Nova', desc: 'Alle 12 Kills entfesselt sich ein Blitz-Ring um dich.', tree: [
+            { name: 'Schock-Nova', desc: 'Alle 12 Kills = ein Blitz-Ring um dich.' },
+            { name: 'Puls-Nova',   desc: 'Auslöser alle 8 Kills, Ring ist größer.' },
+            { name: 'Ketten-Nova', desc: 'Jede Nova entfesselt 6 Ketten-Blitze.' },
+            { name: 'Ewiger Sturm', desc: 'Nova alle 4 Kills + dauerhafte Schock-Aura.' }
+        ]}
+    },
+    singularity: {
+        en: { name: 'Singularity', desc: 'Every 8th volley creates a brief gravity well that pulls enemies in.', tree: [
+            { name: 'Singularity',    desc: 'Every 8th volley creates a brief pull field.' },
+            { name: 'Black Pull',     desc: 'Pull field lasts longer and ticks small damage while active.' },
+            { name: 'Void Implosion', desc: 'After the pull ends, the field implodes for huge damage.' },
+            { name: 'Event Horizon',  desc: 'A permanent micro-singularity orbits your ship.' }
+        ]},
+        de: { name: 'Singularität', desc: 'Jede 8. Salve erzeugt ein Schwerkraft-Feld das Gegner anzieht.', tree: [
+            { name: 'Singularität',    desc: 'Jede 8. Salve erzeugt ein kurzes Anzieh-Feld.' },
+            { name: 'Schwarzer Sog',    desc: 'Anzieh-Feld hält länger und tickt leichten Schaden.' },
+            { name: 'Leeren-Implosion', desc: 'Nach dem Sog implodiert das Feld mit massivem Schaden.' },
+            { name: 'Ereignishorizont', desc: 'Permanente Mikro-Singularität umkreist dein Schiff.' }
+        ]}
+    },
+    cluster_bomb: {
+        en: { name: 'Mini Bomb', desc: 'Every 10th shot fires a small bomb (300% AOE damage).', tree: [
+            { name: 'Mini Bomb',         desc: 'Every 10th shot fires a small bomb (300% damage).' },
+            { name: 'Double Bomb',       desc: 'Bomb every 7 shots with a 50% bigger blast radius.' },
+            { name: 'Cluster Bomb',      desc: 'Bomb splits into 5 sub-bombs on impact for chain explosions.' },
+            { name: 'Cluster Detonation', desc: 'Bomb splits twice — massive cascading chain explosion.' }
+        ]},
+        de: { name: 'Mini-Bombe', desc: 'Jeder 10. Schuss feuert eine kleine Bombe (300% AOE).', tree: [
+            { name: 'Mini-Bombe',        desc: 'Jeder 10. Schuss = kleine Bombe (300% Schaden).' },
+            { name: 'Doppelbombe',       desc: 'Bombe alle 7 Schüsse, +50% größerer Radius.' },
+            { name: 'Streubombe',        desc: 'Bombe spaltet beim Aufprall in 5 Sub-Bomben.' },
+            { name: 'Cluster-Detonation', desc: 'Bombe spaltet sich 2x — massive Kettenexplosion.' }
+        ]}
+    },
+    ricochet: {
+        en: { name: 'Ricochet Round', desc: 'Bullets bounce off walls once before stopping.', tree: [
+            { name: 'Ricochet Round',  desc: 'Bullets bounce off walls 1 time.' },
+            { name: 'Twin Ricochet',   desc: 'Bullets bounce 2 times and gain +20% damage per bounce.' },
+            { name: 'Pinball Master',  desc: 'Bullets bounce 4 times and home in on enemies after each bounce.' },
+            { name: 'Infinite Bounce', desc: 'Bullets bounce forever until they hit something.' }
+        ]},
+        de: { name: 'Querschläger', desc: 'Schüsse prallen einmal von Wänden ab.', tree: [
+            { name: 'Querschläger',      desc: 'Schüsse prallen 1x ab.' },
+            { name: 'Doppel-Querschläger', desc: 'Schüsse prallen 2x ab, +20% Schaden je Abpraller.' },
+            { name: 'Pinball-Meister',    desc: 'Schüsse prallen 4x ab und suchen Gegner nach jedem Abpraller.' },
+            { name: 'Unendlich Abpraller', desc: 'Schüsse prallen unendlich oft ab bis sie etwas treffen.' }
+        ]}
+    },
+    vampire: {
+        en: { name: 'Vampire Round', desc: 'Heal a small percentage of the damage you deal.', tree: [
+            { name: 'Vampire Round', desc: 'Heal 1% of damage dealt as life-steal.' },
+            { name: 'Blood Magnet',  desc: 'Heal 2% as life-steal and pickup range +20%.' },
+            { name: 'Life Drinker',  desc: 'Heal 4% life-steal. Kills sometimes drop a heart pickup.' },
+            { name: 'Eternal Bloodlust', desc: 'Heal 8% life-steal. Boss kills fully heal you.' }
+        ]},
+        de: { name: 'Vampir-Geschoss', desc: 'Heilt einen kleinen Anteil des verursachten Schadens.', tree: [
+            { name: 'Vampir-Geschoss', desc: 'Heilt 1% Lebensraub pro Treffer.' },
+            { name: 'Blut-Magnet',     desc: 'Heilt 2% Lebensraub + 20% mehr Aufsammel-Reichweite.' },
+            { name: 'Lebenstrinker',    desc: 'Heilt 4% Lebensraub. Kills lassen manchmal ein Herz fallen.' },
+            { name: 'Ewiger Blutrausch', desc: 'Heilt 8% Lebensraub. Boss-Kills heilen voll.' }
+        ]}
+    },
+    frost_shot: {
+        en: { name: 'Frost Shot', desc: 'Hits slow enemies down briefly.', tree: [
+            { name: 'Frost Shot',     desc: 'Hits slow enemies by 25% for 1.5s.' },
+            { name: 'Ice Shard',      desc: 'Slow 40% + 5% frostbite damage-over-time.' },
+            { name: 'Deep Freeze',    desc: 'Slow 60% + 15% chance to freeze enemies in place.' },
+            { name: 'Absolute Zero',  desc: 'Frozen enemies shatter explosively when killed.' }
+        ]},
+        de: { name: 'Frost-Geschoss', desc: 'Treffer verlangsamen Gegner kurz.', tree: [
+            { name: 'Frost-Geschoss', desc: 'Treffer verlangsamen Gegner um 25% für 1.5s.' },
+            { name: 'Eis-Splitter',    desc: 'Verlangsamung 40% + 5% Frostbiss-DoT.' },
+            { name: 'Tiefkühl',         desc: 'Verlangsamung 60% + 15% Chance auf Einfrieren.' },
+            { name: 'Absoluter Nullpunkt', desc: 'Eingefrorene Gegner zerschmettern explosiv beim Tod.' }
+        ]}
+    },
+    poison_dart: {
+        en: { name: 'Poison Dart', desc: 'Hits poison enemies, dealing extra damage over time.', tree: [
+            { name: 'Poison Dart',     desc: 'Hits apply poison: 8% of attack damage over 3s.' },
+            { name: 'Toxin',           desc: 'Poison ticks 12% over 4s and spreads to nearby enemies.' },
+            { name: 'Acid Cloud',      desc: 'Poisoned enemies explode into an acid cloud on death.' },
+            { name: 'Plague Carrier',  desc: 'Poison jumps between enemies like a viral infection.' }
+        ]},
+        de: { name: 'Gift-Pfeil', desc: 'Treffer vergiften Gegner mit Schaden über Zeit.', tree: [
+            { name: 'Gift-Pfeil', desc: 'Treffer vergiften: 8% des Angriffsschadens über 3s.' },
+            { name: 'Toxin',      desc: 'Gift tickt 12% über 4s und breitet sich auf nahe Gegner aus.' },
+            { name: 'Säurewolke',  desc: 'Vergiftete Gegner explodieren beim Tod in eine Säurewolke.' },
+            { name: 'Seuchenträger', desc: 'Gift springt zwischen Gegnern wie ein Virus.' }
+        ]}
+    },
+    bullet_storm: {
+        en: { name: 'Frenzy Mode', desc: 'Each kill stacks fire rate. Stacks decay after 2 idle seconds.', tree: [
+            { name: 'Frenzy Mode',   desc: '+3% fire rate per kill (cap +30%). Decays after 2s without a kill.' },
+            { name: 'Killing Spree', desc: 'Cap raised to +50%, also +10% damage at full stacks.' },
+            { name: 'Berserker',     desc: 'Cap raised to +80% and you become immune to slow effects.' },
+            { name: 'Eternal Storm', desc: 'Stacks no longer decay. Permanent frenzy build-up.' }
+        ]},
+        de: { name: 'Frenzy-Modus', desc: 'Jeder Kill stackt Feuerrate. Stacks zerfallen nach 2s untätig.', tree: [
+            { name: 'Frenzy-Modus', desc: '+3% Feuerrate pro Kill (Cap +30%). Zerfällt nach 2s.' },
+            { name: 'Kill-Rausch',   desc: 'Cap erhöht auf +50% und +10% Schaden bei vollen Stacks.' },
+            { name: 'Berserker',     desc: 'Cap erhöht auf +80% und Immunität gegen Verlangsamung.' },
+            { name: 'Ewiger Sturm',   desc: 'Stacks zerfallen nicht mehr. Permanenter Aufbau.' }
+        ]}
+    },
+    lucky_seven: {
+        en: { name: 'Lucky Seven', desc: 'Every 7th shot deals 5x damage.', tree: [
+            { name: 'Lucky Seven',  desc: 'Every 7th shot deals 5x damage.' },
+            { name: 'Seven Stars',  desc: 'Every 7th shot deals 8x damage with a sparkle effect.' },
+            { name: 'Jackpot',      desc: 'Every 5th shot deals 10x damage and heals 1 HP if it kills.' },
+            { name: 'Royal Flush',  desc: 'Every 4th shot deals 15x damage. Small chance for a 30x mega-crit.' }
+        ]},
+        de: { name: 'Glückszahl', desc: 'Jeder 7. Schuss = 5-facher Schaden.', tree: [
+            { name: 'Glückszahl', desc: 'Jeder 7. Schuss = 5x Schaden.' },
+            { name: 'Sieben Sterne', desc: 'Jeder 7. Schuss = 8x Schaden mit Glanz-Effekt.' },
+            { name: 'Jackpot',     desc: 'Jeder 5. Schuss = 10x Schaden und heilt 1 HP bei Kill.' },
+            { name: 'Royal Flush', desc: 'Jeder 4. Schuss = 15x Schaden. Chance auf 30x Mega-Crit.' }
+        ]}
+    },
+    crit_chance: {
+        en: { name: 'Precision Core', desc: 'Shots have a 15% chance to crit for 2x damage.', tree: [
+            { name: 'Precision Core', desc: '15% crit chance for 2x damage.' },
+            { name: 'Headhunter',     desc: '25% crit chance for 2.5x damage.' },
+            { name: 'Lethal Edge',    desc: '40% crit chance. Crits gain +1 pierce.' },
+            { name: 'Deadeye',        desc: '60% crit chance. Crits deal 4x damage.' }
+        ]},
+        de: { name: 'Präzisions-Kern', desc: 'Schüsse haben 15% Crit-Chance (2x Schaden).', tree: [
+            { name: 'Präzisions-Kern', desc: '15% Crit-Chance für 2x Schaden.' },
+            { name: 'Kopfgeldjäger',    desc: '25% Crit-Chance für 2.5x Schaden.' },
+            { name: 'Tödliche Schneide', desc: '40% Crit-Chance. Crits = +1 Durchschlag.' },
+            { name: 'Adlerauge',         desc: '60% Crit-Chance. Crits = 4x Schaden.' }
+        ]}
+    },
+    glass_cannon: {
+        en: { name: 'Glass Cannon', desc: '+60% damage but you have 1 less max HP. High-risk build.', tree: [
+            { name: 'Glass Cannon',  desc: '+60% damage, but -1 max HP.' },
+            { name: 'Brittle Edge',  desc: '+90% damage, -1 max HP, +30% fire rate.' },
+            { name: 'Last Stand',    desc: '+150% damage at 1 HP. Survive one lethal hit per run.' },
+            { name: 'Suicide Pact',  desc: '3x damage, but you only have 2 HP total. Heals cost half.' }
+        ]},
+        de: { name: 'Glaskanone', desc: '+60% Schaden, dafür -1 max HP. High-Risk-Build.', tree: [
+            { name: 'Glaskanone',   desc: '+60% Schaden, aber -1 max HP.' },
+            { name: 'Brüchige Schneide', desc: '+90% Schaden, -1 max HP, +30% Feuerrate.' },
+            { name: 'Letztes Gefecht', desc: '+150% Schaden bei 1 HP. Überlebe 1 tödlichen Treffer.' },
+            { name: 'Selbstmord-Pakt', desc: '3x Schaden, nur 2 HP gesamt. Heals kosten halb.' }
+        ]}
+    },
+    lich_bullets: {
+        en: { name: 'Lich Eye', desc: 'Bullets split into 3 sub-bullets after 0.4s of flight.', tree: [
+            { name: 'Lich Eye',       desc: 'Bullets split after 0.4s into 3 sub-bullets.' },
+            { name: 'Double Lich',    desc: 'Sub-bullets split again into 2 each (3 -> 6 bullets).' },
+            { name: 'Hex Multiplier', desc: 'Triple split, and each sub-bullet has 30% crit chance.' },
+            { name: 'Eye of the Dead', desc: 'All bullets simultaneously gain every split-related synergy.' }
+        ]},
+        de: { name: 'Lich-Auge', desc: 'Schüsse spalten sich nach 0.4s in 3 Sub-Schüsse.', tree: [
+            { name: 'Lich-Auge',      desc: 'Schüsse spalten nach 0.4s in 3 Sub-Schüsse.' },
+            { name: 'Doppel-Lich',    desc: 'Sub-Schüsse spalten erneut in je 2 (3 -> 6).' },
+            { name: 'Hex-Multiplikator', desc: 'Dreifach-Split + 30% Crit-Chance pro Sub-Schuss.' },
+            { name: 'Auge des Toten',   desc: 'Alle Schüsse erhalten jede Split-Synergie gleichzeitig.' }
+        ]}
+    },
+    platinum_rounds: {
+        en: { name: 'Platinum Rounds', desc: 'Hits permanently increase your damage by a tiny amount, capped.', tree: [
+            { name: 'Platinum Rounds', desc: '+0.05% permanent damage per hit (cap +30%).' },
+            { name: 'Gold Splinter',   desc: '+0.08% per hit (cap +50%) plus a small fire rate cap.' },
+            { name: 'Iridium Core',    desc: '+0.12% damage and +0.05% fire rate per hit (cap +80%).' },
+            { name: 'Singular Hit',    desc: 'Every 100th hit gives a permanent +1% damage. No cap.' }
+        ]},
+        de: { name: 'Platin-Kugeln', desc: 'Treffer erhöhen permanent deinen Schaden minimal.', tree: [
+            { name: 'Platin-Kugeln',  desc: '+0.05% permanenter Schaden pro Treffer (Cap +30%).' },
+            { name: 'Goldsplitter',    desc: '+0.08% pro Treffer (Cap +50%), kleiner Feuerraten-Cap.' },
+            { name: 'Iridium-Kern',    desc: '+0.12% Schaden und +0.05% Feuerrate pro Treffer (Cap +80%).' },
+            { name: 'Singulärer Treffer', desc: 'Jeder 100. Treffer = permanent +1% Schaden. Kein Cap.' }
+        ]}
+    },
+    blank_burst: {
+        en: { name: 'Blank Burst', desc: 'Shots have a 5% chance to erase nearby enemy bullets.', tree: [
+            { name: 'Blank Burst',   desc: '5% chance per shot to clear nearby enemy bullets.' },
+            { name: 'Static Wave',   desc: '10% blank chance plus a 0.3s pause on enemy fire.' },
+            { name: 'Bullet Eraser', desc: '18% blank chance, doubled radius, drops a small gold pickup.' },
+            { name: 'Nullification', desc: '30% blank chance with a much larger clear radius.' }
+        ]},
+        de: { name: 'Platzpatronen', desc: 'Schüsse können nahe Gegner-Geschosse löschen.', tree: [
+            { name: 'Platzpatronen',  desc: '5% Chance pro Schuss = nahe Gegner-Geschosse gelöscht.' },
+            { name: 'Statische Welle', desc: '10% Blank-Chance + Gegner-Feuer pausiert 0.3s.' },
+            { name: 'Geschoss-Löscher', desc: '18% Blank-Chance, doppelter Radius, kleines Gold-Pickup.' },
+            { name: 'Nullifizierung',   desc: '30% Blank-Chance mit deutlich größerem Lösch-Radius.' }
+        ]}
+    },
+    strong_spirit: {
+        en: { name: 'Strong Spirit', desc: 'Survive one lethal hit per run with 1 HP and brief invincibility.', tree: [
+            { name: 'Strong Spirit',  desc: 'Survive 1 lethal hit per run with 1 HP. 2s invincibility after.' },
+            { name: 'Phoenix Spirit', desc: 'Resets when you fully heal. 3s invincibility plus a damage burst.' },
+            { name: 'Eternal Spirit', desc: 'Resets every 60s. 5s invincibility and heals 2 HP on trigger.' },
+            { name: 'Divine Shield',  desc: '1 free shield at the start of every wave. Permanent.' }
+        ]},
+        de: { name: 'Starker Geist', desc: 'Überlebe einen tödlichen Treffer pro Run mit 1 HP.', tree: [
+            { name: 'Starker Geist',  desc: 'Überlebe 1 tödlichen Treffer pro Run mit 1 HP. 2s unverwundbar.' },
+            { name: 'Phönix-Geist',    desc: 'Reset bei Vollheilung. 3s unverwundbar + Schadens-Burst.' },
+            { name: 'Ewiger Geist',     desc: 'Reset alle 60s. 5s unverwundbar + heilt 2 HP.' },
+            { name: 'Göttlicher Schild', desc: '1 freier Schild zu Wellen-Start. Permanent.' }
+        ]}
+    },
+    trigger_fingers: {
+        en: { name: 'Trigger Fingers', desc: 'Each kill briefly speeds up your fire rate.', tree: [
+            { name: 'Trigger Fingers', desc: 'Kills give +0.5% fire rate (cap +20%).' },
+            { name: 'Quick Hands',     desc: 'Kills give +1% (cap +35%) plus +5% damage bonus.' },
+            { name: 'Fast Forward',    desc: 'Kills give +2% (cap +60%). Boss kills fully reset the cap.' },
+            { name: 'Time Warp',       desc: 'Cap removed. Kills add +0.1% permanently for the run.' }
+        ]},
+        de: { name: 'Schnelle Finger', desc: 'Jeder Kill beschleunigt deine Feuerrate kurz.', tree: [
+            { name: 'Schnelle Finger', desc: 'Kills geben +0.5% Feuerrate (Cap +20%).' },
+            { name: 'Flinke Hände',     desc: 'Kills geben +1% (Cap +35%) + 5% Schaden.' },
+            { name: 'Vorspulen',         desc: 'Kills geben +2% (Cap +60%). Boss-Kills setzen Cap zurück.' },
+            { name: 'Zeit-Verzerrung',   desc: 'Cap entfällt. Kills geben permanent +0.1% für den Run.' }
+        ]}
+    },
+    scarier_face: {
+        en: { name: 'Scary Face', desc: 'All enemies spawn with 20% less max HP — they die faster.', tree: [
+            { name: 'Scary Face',    desc: 'Enemies spawn with -20% max HP.' },
+            { name: 'Nightmare Fuel', desc: 'Enemies have -30% HP and 10% chance to flee instead of attacking.' },
+            { name: 'Total Eclipse', desc: 'Enemies -45% HP. Bosses also lose 25% max HP.' },
+            { name: 'Grim Reaper',   desc: 'Enemies under 30% HP die instantly.' }
+        ]},
+        de: { name: 'Gruselige Fratze', desc: 'Alle Gegner spawnen mit 20% weniger max HP.', tree: [
+            { name: 'Gruselige Fratze', desc: 'Gegner spawnen mit -20% max HP.' },
+            { name: 'Albtraum-Treibstoff', desc: 'Gegner -30% HP + 10% Chance dass sie fliehen.' },
+            { name: 'Totale Sonnenfinsternis', desc: 'Gegner -45% HP. Bosse verlieren 25% max HP.' },
+            { name: 'Sensenmann',         desc: 'Gegner unter 30% HP sterben sofort.' }
+        ]}
+    },
+    saw_blade: {
+        en: { name: 'Saw Blade', desc: 'Throws slow saw projectiles that pierce through everything.', tree: [
+            { name: 'Saw Blade',   desc: 'Throws a saw every 1.6s (60% damage, pierces all, hits multiple times).' },
+            { name: 'Twin Saws',   desc: '2 saws per throw, 80% damage, every 1.4s.' },
+            { name: 'Buzz Saw',    desc: '2 saws, 120% damage, every 1.1s, with a bigger saw radius.' },
+            { name: 'Death Saws',  desc: '3 giant saws, 180% damage, every 0.9s, slight pull effect.' }
+        ]},
+        de: { name: 'Sägeklinge', desc: 'Wirft langsame Sägen die alles durchschneiden.', tree: [
+            { name: 'Sägeklinge', desc: 'Wirft alle 1.6s eine Säge (60% Schaden, durchschlägt alles).' },
+            { name: 'Doppelsäge',  desc: '2 Sägen pro Wurf, 80% Schaden, alle 1.4s.' },
+            { name: 'Buzz-Säge',   desc: '2 Sägen, 120% Schaden, alle 1.1s, größerer Radius.' },
+            { name: 'Todes-Sägen', desc: '3 Riesen-Sägen, 180% Schaden, alle 0.9s, leichter Sog.' }
+        ]}
+    },
+    boomerang: {
+        en: { name: 'Boomerang', desc: 'Periodically throws a boomerang that arcs out and returns.', tree: [
+            { name: 'Boomerang',       desc: 'Throws a boomerang every 2.5s (140% damage, large arc back to you).' },
+            { name: 'Twin Boomer',     desc: 'Every 2.0s, +1 boomerang (double throw).' },
+            { name: 'Returning Storm', desc: 'Every 1.5s, 3 boomerangs in a fan pattern.' },
+            { name: 'Eternal Return',  desc: 'Every 1.0s, 4 boomerangs at +50% damage.' }
+        ]},
+        de: { name: 'Bumerang', desc: 'Wirft regelmäßig einen Bumerang im großen Bogen.', tree: [
+            { name: 'Bumerang',         desc: 'Wirft alle 2.5s einen Bumerang (140% Schaden, großer Bogen).' },
+            { name: 'Zwillings-Bumerang', desc: 'Alle 2.0s, +1 Bumerang (Doppel-Wurf).' },
+            { name: 'Wiederkehrender Sturm', desc: 'Alle 1.5s, 3 Bumerangs fächerförmig.' },
+            { name: 'Ewige Wiederkehr',   desc: 'Alle 1.0s, 4 Bumerangs mit +50% Schaden.' }
+        ]}
+    },
+    spread_volley: {
+        en: { name: 'Spread Fire', desc: '+1 projectile with a guaranteed straight middle shot plus spread.', tree: [
+            { name: 'Spread Fire',  desc: '+1 projectile and the centre shot stays straight.' },
+            { name: 'Shotgun',      desc: '+2 projectiles, wider spread, centre shot stays straight.' },
+            { name: 'Buckshot',     desc: '+3 projectiles plus +30% damage at close range.' },
+            { name: 'Death Cone',   desc: '+5 projectiles in a 90° spread, point-blank shots deal 4x damage.' }
+        ]},
+        de: { name: 'Streufeuer', desc: '+1 Projektil mit gerade fliegendem Mittel-Schuss + Streuung.', tree: [
+            { name: 'Streufeuer', desc: '+1 Projektil und der zentrale Schuss bleibt gerade.' },
+            { name: 'Schrotflinte', desc: '+2 Projektile, breitere Streuung, Mittel-Schuss bleibt gerade.' },
+            { name: 'Buckshot',    desc: '+3 Projektile + 30% Schaden auf Nahdistanz.' },
+            { name: 'Todes-Kegel',  desc: '+5 Projektile, 90° Streuung, Nahschüsse machen 4x Schaden.' }
+        ]}
+    },
+    crit_bomb: {
+        en: { name: 'Crit Explosion', desc: 'Crits explode in a small AOE around the target.', tree: [
+            { name: 'Crit Explosion', desc: 'Crits cause a small AOE explosion (60% splash damage).' },
+            { name: 'Cluster Crit',   desc: 'Crits split with 80% splash and a bigger blast radius.' },
+            { name: 'Nuclear Crit',   desc: 'Crits = 1.5x damage splash plus a stunning shockwave.' },
+            { name: 'Atom Smash',     desc: 'Crits instantly kill all enemies within 100px.' }
+        ]},
+        de: { name: 'Crit-Explosion', desc: 'Crits explodieren in einem kleinen AOE um das Ziel.', tree: [
+            { name: 'Crit-Explosion', desc: 'Crits = kleine AOE-Explosion (60% Splash).' },
+            { name: 'Cluster-Crit',   desc: 'Crits spalten mit 80% Splash und größerem Radius.' },
+            { name: 'Nuklearer Crit',  desc: 'Crits = 1.5x Splash-Schaden plus Stun-Schockwelle.' },
+            { name: 'Atom-Schlag',     desc: 'Crits töten sofort alle Gegner im 100px Radius.' }
+        ]}
+    },
+    phantom_shield: {
+        en: { name: 'Phantom Shield', desc: 'Every 8s the next hit you take is blocked for free.', tree: [
+            { name: 'Phantom Shield', desc: 'Block 1 hit every 8s (visualised as a glowing ring).' },
+            { name: 'Double Shield',  desc: 'Block 1 hit every 6s, plus 1 extra charge at wave start.' },
+            { name: 'Aegis Shield',   desc: 'Block 1 hit every 4s. The block reflects a counter-shot.' },
+            { name: 'Divine Aura',    desc: 'Block 1 hit every 2s. Each block also heals you.' }
+        ]},
+        de: { name: 'Phantom-Schild', desc: 'Alle 8s wird der nächste Treffer kostenlos geblockt.', tree: [
+            { name: 'Phantom-Schild', desc: 'Blockt 1 Treffer alle 8s (leuchtender Ring sichtbar).' },
+            { name: 'Doppel-Schild',  desc: 'Blockt alle 6s + 1 zusätzliche Ladung bei Wellen-Start.' },
+            { name: 'Ägis-Schild',     desc: 'Blockt alle 4s. Der Block reflektiert einen Konter-Schuss.' },
+            { name: 'Göttliche Aura',   desc: 'Blockt alle 2s. Jeder Block heilt dich zusätzlich.' }
+        ]}
+    },
+    arc_pulse: {
+        en: { name: 'Arc Pulse', desc: 'Every 6th hit zaps 3 nearby enemies with an energy pulse.', tree: [
+            { name: 'Arc Pulse',        desc: 'Every 6th hit pulses to 3 nearby enemies.' },
+            { name: 'Static Field',     desc: 'Pulse every 4 hits, briefly paralysing nearby enemies.' },
+            { name: 'Magnetic Storm',   desc: 'Pulse every 2 hits, hits 6 enemies.' },
+            { name: 'Particle Cascade', desc: 'Every hit pulses to 8 nearby enemies.' }
+        ]},
+        de: { name: 'Arc-Puls', desc: 'Jeder 6. Treffer entfacht einen Energie-Puls auf 3 Gegner.', tree: [
+            { name: 'Arc-Puls',         desc: 'Jeder 6. Treffer = Puls auf 3 nahe Gegner.' },
+            { name: 'Statisches Feld',   desc: 'Puls alle 4 Treffer, lähmt nahe Gegner kurz.' },
+            { name: 'Magnetischer Sturm', desc: 'Puls alle 2 Treffer, trifft 6 Gegner.' },
+            { name: 'Partikel-Kaskade',   desc: 'Jeder Treffer pulst auf 8 nahe Gegner.' }
+        ]}
+    },
+    heat_seeker: {
+        en: { name: 'Heatseeker', desc: 'Bullets weakly home in on the closest enemy.', tree: [
+            { name: 'Heatseeker',      desc: 'Bullets gently curve toward the closest enemy.' },
+            { name: 'Lock-On',         desc: 'Stronger homing plus +15% damage versus locked targets.' },
+            { name: 'Heat Vector',     desc: 'Hard homing — bullets can turn up to 90° mid-flight.' },
+            { name: 'Smart Munition',  desc: 'Bullets wait up to 8 seconds in the air for a target before expiring.' }
+        ]},
+        de: { name: 'Hitzesucher', desc: 'Schüsse steuern leicht auf den nächsten Gegner zu.', tree: [
+            { name: 'Hitzesucher', desc: 'Schüsse curven leicht zum nächsten Gegner.' },
+            { name: 'Anvisiert',    desc: 'Stärkere Zielsuche + 15% Schaden gegen markierte Ziele.' },
+            { name: 'Hitze-Vektor',  desc: 'Harte Zielsuche — Schüsse können 90° im Flug drehen.' },
+            { name: 'Intelligente Munition', desc: 'Schüsse warten bis zu 8s auf ein Ziel.' }
+        ]}
+    },
+    glass_shards: {
+        en: { name: 'Glass Shards', desc: 'Hits leave glass splinters that hurt nearby enemies.', tree: [
+            { name: 'Glass Shards',      desc: 'Hits leave 3 splinters in a 30px radius (50% damage each).' },
+            { name: 'Diamond Edge',      desc: '5 splinters at 70% damage, applies a bleed stack.' },
+            { name: 'Crystalline Storm', desc: '10 splinters that ricochet once off enemies.' },
+            { name: 'Glass Apocalypse',  desc: 'Splinters explode into 5 more smaller splinters.' }
+        ]},
+        de: { name: 'Glas-Splitter', desc: 'Treffer hinterlassen Glassplitter die nahe Gegner verletzen.', tree: [
+            { name: 'Glas-Splitter',  desc: 'Treffer = 3 Splitter im 30px Radius (je 50% Schaden).' },
+            { name: 'Diamant-Schärfe', desc: '5 Splitter mit 70% Schaden + Blutungs-Stack.' },
+            { name: 'Kristalliner Sturm', desc: '10 Splitter die einmal abprallen.' },
+            { name: 'Glas-Apokalypse',  desc: 'Splitter explodieren in 5 weitere kleinere Splitter.' }
+        ]}
+    },
+    combo_multiplier: {
+        en: { name: 'Combo Streak', desc: '+5% damage per current killstreak (cap +50%).', tree: [
+            { name: 'Combo Streak', desc: '+5% damage per consecutive kill (cap +50%).' },
+            { name: 'Kill Chain',   desc: '+8% per kill (cap +80%) and the streak decays slower.' },
+            { name: 'Streak Master', desc: '+12% per kill (cap +150%) plus 1 extra second of combo timer.' },
+            { name: 'God Mode',      desc: '+15% per kill, no cap. The streak never expires.' }
+        ]},
+        de: { name: 'Combo-Streak', desc: '+5% Schaden pro aktuellem Killstreak (Cap +50%).', tree: [
+            { name: 'Combo-Streak', desc: '+5% Schaden pro Kill in Folge (Cap +50%).' },
+            { name: 'Kill-Kette',   desc: '+8% pro Kill (Cap +80%), zerfällt langsamer.' },
+            { name: 'Streak-Meister', desc: '+12% pro Kill (Cap +150%) + 1s extra Combo-Timer.' },
+            { name: 'Gott-Modus',    desc: '+15% pro Kill, kein Cap. Streak verfällt nie.' }
+        ]}
+    },
+    fortune_coin: {
+        en: { name: 'Lucky Coin', desc: 'Kills give +50% more gold.', tree: [
+            { name: 'Lucky Coin',       desc: 'Kills give +50% more gold.' },
+            { name: 'Golden Touch',     desc: '+100% gold and a 5% chance to drop double rewards.' },
+            { name: 'Midas',            desc: '+200% gold and bosses always drop a pack token.' },
+            { name: 'Wealth Generator', desc: '+400% gold plus +20 passive gold each wave clear.' }
+        ]},
+        de: { name: 'Glückstaler', desc: 'Kills geben +50% mehr Gold.', tree: [
+            { name: 'Glückstaler',    desc: 'Kills geben +50% mehr Gold.' },
+            { name: 'Goldener Touch', desc: '+100% Gold + 5% Chance auf doppelten Drop.' },
+            { name: 'Midas',           desc: '+200% Gold + Bosse droppen immer ein Pack-Token.' },
+            { name: 'Wohlstands-Generator', desc: '+400% Gold + 20 passives Gold pro abgeschlossener Welle.' }
+        ]}
+    }
+};
+
+// Localised top-level skill (falls back to ABILITIES if not in SKILL_I18N).
+function tSkill(id) {
+    const lang = (typeof getLang === 'function') ? getLang() : 'en';
+    const entry = SKILL_I18N[id];
+    if (entry && entry[lang]) return entry[lang];
+    if (entry && entry.en) return entry.en;
+    const ab = (typeof ABILITIES !== 'undefined') ? ABILITIES.find((a) => a.id === id) : null;
+    return ab ? { name: ab.name, desc: ab.desc, tree: (ab.tree || []).map((n) => ({ name: n.name, desc: n.desc })) } : null;
+}
+function tSkillRank(id, rankIdx) {
+    const ab = (typeof ABILITIES !== 'undefined') ? ABILITIES.find((a) => a.id === id) : null;
+    const localised = tSkill(id);
+    const idx = Math.max(0, Math.min(((ab && ab.tree) ? ab.tree.length : 1) - 1, rankIdx || 0));
+    const tNode = (localised && localised.tree && localised.tree[idx]) || null;
+    const baseNode = (ab && ab.tree && ab.tree[idx]) || null;
+    return {
+        name: (tNode && tNode.name) || (baseNode && baseNode.name) || (ab && ab.name) || id,
+        desc: (tNode && tNode.desc) || (baseNode && baseNode.desc) || (ab && ab.desc) || '',
+        tier: (baseNode && baseNode.tier) || (ab && ab.rarity) || 'common'
+    };
+}
+
+
 
 function getLang() {
     const l = save?.settings?.language;
@@ -263,6 +903,9 @@ window.setLanguage = function(lang) {
     if (typeof renderAbilityArchive === 'function' && document.getElementById('abilities-screen')?.classList.contains('active')) renderAbilityArchive();
     if (typeof refreshMapRail === 'function') refreshMapRail();
     if (typeof refreshRailBadges === 'function') refreshRailBadges();
+    if (typeof drawAbilityChoices === 'function' && document.getElementById('ability-overlay')?.classList.contains('active')) drawAbilityChoices();
+    if (typeof renderTestGrid === 'function') renderTestGrid();
+    if (typeof updateMetaHud === 'function') updateMetaHud();
 };
 
 let currentLevel = 1;
@@ -299,6 +942,7 @@ let killStreak = 0;
 let killStreakTimer = 0;
 let resultPrimaryAction = null;
 let resultSecondaryAction = null;
+let resultHomeAction = null;
 let audioContext = null;
 let musicGain = null;
 let musicNodesStarted = false;
@@ -1213,6 +1857,112 @@ window.addFxText = function(x, y, text, color = '#ffffff', life = 0.55, size = 1
     });
 };
 
+// Pick a random colour from a small per-tier palette so successive hits don't
+// look identical. Returns a CSS hex/RGBA string.
+function _pickFromPalette(palette) {
+    return palette[Math.floor(Math.random() * palette.length)];
+}
+
+// Floating damage number popup. Tier (size + colour palette) is driven by the
+// hit's damage relative to the player's current base damage. Inside each tier
+// the exact colour and size are randomised so the screen feels lively.
+// Disabled entirely when save.settings.damagePopups === false.
+window.showDamagePopup = function(x, y, dmg, opts) {
+    opts = opts || {};
+    if (!Number.isFinite(dmg) || dmg <= 0) return;
+    // Honour the user's setting (default ON if unset).
+    if (save && save.settings && save.settings.damagePopups === false) return;
+
+    // Display formatting
+    let label;
+    if (dmg >= 1000) label = formatCompactNumber(Math.round(dmg));
+    else if (dmg >= 10) label = String(Math.round(dmg));
+    else label = (Math.round(dmg * 10) / 10).toString();
+
+    // Tier by damage ratio
+    const baseDmg = (player && player.dmg ? player.dmg : 1) * (player && player.damageMultiplier ? player.damageMultiplier : 1) || 1;
+    const ratio = dmg / baseDmg;
+
+    // Neon rainbow — matches the rest of the game's saturated cyberpunk palette
+    // (cyan / gold / magenta / lime / hot pink / etc). Used for normal hits so
+    // every popup can come up in any colour, lively but on-brand.
+    const NEON_RAINBOW = [
+        '#ff375f', '#ff5e7a', '#ff2f8d',          // hot pinks
+        '#ff7035', '#ff9d00', '#ffb02e',          // oranges
+        '#ffd14d', '#ffe698',                      // golds
+        '#a3ff5c', '#00ff9d', '#34ffae',          // limes / mint
+        '#00f2ff', '#7be8ff', '#5cc1ff',          // cyans
+        '#bc13fe', '#d78fff', '#9f57ff',          // magentas
+        '#ffffff'                                  // white highlight
+    ];
+    // Crit / DoT / Splash keep semantic palettes so they still READ as special.
+    let palette, sizeMin, sizeMax, life;
+    if (opts.crit) {
+        // Crits get bright golds + hot pinks for that "headshot" pop.
+        palette = ['#ffd14d', '#ffe698', '#ffb02e', '#ff375f', '#ff8ba2', '#ffffff'];
+        sizeMin = 28; sizeMax = 40;
+        life = 0.7;
+        label = label + '!';
+    } else if (opts.dot) {
+        // DoT ticks stay green so the player learns "green = poison/burn".
+        palette = ['#00ff9d', '#34ffae', '#7be8a3', '#a3ff5c'];
+        sizeMin = 14; sizeMax = 20;
+        life = 0.5;
+    } else if (opts.splash) {
+        // Ability/AOE hits: full warm rainbow + significantly bigger so they
+        // visually dominate normal projectile hits, plus a heavy neon glow.
+        palette = ['#ff7035', '#ff9d00', '#ffb02e', '#ff5c30', '#ff375f', '#ff8ba2', '#bc13fe', '#d78fff'];
+        sizeMin = 32; sizeMax = 44;
+        life = 0.8;
+    } else if (ratio >= 6) {
+        // Huge hits — full rainbow blast for maximum impact.
+        palette = NEON_RAINBOW;
+        sizeMin = 34; sizeMax = 46;
+        life = 0.8;
+    } else if (ratio >= 3) {
+        // Strong hits — rainbow but skip the cool/white tones so it reads "hot".
+        palette = ['#ff375f', '#ff5e7a', '#ff7035', '#ff9d00', '#ffd14d', '#bc13fe', '#d78fff'];
+        sizeMin = 28; sizeMax = 36;
+        life = 0.7;
+    } else if (ratio >= 1.5) {
+        // Boosted — warmer rainbow without the deep magentas yet.
+        palette = ['#ffd14d', '#ffe698', '#ff9d00', '#a3ff5c', '#00ff9d', '#7be8ff'];
+        sizeMin = 22; sizeMax = 28;
+        life = 0.65;
+    } else if (ratio < 0.5) {
+        // Tiny hits — cooler/dimmer rainbow so they don't dominate.
+        palette = ['#7be8ff', '#5cc1ff', '#cfd9ee', '#dfe7ff', '#a3ff5c', '#ffe698'];
+        sizeMin = 14; sizeMax = 18;
+        life = 0.5;
+    } else {
+        // Normal hits — full neon rainbow, every shot looks different.
+        palette = NEON_RAINBOW;
+        sizeMin = 18; sizeMax = 24;
+        life = 0.6;
+    }
+    const color = _pickFromPalette(palette);
+    const size = sizeMin + Math.random() * (sizeMax - sizeMin);
+
+    // Light life jitter so the trails stagger
+    const lifeJitter = life * (0.85 + Math.random() * 0.3);
+
+    // Spread X + slight Y so stacked hits don't pile up
+    const jx = (Math.random() - 0.5) * 22;
+    const jy = (Math.random() - 0.5) * 6;
+
+    fxTexts.push({
+        x: x + jx,
+        y: y - 8 + jy,
+        text: label,
+        color,
+        life: lifeJitter,
+        maxLife: lifeJitter,
+        vy: -55 - Math.random() * 25 - Math.min(40, ratio * 5),
+        size,
+        glow: !!(opts.splash || opts.crit) // heavier neon halo for ability + crit hits
+    });
+};
+
 function loadSave() {
     try {
         const raw = localStorage.getItem('sd_save_v7');
@@ -1290,6 +2040,8 @@ function syncSettingsUi() {
     if (musicSlider) musicSlider.value = Math.round((save.settings?.music ?? 0.35) * 100);
     if (musicValue) musicValue.textContent = `${Math.round((save.settings?.music ?? 0.35) * 100)}%`;
     if (hapticsToggle) hapticsToggle.checked = !!save.settings?.haptics;
+    const dmgToggle = document.getElementById('settings-dmg-popups');
+    if (dmgToggle) dmgToggle.checked = save.settings?.damagePopups !== false;
     // Reflect language pick on the segmented control
     const lang = getLang();
     document.querySelectorAll('.setting-segmented .seg-btn').forEach((b) => {
@@ -1412,7 +2164,16 @@ function updateMetaHud() {
 
     if (goldNode) goldNode.textContent = save.gold;
     if (gemsNode) gemsNode.textContent = save.gems;
-    if (levelNode) levelNode.textContent = `LEVEL ${save.unlocked}`;
+    if (levelNode) levelNode.textContent = `${t('hud.levelShort')} ${save.unlocked}`;
+    // In-run centered LEVEL banner (visible only via body.in-run CSS rule).
+    const inRunLevelNum = document.getElementById('in-run-level-num');
+    const inRunLevelLabel = document.getElementById('in-run-level-label');
+    if (inRunLevelNum) {
+        inRunLevelNum.textContent = (currentMode === 'endless') ? `${currentWave + 1}` : `${currentLevel}`;
+    }
+    if (inRunLevelLabel) {
+        inRunLevelLabel.textContent = (currentMode === 'endless') ? t('cta.endless') : t('hud.levelShort');
+    }
 
     if (waveNode) {
         if (gameRunning) {
@@ -1555,7 +2316,28 @@ window.openSettings = function() {
     syncSettingsUi();
     const overlay = document.getElementById('settings-overlay');
     if (overlay) overlay.classList.add('active');
+    const leaveRow = document.getElementById('settings-leave-row');
+    if (leaveRow) leaveRow.style.display = gameRunning ? '' : 'none';
     playHaptic('soft');
+};
+
+// Leave a run from inside the settings overlay - reset and bounce to home.
+window.leaveGameToHome = function() {
+    const overlay = document.getElementById('settings-overlay');
+    if (overlay) overlay.classList.remove('active');
+    if (typeof hideResultOverlay === 'function') hideResultOverlay();
+    if (gameRunning) {
+        if (typeof closeMission === 'function') {
+            closeMission();
+        } else {
+            gameRunning = false;
+            document.body.classList.remove('in-run');
+            if (window.canvas) window.canvas.style.display = 'none';
+        }
+    }
+    currentMode = 'mission';
+    if (typeof showFight === 'function') showFight();
+    playHaptic('medium');
 };
 
 window.closeSettings = function(event) {
@@ -1584,6 +2366,13 @@ window.toggleHaptics = function(enabled) {
     saveSave();
     syncSettingsUi();
     if (enabled) playHaptic('medium');
+};
+
+window.toggleDamagePopups = function(enabled) {
+    save.settings = save.settings || {};
+    save.settings.damagePopups = !!enabled;
+    saveSave();
+    syncSettingsUi();
 };
 
 function showScreen(id) {
@@ -2760,9 +3549,11 @@ function updateProjectiles(dt) {
             enemy.hitFlash = isCrit ? 0.16 : 0.08;
             enemy.lastHitBy = projectile.id;
 
+            // Floating damage number — every hit, sized + coloured by impact tier
+            showDamagePopup(enemy.x, enemy.y - enemy.r, dmgApplied, { crit: isCrit });
+
             if (isCrit) {
                 addP(projectile.x, projectile.y, '#ffd14d', 8, 120, 0.2, 3);
-                addFxText(projectile.x, projectile.y - 16, 'CRIT!', '#ffd14d', 0.35, 18);
                 // ── Crit Bomb AOE ──
                 if (player.critExplode) {
                     triggerCritExplosion(projectile.x, projectile.y, finalDmg);
@@ -2954,6 +3745,7 @@ function triggerEchoShock(cx, cy) {
         if (d > radius) return;
         e.hp -= dmg;
         e.hitFlash = 0.1;
+        showDamagePopup(e.x, e.y - e.r, dmg, { splash: true });
         if (e.hp <= 0) triggerKill(e);
     });
     addFxText(cx, cy - 18, 'ECHO', '#7be8ff', 0.3, 14);
@@ -3002,6 +3794,7 @@ function triggerCritExplosion(cx, cy, baseDmg) {
         e.hp -= splashDmg;
         e.hitFlash = 0.14;
         addP(e.x, e.y, '#ffd14d', 6, 80, 0.15, 2);
+        showDamagePopup(e.x, e.y - e.r, splashDmg, { splash: true });
         if (e.hp <= 0) triggerKill(e);
     });
 }
@@ -3101,6 +3894,7 @@ function triggerChainLightning(origin, damage) {
         enemy.hitFlash = 0.12;
         addLightningBolt(origin.x, origin.y, enemy.x, enemy.y, '#7be8ff', 0.16, 3.6 + rank * 0.35);
         addP(enemy.x, enemy.y, '#00f2ff', 14, 150, 0.28, 2);
+        showDamagePopup(enemy.x, enemy.y - enemy.r, chainDamage, { splash: true });
         addFxText(enemy.x, enemy.y - 18, 'ARC', '#00f2ff', 0.32, 16);
         if (enemy.hp <= 0) triggerKill(enemy);
     });
@@ -3834,7 +4628,7 @@ function triggerKill(enemy) {
     killStreakTimer = 2.2 + (player.comboTimeBonus || 0);
     screenShake = Math.min(2.9, screenShake + (enemy.isBoss ? 1.05 : 0.28));
     powerPulse = Math.min(2.3, powerPulse + (enemy.isBoss ? 0.88 : 0.2));
-    if (enemy.isBoss) playHaptic('hard');
+    if (enemy.isBoss) playHaptic('hard'); else playHaptic('tap');
     addFxText(enemy.x, enemy.y - enemy.r - 12, enemy.isBoss ? 'BOSS DOWN' : `+${enemy.exp} XP`, enemy.isBoss ? '#ff9d00' : '#ffffff', enemy.isBoss ? 0.85 : 0.45, enemy.isBoss ? 24 : 16);
     updateMetaHud();
 }
@@ -3877,9 +4671,11 @@ function releaseShockNova() {
         if (!enemy.alive) return;
         const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
         if (distance > radius) return;
-        enemy.hp -= player.dmg * player.damageMultiplier * (0.36 + rank * 0.12);
+        const novaDmg = player.dmg * player.damageMultiplier * (0.36 + rank * 0.12);
+        enemy.hp -= novaDmg;
         enemy.hitFlash = 0.18;
         addLightningBolt(player.x, player.y, enemy.x, enemy.y, '#ffe698', 0.20, 4);
+        showDamagePopup(enemy.x, enemy.y - enemy.r, novaDmg, { splash: true });
         if (enemy.hp <= 0) triggerKill(enemy);
     });
 }
@@ -3979,7 +4775,13 @@ function drawAbilityChoices() {
         const rank = getAbilityRank(ability.id);
         const isEvolve = rank > 0;
         const nextIdx = Math.min((ability.tree?.length || 1) - 1, rank);
-        const nextDef = ability.tree ? ability.tree[nextIdx] : { name: ability.name, tier: ability.rarity, desc: ability.desc };
+        const localisedNode = (typeof tSkillRank === 'function') ? tSkillRank(ability.id, nextIdx) : null;
+        const baseNode = ability.tree ? ability.tree[nextIdx] : { name: ability.name, tier: ability.rarity, desc: ability.desc };
+        const nextDef = {
+            name: (localisedNode && localisedNode.name) || baseNode.name,
+            tier: (localisedNode && localisedNode.tier) || baseNode.tier,
+            desc: (localisedNode && localisedNode.desc) || baseNode.desc
+        };
         const tier = (nextDef.tier || ability.rarity || 'common').toLowerCase();
 
         // Pull the inner SVG out of the wrapped icon markup so we can place it inside the diamond
@@ -4028,14 +4830,19 @@ function updateAbilityPickFeature() {
     const rank = getAbilityRank(ability.id);
     const tree = ability.tree || [{ name: ability.name, tier: ability.rarity, desc: ability.desc }];
     const nextIdx = Math.min(tree.length - 1, rank);
-    const nextDef = tree[nextIdx];
+    const localised = (typeof tSkillRank === 'function') ? tSkillRank(ability.id, nextIdx) : null;
+    const baseNext = tree[nextIdx];
+    const nextDef = {
+        name: (localised && localised.name) || baseNext.name,
+        tier: (localised && localised.tier) || baseNext.tier,
+        desc: (localised && localised.desc) || baseNext.desc
+    };
     const tier = (nextDef.tier || ability.rarity || 'common').toLowerCase();
 
     featureEl.classList.remove('tier-common','tier-rare','tier-epic','tier-legendary');
     featureEl.classList.add(`tier-${tier}`);
 
-    titleEl.innerHTML = `${nextDef.name.toUpperCase()}`;
-    // Pull a delta phrase out of the desc (anything after a "+" or "x")
+    titleEl.innerHTML = `${(nextDef.name || '').toUpperCase()}`;
     effectEl.innerHTML = nextDef.desc;
 
     // Build the vertical tree of diamonds
@@ -4603,7 +5410,7 @@ function hideResultOverlay() {
     if (overlay) overlay.classList.remove('active');
 }
 
-function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, secondaryLabel, onPrimary, onSecondary, stars = 0 }) {
+function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, secondaryLabel, homeLabel, onPrimary, onSecondary, onHome, stars = 0, leaderboardDelta = null }) {
     const overlay = document.getElementById('result-overlay');
     const content = overlay ? overlay.querySelector('.result-content') : null;
     const badge = document.getElementById('result-badge');
@@ -4612,37 +5419,68 @@ function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, sec
     const statsNode = document.getElementById('result-stats');
     const primary = document.getElementById('result-primary');
     const secondary = document.getElementById('result-secondary');
+    const home = document.getElementById('result-home');
+    const lbBlock = document.getElementById('result-leaderboard-delta');
     if (!overlay || !badge || !titleNode || !copyNode || !statsNode || !primary || !secondary) return;
 
     if (content) {
         content.classList.toggle('loss', loss);
         content.classList.toggle('win', !loss);
-        // Re-trigger the pop animation
         content.style.animation = 'none';
         // eslint-disable-next-line no-unused-expressions
         content.offsetHeight;
         content.style.animation = '';
     }
 
-    badge.textContent = loss ? 'DEFEATED' : 'VICTORY';
+    badge.textContent = loss ? t('result.defeated') : t('result.victory');
     badge.classList.toggle('loss', loss);
     titleNode.textContent = title;
     copyNode.textContent = copy;
 
-    // Optional star rating for victory
     let starsHtml = '';
     if (!loss && stars >= 0) {
         const lit = Math.max(0, Math.min(3, stars));
-        starsHtml = `<div class="result-stars">
-            ${[0,1,2].map((i) => `<span class="result-star ${i < lit ? 'lit' : ''}" style="--star-delay:${(i*0.15+0.2).toFixed(2)}s">★</span>`).join('')}
-        </div>`;
+        starsHtml = `<div class="result-stars">${[0,1,2].map((i) => `<span class="result-star ${i < lit ? 'lit' : ''}" style="--star-delay:${(i*0.15+0.2).toFixed(2)}s">★</span>`).join('')}</div>`;
     }
 
     statsNode.innerHTML = starsHtml + stats.map((entry) => `<div class="result-line"><span>${entry.label}</span><strong>${entry.value}</strong></div>`).join('');
     primary.textContent = primaryLabel;
     secondary.textContent = secondaryLabel;
+    if (home) home.textContent = homeLabel || t('result.home');
     resultPrimaryAction = onPrimary;
     resultSecondaryAction = onSecondary;
+    resultHomeAction = onHome;
+
+    // Leaderboard delta block (only on victory if data is supplied)
+    if (lbBlock) {
+        if (!loss && leaderboardDelta && Number.isFinite(leaderboardDelta.before) && Number.isFinite(leaderboardDelta.after)) {
+            const before = leaderboardDelta.before;
+            const after = leaderboardDelta.after;
+            const moved = before - after;
+            const arrow = document.getElementById('rld-arrow');
+            const beforeNode = document.getElementById('rld-rank-before');
+            const afterNode = document.getElementById('rld-rank-after');
+            const detailNode = document.getElementById('rld-detail');
+            if (beforeNode) beforeNode.textContent = `#${before}`;
+            if (afterNode) afterNode.textContent = `#${after}`;
+            if (arrow) {
+                arrow.classList.remove('same', 'down');
+                if (moved > 0) { arrow.textContent = '▲'; }
+                else if (moved < 0) { arrow.textContent = '▼'; arrow.classList.add('down'); }
+                else { arrow.textContent = '–'; arrow.classList.add('same'); }
+            }
+            if (detailNode) {
+                if (moved > 0) detailNode.textContent = t('result.lbClimbed', { n: moved });
+                else if (moved < 0) detailNode.textContent = t('result.lbDropped', { n: Math.abs(moved) });
+                else detailNode.textContent = t('result.lbHeld');
+            }
+            lbBlock.style.display = '';
+        } else {
+            lbBlock.style.display = 'none';
+        }
+    }
+
+    if (typeof applyI18nToDom === 'function') applyI18nToDom();
     overlay.classList.add('active');
 }
 
@@ -4665,49 +5503,55 @@ function gameOver() {
         saveSave();
         showResultOverlay({
             loss: true,
-            title: 'Endless Run Over',
-            copy: 'Endless is for pushing builds, not for farming money.',
+            title: t('result.endlessOver'),
+            copy: t('result.endlessCopy'),
             stats: [
-                { label: 'Waves Survived', value: `${currentWave + 1}` },
-                { label: 'Scaled Level', value: `${currentLevel}` },
-                { label: 'Gold Earned', value: `+${formatCompactNumber(endlessGold)}` },
-                { label: 'Gems Earned', value: `+${endlessGems}` }
+                { label: t('result.statWaves'), value: `${currentWave + 1}` },
+                { label: t('result.statScaled'), value: `${currentLevel}` },
+                { label: t('result.statGold'), value: `+${formatCompactNumber(endlessGold)}` },
+                { label: t('result.statGems'), value: `+${endlessGems}` }
             ],
-            primaryLabel: 'Run Endless',
-            secondaryLabel: 'Map',
+            primaryLabel: t('result.runEndless'),
+            secondaryLabel: t('result.skills'),
+            homeLabel: t('result.home'),
             onPrimary: () => window.startEndlessMode(),
-            onSecondary: () => {
-                hideResultOverlay();
-                currentMode = 'mission';
-                showFight();
-            }
+            onSecondary: () => { hideResultOverlay(); openRunSummary(); },
+            onHome: () => { currentMode = 'mission'; showFight(); }
         });
         return;
     }
     const failStats = [
-        { label: 'Mission', value: `Level ${currentLevel}` },
-        { label: 'Best Reach', value: `Wave ${Math.min(currentWave + 1, Math.max(1, currentLevelWaves.length))}/${Math.max(1, currentLevelWaves.length)}` },
-        { label: 'Gold Bank', value: formatCompactNumber(save.gold) }
+        { label: t('result.statMission'), value: `${t('cta.level')} ${currentLevel}` },
+        { label: t('result.statBestReach'), value: `${t('hud.waveShort')} ${Math.min(currentWave + 1, Math.max(1, currentLevelWaves.length))}/${Math.max(1, currentLevelWaves.length)}` },
+        { label: t('result.statGoldBank'), value: formatCompactNumber(save.gold) }
     ];
     const failSkills = formatRunSkillsList(save.lastRunSkills);
-    if (failSkills) failStats.push({ label: 'Skills Used', value: failSkills });
+    if (failSkills) failStats.push({ label: t('result.statSkillsUsed'), value: failSkills });
     showResultOverlay({
         loss: true,
-        title: 'Mission Failed',
-        copy: 'One hit costs one full heart. Upgrade and push again.',
+        title: t('result.failTitle'),
+        copy: t('result.failCopy'),
         stats: failStats,
-        primaryLabel: 'Retry',
-        secondaryLabel: 'Skills',
+        primaryLabel: t('result.retry'),
+        secondaryLabel: t('result.skills'),
+        homeLabel: t('result.home'),
         onPrimary: () => window.startCurrentLevel(),
-        onSecondary: () => {
-            hideResultOverlay();
-            openRunSummary();
-        }
+        onSecondary: () => { hideResultOverlay(); openRunSummary(); },
+        onHome: () => { currentMode = 'mission'; showFight(); }
     });
 }
 
 function victory() {
     if (currentMode === 'endless') return;
+    // Snapshot leaderboard rank BEFORE the score bumps so we can show the delta.
+    const lbBefore = (function() {
+        try {
+            if (typeof getLeaderboardBots !== 'function') return null;
+            const rows = getLeaderboardBots();
+            const idx = rows.findIndex((r) => r.isYou);
+            return idx >= 0 ? idx + 1 : null;
+        } catch (e) { return null; }
+    })();
     const goldReward = Math.round(getLevelGoldReward(currentLevel) * getEconomyMultiplier());
     const gemReward = 1 + Math.floor(currentLevel / 6);
     save.unlocked = Math.max(save.unlocked, currentLevel + 1);
@@ -4744,32 +5588,39 @@ function victory() {
     // Star rating: 1 (cleared), 2 (cleared with HP > half), 3 (cleared full HP)
     const stars = player && player.maxHp ? (player.hp >= player.maxHp ? 3 : (player.hp > player.maxHp / 2 ? 2 : 1)) : 1;
     const stats = [
-        { label: 'Gold Earned', value: `+${formatCompactNumber(goldReward)}` },
-        { label: 'Gems Earned', value: `+${gemReward}` },
-        { label: 'Next Mission', value: `Level ${save.unlocked}` }
+        { label: t('result.statGold'), value: `+${formatCompactNumber(goldReward)}` },
+        { label: t('result.statGems'), value: `+${gemReward}` },
+        { label: t('result.statNextMission'), value: `${t('cta.level')} ${save.unlocked}` }
     ];
     if (milestoneBonus) {
-        stats.push({ label: 'Milestone Bonus', value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || 'Pack'}` });
+        stats.push({ label: t('result.statMilestone'), value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || t('result.pack')}` });
     }
-    // Append the "Skills used" summary as a single rolled-up stat line. The
-    // dedicated overlay (openRunSummary) is opened on demand via the result
-    // screen.
     const skillsSummary = formatRunSkillsList(save.lastRunSkills);
     if (skillsSummary) {
-        stats.push({ label: 'Skills Used', value: skillsSummary });
+        stats.push({ label: t('result.statSkillsUsed'), value: skillsSummary });
     }
+    const lbAfter = (function() {
+        try {
+            if (typeof getLeaderboardBots !== 'function') return null;
+            const rows = getLeaderboardBots();
+            const idx = rows.findIndex((r) => r.isYou);
+            return idx >= 0 ? idx + 1 : null;
+        } catch (e) { return null; }
+    })();
+    const leaderboardDelta = (lbBefore != null && lbAfter != null) ? { before: lbBefore, after: lbAfter } : null;
+
     showResultOverlay({
-        title: `Level ${currentLevel} Clear`,
-        copy: 'Rewards paid out. The next mission is live.',
+        title: t('result.winTitle', { n: currentLevel }),
+        copy: t('result.winCopy'),
         stars,
         stats,
-        primaryLabel: 'Next Fight',
-        secondaryLabel: 'Skills',
+        primaryLabel: t('result.nextFight'),
+        secondaryLabel: t('result.skills'),
+        homeLabel: t('result.home'),
+        leaderboardDelta,
         onPrimary: () => window.startCurrentLevel(),
-        onSecondary: () => {
-            hideResultOverlay();
-            openRunSummary();
-        }
+        onSecondary: () => { hideResultOverlay(); openRunSummary(); },
+        onHome: () => { currentMode = 'mission'; showFight(); }
     });
 }
 
@@ -4779,8 +5630,9 @@ function formatRunSkillsList(ranks) {
     const entries = Object.entries(ranks).filter(([, r]) => r > 0);
     if (!entries.length) return '';
     const parts = entries.slice(0, 4).map(([id, rank]) => {
+        const localised = (typeof tSkill === 'function') ? tSkill(id) : null;
         const ab = ABILITIES.find((a) => a.id === id);
-        const name = ab ? ab.name : id;
+        const name = (localised && localised.name) || (ab ? ab.name : id);
         return `${name} (R${rank})`;
     });
     if (entries.length > 4) parts.push(`+${entries.length - 4} more`);
@@ -4800,16 +5652,19 @@ window.openRunSummary = function() {
             const ab = ABILITIES.find((a) => a.id === id);
             if (!ab) return '';
             const tier = (ab.rarity || 'common').toLowerCase();
-            const node = (ab.tree && ab.tree[Math.min(ab.tree.length - 1, rank - 1)]) || { name: ab.name, desc: ab.desc };
+            const localised = (typeof tSkill === 'function') ? tSkill(id) : null;
+            const localNode = (typeof tSkillRank === 'function') ? tSkillRank(id, Math.min((ab.tree||[]).length - 1, rank - 1)) : null;
+            const dispName = (localised && localised.name) || ab.name;
+            const dispDesc = (localNode && localNode.desc) || (localised && localised.desc) || ab.desc || '';
             return `
                 <div class="run-summary-row rarity-tier-${tier}">
                     <div class="rs-icon">${getAbilityIconMarkup(ab.id, ab.icon) || ''}</div>
                     <div class="rs-body">
                         <div class="rs-head">
-                            <span class="rs-name">${ab.name}</span>
+                            <span class="rs-name">${dispName}</span>
                             <span class="rs-rank">${t('runSummary.rank')} ${rank}/${(ab.tree || []).length || 1}</span>
                         </div>
-                        <div class="rs-desc">${node.desc || ab.desc || ''}</div>
+                        <div class="rs-desc">${dispDesc}</div>
                     </div>
                 </div>`;
         }).join('');
@@ -6220,7 +7075,8 @@ function renderLevelRoadmap() {
     // Bottom padding ensures the CURRENT node sits ABOVE the FIGHT/ENDLESS
     // CTA instead of being pushed behind it. Top padding gives the highest
     // node room to breathe.
-    const bottomPad = 24;
+    const bottomPad = 110; // big buffer so the current-level node never
+                           // overlaps the primary CTA + endless pill below.
     const topPad = 24;
     const totalHeight = bottomPad + topPad + stepY * ordered.length;
     host.style.minHeight = `${totalHeight}px`;
@@ -6275,7 +7131,7 @@ function renderLevelRoadmap() {
         // can't get clipped by a side rail. The label is short-circuited to
         // keep the pill compact (full name shown on tap in tooltip).
         const skillBadge = p.ability ? `
-            <div class="lr-skill-link side-${p.badgeSide}" title="${t('roadmap.skillUnlock')}: ${p.ability.name}">
+            <div class="lr-skill-link side-${p.badgeSide}" title="${t('roadmap.skillUnlock')}: ${(typeof tSkill === 'function' && tSkill(p.ability.id)?.name) || p.ability.name}">
                 <span class="lr-skill-arm"></span>
                 <span class="lr-skill-tag rarity-tier-${(p.ability.rarity || 'common').toLowerCase()}">
                     ${sparkSvg}
@@ -6855,6 +7711,7 @@ window.handleResultPrimary = function() {
     const action = resultPrimaryAction;
     resultPrimaryAction = null;
     resultSecondaryAction = null;
+    resultHomeAction = null;
     action();
 };
 
@@ -6864,7 +7721,23 @@ window.handleResultSecondary = function() {
     const action = resultSecondaryAction;
     resultPrimaryAction = null;
     resultSecondaryAction = null;
+    resultHomeAction = null;
     action();
+};
+
+// Home button on result overlay - back to fight screen without forcing the Skills view.
+window.handleResultHome = function() {
+    hideResultOverlay();
+    const action = resultHomeAction;
+    resultPrimaryAction = null;
+    resultSecondaryAction = null;
+    resultHomeAction = null;
+    if (typeof action === 'function') {
+        action();
+    } else {
+        currentMode = 'mission';
+        if (typeof showFight === 'function') showFight();
+    }
 };
 
 window.rerollAbilities = function() {
@@ -7075,18 +7948,19 @@ function renderAbilityArchive() {
         const unlocked = (ability.unlockLevel || 1) <= save.unlocked;
         const baseTier = (ability.rarity || 'common').toLowerCase();
         const card = document.createElement('div');
-        // Old-style clean card: icon + title + meta line + 1-line desc + button.
-        // No tree dots in archive (those clutter and the user dislikes them).
+        const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
+        const dispName = (localised && localised.name) || ability.name;
+        const dispDesc = (localised && localised.desc) || ability.desc;
         card.className = `shop-card ability-card ability-archive-card rarity-tier-${baseTier} ability-${ability.id} ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
         card.innerHTML = `
             ${getAbilityIconMarkup(ability.id, ability.icon)}
-            <div class="card-title">${ability.name}</div>
+            <div class="card-title">${dispName}</div>
             <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
-                ${baseTier.toUpperCase()} | Freigeschaltet ab Lv ${ability.unlockLevel}
+                ${baseTier.toUpperCase()} | ${t('milestone.unlockedAt')} ${ability.unlockLevel}
             </div>
-            <div class="card-copy">${ability.desc}</div>
+            <div class="card-copy">${dispDesc}</div>
             <button class="archive-cta" type="button" ${unlocked ? '' : 'disabled'}>
-                ${unlocked ? 'JETZT VERFUEGBAR' : `AB LV ${ability.unlockLevel}`}
+                ${unlocked ? t('milestone.archiveAvailable') : `${t('milestone.lockedFrom')} ${ability.unlockLevel}`}
             </button>
         `;
         if (unlocked) {
@@ -7114,25 +7988,26 @@ function showAbilityDetail(abilityId) {
         const rarityLabel = tierLabels[tier] || tier;
         const currentRank = (gameRunning && player?.abilityRanks?.[ability.id]) || 0;
         const tree = ability.tree || [{ name: ability.name, tier, desc: ability.desc }];
+        const localisedTop = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
 
-        // Inline SVG icon directly (no DOM gymnastics — that was the crash source)
         const iconHtml = getAbilityIconMarkup(ability.id, ability.icon) || '';
-
         const statRow = buildAbilityDetailStats(ability, currentRank);
 
-        // Tree rows: each rank gets a colored row with name + tier pill + desc
         const treeRows = tree.map((node, i) => {
             const state = i < currentRank ? 'owned' : i === currentRank ? 'next' : 'future';
             const nodeTier = (node.tier || tier).toLowerCase();
+            const localNode = (typeof tSkillRank === 'function') ? tSkillRank(ability.id, i) : null;
+            const dispName = (localNode && localNode.name) || node.name;
+            const dispDesc = (localNode && localNode.desc) || node.desc;
             return `
                 <div class="ability-tree-row state-${state} tier-${nodeTier}">
                     <div class="tree-row-bullet"></div>
                     <div class="tree-row-body">
                         <div class="tree-row-head">
-                            <span class="tree-row-name">${node.name}</span>
+                            <span class="tree-row-name">${dispName}</span>
                             <span class="rarity-tag tier-${nodeTier}">${nodeTier}</span>
                         </div>
-                        <div class="tree-row-desc">${node.desc}</div>
+                        <div class="tree-row-desc">${dispDesc}</div>
                     </div>
                 </div>
             `;
@@ -7143,7 +8018,7 @@ function showAbilityDetail(abilityId) {
 
         // Single innerHTML write — SVG sizing handled via CSS, no replaceChild
         card.innerHTML = `
-            <div class="ability-detail-title">${ability.name}</div>
+            <div class="ability-detail-title">${(localisedTop && localisedTop.name) || ability.name}</div>
             <div class="ability-detail-icon-wrap">
                 <div class="detail-arc-container">
                     <svg class="detail-arc-svg" viewBox="0 0 220 220">
@@ -7154,7 +8029,7 @@ function showAbilityDetail(abilityId) {
                 <div class="neon-svg">${iconHtml}</div>
             </div>
             <div class="ability-detail-stats">${statRow}</div>
-            <div class="ability-detail-desc">${ability.desc}</div>
+            <div class="ability-detail-desc">${(localisedTop && localisedTop.desc) || ability.desc}</div>
             <div class="ability-detail-tree-block">
                 <div class="ability-detail-tree-title">Skill Tree · ${currentRank}/${tree.length}</div>
                 <div class="ability-detail-tree-list">${treeRows}</div>
@@ -7233,7 +8108,16 @@ function updateMetaHud() {
 
     if (goldNode) goldNode.textContent = save.gold;
     if (gemsNode) gemsNode.textContent = save.gems;
-    if (levelNode) levelNode.textContent = `LEVEL ${save.unlocked}`;
+    if (levelNode) levelNode.textContent = `${t('hud.levelShort')} ${save.unlocked}`;
+    // In-run centered LEVEL banner (visible only via body.in-run CSS rule).
+    const inRunLevelNum = document.getElementById('in-run-level-num');
+    const inRunLevelLabel = document.getElementById('in-run-level-label');
+    if (inRunLevelNum) {
+        inRunLevelNum.textContent = (currentMode === 'endless') ? `${currentWave + 1}` : `${currentLevel}`;
+    }
+    if (inRunLevelLabel) {
+        inRunLevelLabel.textContent = (currentMode === 'endless') ? t('cta.endless') : t('hud.levelShort');
+    }
     updateUpgradeNotifier();
     renderDailyLoginPanel();
 
@@ -7447,11 +8331,12 @@ function renderTestGrid() {
         const rankLabel = rank > 0 ? `R${rank}` : '';
         const tierNames = ['', 'Common', 'Rare', 'Epic', 'Legendary'];
         const tierName = rank > 0 && rank <= 4 ? tierNames[rank] : '';
+        const localisedName = ((typeof tSkill === 'function') && tSkill(ability.id) && tSkill(ability.id).name) || ability.name || ability.id;
 
         return `
-            <button class="test-ability-btn ${rankClass}" onclick="testApplyAbility('${ability.id}')" title="${ability.name}\n${tierName}">
+            <button class="test-ability-btn ${rankClass}" onclick="testApplyAbility('${ability.id}')" title="${localisedName}\n${tierName}">
                 <span class="ta-rank">${rankLabel}</span>
-                <span class="ta-name">${ability.name || ability.id}</span>
+                <span class="ta-name">${localisedName}</span>
             </button>
         `;
     }).join('');

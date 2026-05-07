@@ -423,6 +423,29 @@ const ABILITIES = [
     }
 ];
 
+// === Rarity normalisation: make base rarity monotonic by unlockLevel ===
+// User wanted skills' colours to track unlock order: a Lv 12 skill must never
+// be rarer-looking than a Lv 10 one. Walk ABILITIES sorted by unlockLevel and
+// bump each rarity to at least the running max seen so far.
+(function normaliseAbilityRarities() {
+    const order = { common: 0, rare: 1, epic: 2, legendary: 3 };
+    const inv = ['common', 'rare', 'epic', 'legendary'];
+    const sorted = [...ABILITIES].sort((a, b) => (a.unlockLevel || 1) - (b.unlockLevel || 1));
+    let runningMax = 0;
+    sorted.forEach((ab) => {
+        const cur = order[(ab.rarity || 'common').toLowerCase()] || 0;
+        const promoted = Math.max(cur, runningMax);
+        if (promoted !== cur) {
+            ab.rarity = inv[promoted];
+            if (ab.tree && ab.tree[0]) {
+                const firstTier = order[(ab.tree[0].tier || 'common').toLowerCase()] || 0;
+                if (firstTier < promoted) ab.tree[0].tier = inv[promoted];
+            }
+        }
+        runningMax = Math.max(runningMax, promoted);
+    });
+})();
+
 // Convenience: get the descriptor at the player's CURRENT rank for an ability
 function getAbilityRankDef(ability, rank) {
     if (!ability || !ability.tree) return { name: ability?.name || '?', tier: ability?.rarity || 'common', desc: ability?.desc || '' };

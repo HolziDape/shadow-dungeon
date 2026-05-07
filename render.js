@@ -613,13 +613,37 @@ function drawParticles() {
 function drawFxTexts() {
     fxTexts.forEach((text) => {
         ctx.globalAlpha = text.life / text.maxLife;
-        ctx.font = `700 ${text.size}px Rajdhani`;
+        ctx.font = `900 ${text.size}px Rajdhani, "Arial Black", sans-serif`;
         ctx.textAlign = 'center';
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-        ctx.fillStyle = text.color;
+
+        // Glow: ability + crit popups get a heavy multi-pass neon halo so they
+        // feel weighty. Regular pop-ups still get a light shadow above 22px.
+        if (text.glow) {
+            // Outer soft halo (additive feel via extra fill passes)
+            ctx.save();
+            ctx.shadowBlur = Math.min(60, text.size * 1.6);
+            ctx.shadowColor = text.color;
+            ctx.fillStyle = text.color;
+            // Two halo passes intensify the bloom
+            ctx.fillText(text.text, text.x, text.y);
+            ctx.fillText(text.text, text.x, text.y);
+            ctx.restore();
+            ctx.shadowBlur = Math.min(40, text.size * 1.1);
+            ctx.shadowColor = text.color;
+        } else if (text.size >= 22) {
+            ctx.shadowBlur = Math.min(28, text.size * 0.9);
+            ctx.shadowColor = text.color;
+        } else {
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.lineWidth = Math.max(5, Math.round(text.size * (text.glow ? 0.36 : 0.32)));
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.82)';
         ctx.strokeText(text.text, text.x, text.y);
+        ctx.fillStyle = text.color;
         ctx.fillText(text.text, text.x, text.y);
+        ctx.shadowBlur = 0;
     });
     ctx.globalAlpha = 1;
 }
@@ -741,9 +765,10 @@ function drawInGameHud(width) {
 
     drawHearts(20, 20, player.hp);
 
+    const _tt = (typeof t === 'function') ? t : ((k) => k);
     const pills = [
-        { text: `WAVE ${currentMode === 'endless' ? `${currentWave + 1}/∞` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`, color: '#ffffff' },
-        { text: `LVL ${currentLevel}`, color: '#ffffff' },
+        { text: `${_tt('hud.waveShort')} ${currentMode === 'endless' ? `${currentWave + 1}/∞` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`, color: '#ffffff' },
+        { text: `${_tt('hud.levelShort')} ${currentLevel}`, color: '#ffffff' },
         { text: `GOLD ${save.gold}`, color: '#ffd14d' },
         { text: `GEMS ${save.gems}`, color: '#d98cff' }
     ];
@@ -774,13 +799,13 @@ function drawInGameHud(width) {
         ctx.textAlign = 'center';
         ctx.font = '700 14px Orbitron';
         ctx.fillStyle = '#ff9d00';
-        ctx.fillText(`HIT RUSH x${killStreak}`, width * 0.5, 30);
+        ctx.fillText(`${_tt('hud.hitRush')} x${killStreak}`, width * 0.5, 30);
     }
 
     ctx.textAlign = 'left';
     ctx.font = '700 13px Rajdhani';
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fillText(`Ability XP ${player.abilityXp} / ${player.nextAbilityXp}`, barLeft, 60);
+    ctx.fillText(`${_tt('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`, barLeft, 60);
 
     ctx.fillStyle = 'rgba(4, 8, 20, 0.42)';
     ctx.beginPath();
@@ -850,9 +875,10 @@ function drawInGameHud(width) {
         drawExtraHearts(24 + 3 * 34, safeTop + 8, player.extraHearts);
     }
 
+    const _tt2 = (typeof t === 'function') ? t : ((k) => k);
     const topPills = [
-        { text: `WAVE ${waveLabel}`, color: '#ffffff' },
-        { text: `ZONE ${currentLevel}`, color: '#ffffff' }
+        { text: `${_tt2('hud.waveShort')} ${waveLabel}`, color: '#ffffff' },
+        { text: `${_tt2('hud.zone')} ${currentLevel}`, color: '#ffffff' }
     ];
     const currencyPills = [
         { text: `GOLD ${save.gold}`, color: '#ffd14d' },
@@ -912,14 +938,14 @@ function drawInGameHud(width) {
         ctx.fillStyle = '#ff9d00';
         ctx.shadowBlur = 14;
         ctx.shadowColor = '#ff9d00';
-        ctx.fillText(`HIT RUSH x${killStreak}`, width * 0.5, safeTop + 20);
+        ctx.fillText(`${_tt2('hud.hitRush')} x${killStreak}`, width * 0.5, safeTop + 20);
         ctx.shadowBlur = 0;
     }
 
     ctx.textAlign = 'left';
     ctx.font = '700 12px Rajdhani';
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fillText(`Ability XP ${player.abilityXp} / ${player.nextAbilityXp}`, barLeft, safeTop + 62);
+    ctx.fillText(`${_tt2('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`, barLeft, safeTop + 62);
 
     ctx.fillStyle = 'rgba(4, 8, 20, 0.42)';
     ctx.beginPath();

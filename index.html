@@ -12,8 +12,10 @@
 
     <div class="hud-bar" id="main-hud">
         <div class="hud-left">
-            <div class="currency-badge" id="hud-level" data-i18n="hud.level">LEVEL 1</div>
             <div class="currency-badge" id="hud-wave" data-i18n="hud.wave">WAVE 0/0</div>
+        </div>
+        <div class="hud-center">
+            <div class="currency-badge currency-level" id="hud-level" data-i18n="hud.level">LEVEL 1</div>
         </div>
         <div class="hud-right">
             <div class="currency-badge currency-gold">GOLD <span id="hud-gold">0</span></div>
@@ -296,6 +298,18 @@
     <canvas id="game-canvas"></canvas>
     <div id="hp-flair"></div>
 
+    <!-- In-run centered LEVEL banner + floating settings (only visible during a run) -->
+    <div id="in-run-level-banner" class="in-run-level-banner" aria-hidden="true">
+        <span class="irl-label" id="in-run-level-label" data-i18n="hud.levelShort">LEVEL</span>
+        <span class="irl-num" id="in-run-level-num">1</span>
+    </div>
+    <button class="settings-button in-game-settings-button" id="in-game-settings-button" type="button" onclick="openSettings()" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9 1.65 1.65 0 0 0 4.27 7.18l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+    </button>
+
     <div id="ability-overlay" class="modal-overlay">
         <div class="modal-content ability-pick-content">
             <div class="ability-pick-header">
@@ -338,7 +352,30 @@
             <h2 class="result-title" id="result-title">Mission Clear</h2>
             <p class="result-copy" id="result-copy">Rewards granted.</p>
             <div class="result-stats" id="result-stats"></div>
+            <div id="result-leaderboard-delta" class="result-leaderboard-delta" style="display:none">
+                <div class="rld-head">
+                    <span class="rld-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V4z"/><path d="M6 4H3v3a3 3 0 0 0 3 3"/><path d="M18 4h3v3a3 3 0 0 1-3 3"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="14" x2="12" y2="20"/></svg>
+                    </span>
+                    <span class="rld-title" id="rld-title" data-i18n="result.leaderboardTitle">LEADERBOARD</span>
+                </div>
+                <div class="rld-body">
+                    <div class="rld-rank-row">
+                        <div class="rld-rank-block">
+                            <div class="rld-rank-label" data-i18n="result.before">BEFORE</div>
+                            <div class="rld-rank-value" id="rld-rank-before">#-</div>
+                        </div>
+                        <div class="rld-arrow" id="rld-arrow">&#9650;</div>
+                        <div class="rld-rank-block">
+                            <div class="rld-rank-label" data-i18n="result.after">AFTER</div>
+                            <div class="rld-rank-value" id="rld-rank-after">#-</div>
+                        </div>
+                    </div>
+                    <div class="rld-detail" id="rld-detail"></div>
+                </div>
+            </div>
             <div class="result-actions">
+                <button id="result-home" class="mini-action result-home" type="button" onclick="handleResultHome()" data-i18n="result.home">Home</button>
                 <button id="result-secondary" class="mini-action result-secondary" type="button" onclick="handleResultSecondary()">Map</button>
                 <button id="result-primary" class="inline-button" type="button" onclick="handleResultPrimary()">Next</button>
             </div>
@@ -408,6 +445,34 @@
                         <input id="settings-haptics" type="checkbox" onchange="toggleHaptics(this.checked)">
                         <span class="toggle-track"><span class="toggle-thumb"></span></span>
                     </label>
+                </div>
+
+                <div class="setting-toggle-v2">
+                    <div class="setting-row-head">
+                        <div class="setting-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
+                        </div>
+                        <div class="setting-info">
+                            <div class="setting-label" data-i18n="settings.dmgPopups">Damage Numbers</div>
+                            <div class="setting-copy" data-i18n="settings.dmgPopupsCopy">Show floating damage numbers when you hit enemies.</div>
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input id="settings-dmg-popups" type="checkbox" onchange="toggleDamagePopups(this.checked)">
+                        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    </label>
+                </div>
+
+                <div class="setting-row-v2 setting-leave-row" id="settings-leave-row" style="display:none">
+                    <button class="setting-leave-btn" type="button" onclick="leaveGameToHome()">
+                        <span class="setting-leave-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        </span>
+                        <span class="setting-leave-text">
+                            <span class="setting-leave-title" data-i18n="settings.leaveTitle">Leave Game</span>
+                            <span class="setting-leave-copy" data-i18n="settings.leaveCopy">Quit the run and return to the home screen.</span>
+                        </span>
+                    </button>
                 </div>
             </div>
         </div>

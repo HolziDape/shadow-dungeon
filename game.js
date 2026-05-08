@@ -7045,11 +7045,11 @@ function renderLevelRoadmap() {
     if (!host) return;
     const cur = Math.max(1, save.unlocked || 1);
 
-    // 8 future + current + 1 past, top → bottom (scrollable). Spiral coordinates
-    // are computed in the host's local box; the host is given an explicit height
-    // so we get smooth scrolling instead of cramming everything.
-    const future = 8;
-    const past = 1;
+    // Layout: future levels at TOP, CURRENT pinned near the BOTTOM, past
+    // (faded) below. Spiral climbs upward — the player progresses by going up.
+    // Viewport scrolls so user can browse 10 levels in each direction.
+    const future = 10;
+    const past = 10;
     const items = [];
     for (let i = future; i >= -past; i--) {
         const lvl = cur + i;
@@ -7066,37 +7066,38 @@ function renderLevelRoadmap() {
     // Spiral params — tuned for a mobile portrait viewport (~380px wide).
     // The horizontal radius has to stay clear of the left/right rails (each
     // ~92px wide); a radius of ~46 keeps the nodes inside the central lane.
-    const ordered = items.slice().reverse(); // index 0 = past/current, last = far-future
+    const ordered = items.slice().reverse(); // index 0 = past most, last = highest future
     const cx = 50; // center column in %
     const stepY = 92; // px between consecutive nodes
     const radius = 46; // px sideways amplitude — was 78, now stays inside the rails
     const turn = 0.7; // how tight the spiral coils per step (radians)
 
-    // Bottom padding ensures the CURRENT node sits ABOVE the FIGHT/ENDLESS
-    // CTA instead of being pushed behind it. Top padding gives the highest
-    // node room to breathe.
-    const bottomPad = 110; // big buffer so the current-level node never
-                           // overlaps the primary CTA + endless pill below.
+    // Top-down layout. Top padding keeps the past/current level off the host's
+    // top edge; bottom padding gives the deepest future level breathing room
+    // before the host viewport ends (above the FIGHT button).
     const topPad = 24;
+    const bottomPad = 32;
     const totalHeight = bottomPad + topPad + stepY * ordered.length;
-    host.style.minHeight = `${totalHeight}px`;
-    host.style.position = 'relative';
+    host.style.minHeight = '';
+    // Climbing layout: highest future at TOP of content, past at BOTTOM, so
+    // y grows from top to bottom. Use top: positioning inside an explicit-
+    // height wrapper so overflow scrolling works without weird abs-pos quirks.
+    // For ordered = [past..past, current, future..future] (ascending level), we
+    // want index 0 (oldest past) at the BOTTOM and last index (highest future)
+    // at the TOP — so flip i in the y formula.
+    const lastIdx = ordered.length - 1;
 
     const chestSvg = `<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18"/><path d="M9 8c0-2 6-2 6 0"/></svg>`;
     const sparkSvg = `<svg viewBox="0 0 24 24"><polygon points="12,3 14,10 21,12 14,14 12,21 10,14 3,12 10,10"/></svg>`;
 
-    // Compute per-node coordinates so the connecting SVG line + reward + skill
-    // markers can attach to the same positions.
+    // Compute per-node coordinates. Node at index 0 (oldest past) sits at the
+    // BOTTOM of the wrapper; node at last index (highest future) sits at TOP.
+    // y-from-top therefore decreases as i increases.
     const positions = ordered.map((it, i) => {
-        const t = i;
-        const offsetX = Math.sin(t * turn) * radius; // px
-        // y measured from the BOTTOM of the host so the current node anchors
-        // near the bottom (just above the CTA, not behind it).
-        const yFromBottom = bottomPad + stepY * i;
-        // Skill / reward badges are pinned to the side OPPOSITE the spiral
-        // curve so they never bleed under the left or right rail.
+        const offsetX = Math.sin(i * turn) * radius;
+        const yFromTop = topPad + stepY * (lastIdx - i);
         const badgeSide = offsetX <= 0 ? 'right' : 'left';
-        return { ...it, x: offsetX, yFromBottom, badgeSide };
+        return { ...it, x: offsetX, yFromTop, badgeSide };
     });
 
     // Connecting spiral line as a stack of CSS-rotated segments. Each
@@ -7109,17 +7110,13 @@ function renderLevelRoadmap() {
         const a = positions[i];
         const b = positions[i + 1];
         const dx = b.x - a.x;
-        // CSS y grows DOWN, our yFromBottom grows UP — when b is higher than
-        // a, dyCss is negative (the segment needs to tilt upward in CSS).
-        const dyCss = -(b.yFromBottom - a.yFromBottom);
+        const dyCss = b.yFromTop - a.yFromTop; // CSS-y is down, yFromTop is down
         const len = Math.sqrt(dx * dx + dyCss * dyCss);
-        // CSS rotate() is clockwise-positive, which matches atan2(dyCss, dx)
-        // for a y-down coordinate system. No sign flip needed.
         const angleDeg = Math.atan2(dyCss, dx) * 180 / Math.PI;
         const lineActive = (a.state === 'current' || a.state === 'locked') && (b.state === 'current' || b.state === 'locked');
         segmentsHtml += `<div class="lr-segment ${lineActive ? 'line-active' : ''}" style="
             left: calc(50% + ${a.x}px);
-            bottom: ${a.yFromBottom - SEG_H / 2}px;
+            top: ${a.yFromTop - SEG_H / 2}px;
             width: ${len}px;
             transform: rotate(${angleDeg}deg);
         "></div>`;
@@ -7145,7 +7142,7 @@ function renderLevelRoadmap() {
             </div>` : '';
         nodesHtml += `<div class="lr-node ${p.state}" data-lvl="${p.lvl}" style="
             left: calc(50% + ${p.x}px);
-            bottom: ${p.yFromBottom}px;
+            top: ${p.yFromTop}px;
         ">
             <span class="lr-node-num">${p.lvl}</span>
             ${rewardBadge}
@@ -7153,19 +7150,22 @@ function renderLevelRoadmap() {
         </div>`;
     });
 
+    // Single content wrapper with explicit height. Both segments and nodes
+    // are absolutely positioned INSIDE this wrapper, which establishes the
+    // scroll content area cleanly.
     host.innerHTML = `
-        <div class="lr-segments">${segmentsHtml}</div>
-        <div class="lr-nodes">${nodesHtml}</div>
+        <div class="lr-content" style="position:relative; height:${totalHeight}px; width:100%;">
+            <div class="lr-segments">${segmentsHtml}</div>
+            <div class="lr-nodes">${nodesHtml}</div>
+        </div>
     `;
 
-    // Scroll so the CURRENT node sits in the BOTTOM 25% of the viewport. The
-    // future levels then read upward from there.
+    // Scroll so the CURRENT node sits ~88% down the viewport. Future levels
+    // stack ABOVE it so the screen feels full instead of half-empty.
     requestAnimationFrame(() => {
         const currentEl = host.querySelector('.lr-node.current');
         if (currentEl) {
-            // offsetTop of the current node, minus an offset that lands the
-            // node ~80% of the way down the visible area.
-            const target = currentEl.offsetTop + currentEl.offsetHeight - host.clientHeight * 0.92;
+            const target = currentEl.offsetTop + currentEl.offsetHeight - host.clientHeight * 0.90;
             host.scrollTop = Math.max(0, target);
         } else {
             host.scrollTop = host.scrollHeight;

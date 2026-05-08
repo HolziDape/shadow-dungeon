@@ -3829,15 +3829,16 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
    path; the host scrolls vertically and the connecting line is built from a
    stack of rotated 1-pixel-thin div segments. */
 .level-roadmap {
-  position: relative;
+  position: fixed;
   z-index: 2;
-  margin: 8px auto 0;
+  bottom: 220px;
+  left: 50%;
+  transform: translateX(-50%);
   /* Stay narrow enough that even at radius=46 nodes don't reach the rails */
   width: min(220px, 64%);
-  /* Scrollable vertical viewport. We reserve ~210px for HUD + ~190px for
-     the FIGHT/ENDLESS CTA + bottom nav, so the spiral never tucks behind
-     either. */
-  max-height: calc(100vh - 380px);
+  /* Scrollable vertical viewport. */
+  max-height: calc(100vh - 340px);
+  min-height: 280px;
   overflow-y: auto;
   scrollbar-width: none;
   scroll-behavior: smooth;

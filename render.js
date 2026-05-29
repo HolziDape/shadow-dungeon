@@ -415,10 +415,13 @@ function drawOrbiters() {
 
 function drawPlayer() {
     if (!player) return;
-    const equippedSkin = (save && SKIN_DEFINITIONS && SKIN_DEFINITIONS[save.equippedSkin]) ? SKIN_DEFINITIONS[save.equippedSkin] : SKIN_DEFINITIONS.stock;
-    const style = equippedSkin.style;
+    const skin = (save && SKIN_DEFINITIONS && SKIN_DEFINITIONS[save.equippedSkin])
+        ? SKIN_DEFINITIONS[save.equippedSkin]
+        : SKIN_DEFINITIONS.stock;
+    const style = skin.style;
+    const rarityVfx = ({ blue: 1, dark: 2, purple: 3, red: 4, gold: 5 })[skin.rarity] || 1;
 
-    // ── Phoenix Aura: pulsating fire ring around the player ──
+    // ── Phoenix Aura ──────────────────────────────────────────────────────────
     if (player.phoenixAura && player.phoenixAuraRadius > 0) {
         const t = (performance.now() / 1000) % 1000;
         const r = player.phoenixAuraRadius;
@@ -431,170 +434,84 @@ function drawPlayer() {
         grad.addColorStop(0.55, 'rgba(255, 110, 40, 0.45)');
         grad.addColorStop(1, 'rgba(255, 50, 20, 0.0)');
         ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(0, 0, r * wobble, 0, Math.PI * 2);
-        ctx.fill();
-        // Outer crackling ring
+        ctx.beginPath(); ctx.arc(0, 0, r * wobble, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 0.55;
         ctx.strokeStyle = 'rgba(255, 180, 80, 0.7)';
-        ctx.lineWidth = 1.4;
-        ctx.shadowBlur = 18;
-        ctx.shadowColor = '#ff7035';
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.lineWidth = 1.4; ctx.shadowBlur = 18; ctx.shadowColor = '#ff7035';
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
     }
-    // VFX intensity climbs with rarity (blue=1, dark=2, purple=3, red=4, gold=5)
-    const rarityVfx = ({ blue: 1, dark: 2, purple: 3, red: 4, gold: 5 })[equippedSkin.rarity] || 1;
 
-    // Skin-based trail (always on, gets richer with rarity)
+    // ── Trail ─────────────────────────────────────────────────────────────────
     const trail = player.trailPoints || [];
     if (trail.length > 1) {
         ctx.save();
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         const baseWidth = 4 + rarityVfx * 1.4;
         for (let i = 0; i < trail.length - 1; i++) {
-            const prev = trail[Math.max(0, i - 1)];
+            const prev    = trail[Math.max(0, i - 1)];
             const current = trail[i];
-            const next = trail[i + 1];
+            const next    = trail[i + 1];
             const startX = i === 0 ? current.x : (prev.x + current.x) * 0.5;
             const startY = i === 0 ? current.y : (prev.y + current.y) * 0.5;
-            const endX = (current.x + next.x) * 0.5;
-            const endY = (current.y + next.y) * 0.5;
-            const fade = 1 - (i / Math.max(1, trail.length - 1));
-            const alpha = Math.max(0.02, current.life * 0.55 * fade);
-            ctx.shadowBlur = 6 + (fade * (6 + rarityVfx * 2));
+            const endX   = (current.x + next.x) * 0.5;
+            const endY   = (current.y + next.y) * 0.5;
+            const fade   = 1 - (i / Math.max(1, trail.length - 1));
+            ctx.shadowBlur  = 6 + (fade * (6 + rarityVfx * 2));
             ctx.shadowColor = style.trail;
             ctx.strokeStyle = style.trail;
-            ctx.globalAlpha = alpha;
-            ctx.lineWidth = Math.max(1, baseWidth * current.width * (0.24 + fade * 0.76));
+            ctx.globalAlpha = Math.max(0.02, current.life * 0.55 * fade);
+            ctx.lineWidth   = Math.max(1, baseWidth * current.width * (0.24 + fade * 0.76));
             ctx.beginPath();
             ctx.moveTo(startX, startY);
             ctx.quadraticCurveTo(current.x, current.y, endX, endY);
             ctx.stroke();
         }
         ctx.globalAlpha = 1;
-        // Aurora-Zero gold skin: rainbow shimmer overlay
-        if (equippedSkin.rarity === 'gold') {
-            const colors = ['#7be8ff', '#fffbe8', '#ffd14d', '#ff8ba2'];
-            for (let i = 0; i < trail.length - 1; i += 2) {
-                const fade = 1 - (i / Math.max(1, trail.length - 1));
-                ctx.globalAlpha = Math.max(0.02, fade * 0.3);
-                ctx.strokeStyle = colors[i % colors.length];
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = colors[i % colors.length];
-                ctx.lineWidth = 2;
-                const cur = trail[i];
-                const nxt = trail[i + 1];
-                ctx.beginPath(); ctx.moveTo(cur.x, cur.y); ctx.lineTo(nxt.x, nxt.y); ctx.stroke();
-            }
+        // Optional per-skin trail overlay (e.g. aurora rainbow shimmer)
+        if (typeof skin.drawTrailExtra === 'function') {
+            skin.drawTrailExtra(ctx, trail, style);
         }
         ctx.restore();
     }
 
+    // ── Power-pulse ring ──────────────────────────────────────────────────────
     if (powerPulse > 0) {
         ctx.save();
         ctx.globalAlpha = Math.min(0.25, powerPulse * 0.12);
-        ctx.strokeStyle = style.pulse;
-        ctx.shadowBlur = 14;
-        ctx.shadowColor = style.pulse;
+        ctx.strokeStyle = style.pulse; ctx.shadowBlur = 14; ctx.shadowColor = style.pulse;
         ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, 34 + (powerPulse * 14), 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(player.x, player.y, 34 + powerPulse * 14, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
     }
 
-    // Soft aura glow around the ship (intensity ramps with rarity)
+    // ── Soft aura glow ────────────────────────────────────────────────────────
     ctx.save();
     ctx.globalAlpha = 0.55;
-    const auraGrad = ctx.createRadialGradient(player.x, player.y, 4, player.x, player.y, player.r * (2.0 + rarityVfx * 0.4));
+    const auraGrad = ctx.createRadialGradient(
+        player.x, player.y, 4,
+        player.x, player.y, player.r * (2.0 + rarityVfx * 0.4)
+    );
     auraGrad.addColorStop(0, style.pulse);
     auraGrad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = auraGrad;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.r * (2.0 + rarityVfx * 0.4), 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.r * (2.0 + rarityVfx * 0.4), 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
+    // ── Ship body (delegated to the skin) ─────────────────────────────────────
+    const invulAlpha = player.invulnerable > 0 && Math.floor(player.invulnerable * 12) % 2 === 0 ? 0.45 : 1;
+    // Rotate world-space smoothed velocity into ship-local space so skins can react
+    // to movement without knowing about world angle. Normalized ~0..1 at full speed.
+    const _angle = player.angle || 0;
+    const _cosA = Math.cos(-_angle), _sinA = Math.sin(-_angle);
+    const _wx = player._mvx || 0, _wy = player._mvy || 0;
+    const _lmx = Math.max(-1, Math.min(1, (_wx * _cosA - _wy * _sinA) / 220));
+    const _lmy = Math.max(-1, Math.min(1, (_wx * _sinA + _wy * _cosA) / 220));
     ctx.save();
     ctx.translate(player.x, player.y);
-    ctx.rotate(player.angle || 0);
-    ctx.globalAlpha = player.invulnerable > 0 && Math.floor(player.invulnerable * 12) % 2 === 0 ? 0.45 : 1;
-
-    // Ship body — outer outline in skin core color
-    ctx.shadowBlur = 16 + rarityVfx * 3;
-    ctx.shadowColor = style.core;
-    ctx.strokeStyle = style.ship;
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.moveTo(0, -player.r);
-    ctx.lineTo(player.r * 0.82, player.r);
-    ctx.lineTo(0, player.r * 0.42);
-    ctx.lineTo(-player.r * 0.82, player.r);
-    ctx.closePath();
-    ctx.stroke();
-
-    // Filled silhouette (ship color, semi-transparent)
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = style.ship;
-    ctx.globalAlpha = (player.invulnerable > 0 && Math.floor(player.invulnerable * 12) % 2 === 0 ? 0.25 : 0.40);
-    ctx.fill();
-    ctx.globalAlpha = player.invulnerable > 0 && Math.floor(player.invulnerable * 12) % 2 === 0 ? 0.45 : 1;
-
-    // Core sphere
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = style.core;
-    ctx.fillStyle = style.core;
-    ctx.beginPath();
-    ctx.arc(0, -4, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Outer wing-tip outline (faint, helps silhouette pop on dark bg)
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = style.ship;
-    ctx.globalAlpha = 0.35;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, -player.r - 4);
-    ctx.lineTo(player.r * 0.98, player.r + 4);
-    ctx.lineTo(0, player.r * 0.5);
-    ctx.lineTo(-player.r * 0.98, player.r + 4);
-    ctx.closePath();
-    ctx.stroke();
-
-    // Rarity-specific extra VFX
-    if (equippedSkin.rarity === 'red' || equippedSkin.rarity === 'gold') {
-        // Twin afterburner cones from the back
-        ctx.globalAlpha = 0.6;
-        ctx.fillStyle = style.trail;
-        ctx.shadowBlur = 14;
-        ctx.shadowColor = style.core;
-        const tx = player.r * 0.45;
-        const ty = player.r + 2;
-        const tlen = player.r * 0.9;
-        ctx.beginPath();
-        ctx.moveTo(-tx, ty); ctx.lineTo(0, ty + tlen); ctx.lineTo(tx, ty); ctx.closePath();
-        ctx.fill();
-    }
-    if (equippedSkin.rarity === 'gold' || equippedSkin.rarity === 'red') {
-        // Sparkles around ship
-        const t = (performance.now() / 90) % (Math.PI * 2);
-        for (let i = 0; i < 4; i++) {
-            const a = t + i * (Math.PI / 2);
-            const px = Math.cos(a) * (player.r + 8);
-            const py = Math.sin(a) * (player.r + 8);
-            ctx.globalAlpha = 0.7;
-            ctx.fillStyle = style.core;
-            ctx.shadowBlur = 6;
-            ctx.beginPath();
-            ctx.arc(px, py, 1.5, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
+    ctx.rotate(_angle);
+    ctx.globalAlpha = invulAlpha;
+    skin.drawBody(ctx, player.r, style, rarityVfx, invulAlpha, _lmx, _lmy);
     ctx.restore();
     ctx.globalAlpha = 1;
 }
@@ -1074,14 +991,6 @@ function drawExtraHearts(x, y, count) {
         ctx.bezierCurveTo(-12, -10, -12, 2, 0, 10);
         ctx.fill();
         ctx.stroke();
-        ctx.restore();
-    }
-    if (count > max) {
-        ctx.save();
-        ctx.font = '700 11px Orbitron';
-        ctx.fillStyle = '#ffd14d';
-        ctx.textAlign = 'left';
-        ctx.fillText(`+${count - max}`, x + max * 30 + 4, y + 4);
         ctx.restore();
     }
 }

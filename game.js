@@ -2147,66 +2147,6 @@ function getUpgradeBonus(statConfig, level, upgradeId) {
     return total;
 }
 
-function updateMetaHud() {
-    const goldNode = document.getElementById('hud-gold');
-    const gemsNode = document.getElementById('hud-gems');
-    const levelNode = document.getElementById('hud-level');
-    const waveNode = document.getElementById('hud-wave');
-    const label = document.getElementById('selected-level-label');
-    const desc = document.getElementById('selected-level-desc');
-    const difficulty = document.getElementById('selected-level-difficulty');
-    const modePill = document.getElementById('selected-mode-pill');
-    const battleButton = document.getElementById('battle-button');
-    const endlessButton = document.getElementById('endless-button');
-    const rerollButton = document.getElementById('ability-reroll');
-
-    save.selectedLevel = save.unlocked;
-
-    if (goldNode) goldNode.textContent = save.gold;
-    if (gemsNode) gemsNode.textContent = save.gems;
-    if (levelNode) levelNode.textContent = `${t('hud.levelShort')} ${save.unlocked}`;
-    // In-run centered LEVEL banner (visible only via body.in-run CSS rule).
-    const inRunLevelNum = document.getElementById('in-run-level-num');
-    const inRunLevelLabel = document.getElementById('in-run-level-label');
-    if (inRunLevelNum) {
-        inRunLevelNum.textContent = (currentMode === 'endless') ? `${currentWave + 1}` : `${currentLevel}`;
-    }
-    if (inRunLevelLabel) {
-        inRunLevelLabel.textContent = (currentMode === 'endless') ? t('cta.endless') : t('hud.levelShort');
-    }
-
-    if (waveNode) {
-        if (gameRunning) {
-            waveNode.textContent = currentMode === 'endless'
-                ? `WAVE ${currentWave + 1}/∞`
-                : `WAVE ${Math.min(currentWave + 1, currentLevelWaves.length)}/${currentLevelWaves.length}`;
-        } else {
-            waveNode.textContent = currentMode === 'endless'
-                ? 'WAVES ∞'
-                : `WAVES ${getLevelWaves(save.unlocked).length}`;
-        }
-    }
-
-    if (label) label.textContent = currentMode === 'endless' ? `Endless · Wave ${currentWave + 1}` : `Level ${save.unlocked}`;
-    if (desc) {
-        const previewDrone = formatCompactNumber(getEnemyLevelStats('drone', save.unlocked).hp);
-        const waves = getLevelWaves(save.unlocked).length;
-        desc.textContent = currentMode === 'endless'
-            ? `Infinite waves. Always starts at Level 1 — difficulty climbs with every wave you survive.`
-            : `Early kills are faster, late-game slows down. ${waves} waves. Drone HP: ${previewDrone}.`;
-    }
-    if (difficulty) {
-        if (currentMode === 'endless') difficulty.textContent = 'Threat Endless';
-        else if (save.unlocked < 4) difficulty.textContent = 'Threat Low';
-        else if (save.unlocked < 9) difficulty.textContent = 'Threat Medium';
-        else difficulty.textContent = 'Threat High';
-    }
-    if (modePill) modePill.textContent = currentMode === 'endless' ? 'Endless' : 'Mission';
-    if (battleButton) battleButton.textContent = `Fight Mission ${save.unlocked}`;
-    if (endlessButton) endlessButton.textContent = currentMode === 'endless' ? 'Endless Ready' : 'Endless';
-    if (rerollButton) rerollButton.textContent = save.rerollTokens > 0 ? `Reroll ${save.rerollTokens}` : 'Reroll 5 Gems';
-}
-
 function setActiveNav(id) {
     // Support both legacy .nav-btn and new .nav-tab
     document.querySelectorAll('.nav-btn, .nav-tab').forEach((button) => button.classList.remove('active'));
@@ -2435,240 +2375,6 @@ window.buildRoadmap = function() {
         container.scrollTop = Math.min(desired, Math.max(0, container.scrollHeight - container.clientHeight));
     }
 };
-
-function createPlayer() {
-    const inventory = getInventoryBonuses();
-    const spawn = getArenaSpawnPoint();
-    const earlyDamageBoost = save.unlocked <= 10 ? 1.12 : save.unlocked <= 20 ? 1.04 : 1;
-    const damageUpgrade = getUpgradeBonus(PLAYER_STATS.dmg, save.stats.dmg, 'dmg');
-    const fireRateUpgrade = getUpgradeBonus(PLAYER_STATS.atkSpd, save.stats.atkSpd, 'atkSpd');
-    const baseDamage = (PLAYER_STATS.dmg.base + damageUpgrade) * Math.max(0.18, 1 + inventory.damageMultiplier) * earlyDamageBoost;
-    const speed = PLAYER_STATS.speed.base * (1 + inventory.speedMultiplier);
-    const magnet = PLAYER_STATS.magnet.base + inventory.magnetFlat;
-    const atkSpeedMult = Math.max(0.35, (PLAYER_STATS.atkSpd.base + fireRateUpgrade) * (1 + inventory.attackSpeedMultiplier));
-
-    return {
-        x: spawn.x,
-        y: spawn.y,
-        r: 20,
-        angle: 0,
-        hp: PLAYER_STATS.hearts.base,
-        maxHp: PLAYER_STATS.hearts.base,
-        invulnerable: 0,
-        dmg: baseDamage,
-        damageMultiplier: 1,
-        spd: speed,
-        atkCooldown: 0.82 / atkSpeedMult,
-        baseAtkCooldown: 0.82 / atkSpeedMult,
-        shootTimer: 0,
-        range: PLAYER_STATS.range.base,
-        multishot: 1,
-        multiSpread: 0,
-        pierce: 0,
-        magnet,
-        reviveUsed: false,
-        bossReviveUsed: false,
-        orbiters: [],
-        abilityXp: save.bonusAbilityXp || 0,
-        nextAbilityXp: 12,
-        abilityLevel: 1,
-        abilityRanks: {},
-        chainLightning: false,
-        tornadoShot: false,
-        echoShot: false,
-        ionRound: false,
-        shockNova: false,
-        shockNovaCounter: 0,
-        shotCounter: 0,
-        hitCounter: 0,
-        trailPoints: [],
-        trailBudget: 0,
-        // ── Crit System ──
-        critChance: 0,
-        critMultiplier: 2.0,
-        megaCritChance: 0,
-        // ── Lifesteal / Healing ──
-        lifesteal: 0,
-        healAccum: 0,
-        healOnKillChance: 0,
-        everyKillHeal: 0,
-        healPerKills: 0,
-        healPerKillCounter: 0,
-        heartDropOnKill: 0,
-        bossFullHeal: false,
-        // ── Kill Streak / Combo ──
-        comboBuff: false,
-        comboPct: 0,
-        comboCap: 0,
-        comboTimeBonus: 0,
-        comboPermanent: false,
-        // ── Frenzy ──
-        frenzyOnKill: false,
-        frenzyStack: 0,
-        frenzyCap: 0.30,
-        frenzyTimer: 0,
-        frenzyPermanent: false,
-        // ── Gold ──
-        goldBonus: 0,
-        doubleDropChance: 0,
-        passiveGold: 0,
-        bossPackToken: false,
-        // ── Trigger Fingers ──
-        killSpeedBoost: false,
-        killSpeedPct: 0,
-        killSpeedCap: 0,
-        killSpeedStack: 0,
-        killDamageBoost: 0,
-        killDamageBuff: 0,
-        bossResetCap: false,
-        // ── Platinum Rounds ──
-        platinumStack: false,
-        platinumPerHit: 0,
-        platinumCap: 0,
-        platinumDmg: 0,
-        platinumFireRate: 0,
-        platinumFireRateDmg: 0,
-        // ── Lucky Seven ──
-        luckyEvery: 0,
-        luckyMult: 0,
-        luckyHeals: 0,
-        // ── Frost ──
-        frostOnHit: false,
-        frostStrength: 0,
-        frostDoT: false,
-        freezeChance: 0,
-        frozenShatter: false,
-        // ── Poison ──
-        poisonOnHit: false,
-        poisonPct: 0,
-        poisonDuration: 0,
-        poisonSpread: false,
-        poisonExplodeOnDeath: false,
-        poisonJump: false,
-        // ── Bullet Storm ──
-        slowImmune: false,
-        // ── Glass Cannon ──
-        closeRangeBonus: 0,
-        pointBlankMult: 0,
-        // ── Glass Shards ──
-        shardsOnHit: false,
-        shardCount: 0,
-        shardDmgMult: 0,
-        shardBleed: false,
-        shardsBounce: false,
-        shardsExplode: false,
-        // ── Arc Pulse ──
-        arcOnHit: false,
-        arcEvery: 0,
-        arcTargets: 0,
-        arcParalyze: false,
-        // ── Crit Bomb ──
-        critExplode: false,
-        critExplodeRadius: 0,
-        critExplodeMult: 0,
-        critStunWave: false,
-        critOneShot: false,
-        // ── Phantom Shield ──
-        shieldEvery: 0,
-        shieldCharges: 0,
-        shieldTimer: 0,
-        shieldActive: false,
-        shieldReflect: false,
-        shieldHeals: false,
-        // ── Strong Spirit / Phoenix ──
-        firstLethalBlock: false,
-        lethalBlockUsed: false,
-        spiritInvul: 0,
-        spiritResetOnFullHeal: false,
-        spiritEvery: 0,
-        spiritCooldown: 0,
-        shieldEachWave: false,
-        phoenixDrive: false,
-        phoenixBurning: false,
-        phoenixDouble: false,
-        phoenixRevive: false,
-        phoenixReviveUsed: false,
-        // ── Scarier Face ──
-        enemyHpMult: 1,
-        enemyFleeChance: 0,
-        bossHpMult: 1,
-        executeThreshold: 0,
-        // ── Ricochet ──
-        bulletsRicochet: false,
-        ricochetCount: 0,
-        ricochetDmgPerBounce: 0,
-        ricochetSeek: false,
-        // ── Heat Seeker ──
-        bulletsHome: 0,
-        markedDmg: 0,
-        bulletsHardHome: false,
-        bulletsSmartWait: false,
-        // ── Boomerang ──
-        boomerangShot: false,
-        boomerangEvery: 0,
-        boomerangSpawnsClone: false,
-        boomerangCount: 1,
-        boomerangPendulum: 0,
-        // ── Lich Bullets ──
-        bulletFork: false,
-        bulletForkCount: 0,
-        forkCritChance: 0,
-        lichEye: false,
-        // ── Cluster Bomb ──
-        clusterBomb: false,
-        clusterEvery: 0,
-        clusterDmgMult: 0,
-        clusterSplit: false,
-        clusterChain: false,
-        // ── Blank Burst ──
-        blankChance: 0,
-        blankPulse: false,
-        blankRadius: 1,
-        permanentBlankAura: false,
-        // ── Singularity ──
-        singularity: false,
-        singularityEvery: 0,
-        singularityImplode: false,
-        permaSingularity: false,
-        singularityTimer: 0,
-        // ── Spread Volley ──
-        markOnHit: false,
-        pierceDamageBonus: 0,
-        pulsarBurst: false,
-        sentinelHalo: false,
-        sawWaves: false,
-        sawPull: false,
-        // ── Reworked / new abilities ──
-        extraHearts: 0,           // Patch Heart stack
-        extraHeartHealPerKills: 0,
-        extraHeartKillCounter: 0,
-        echoOnHit: false,         // Echo Shock
-        echoEveryHits: 4,
-        echoHitCounter: 0,
-        echoRadius: 80,
-        echoDmgMult: 0.6,
-        phoenixAura: false,       // Phoenix Aura
-        phoenixAuraRadius: 0,
-        phoenixAuraDps: 0,
-        phoenixAuraTick: 0,
-        ionSplash: false,         // Ion Round splash
-        ionSplashRadius: 0,
-        ionSplashMult: 0,
-        ionPiercing: false,
-        ionVaporize: false,
-        sawShoot: false,          // Saw projectile launcher
-        sawShootCooldown: 0,
-        sawShootInterval: 1.6,
-        sawShootCount: 1,
-        sawShootDmgMult: 0.6,
-        boomerangLaunch: false,   // Real boomerang projectile
-        boomerangLaunchCooldown: 0,
-        boomerangLaunchInterval: 2.5,
-        boomerangLaunchCount: 1,
-        boomerangLaunchDmgMult: 1.4,
-        alwaysCenterShot: false   // Spread Volley center guarantee
-    };
-}
 
 function startLevel() {
     gameRunning = true;
@@ -2996,6 +2702,12 @@ function updatePlayerMovement(dt) {
     const topBoundary = arena.top;
     player.x = Math.max(WALL + player.r, Math.min(arena.width - WALL - player.r, player.x));
     player.y = Math.max(topBoundary + player.r, Math.min(arena.height - WALL - player.r, player.y));
+
+    // Smoothed world-space velocity (pixels/sec) used by skin drawBody for motion effects
+    const safeDt = Math.max(dt, 0.001);
+    player._mvx = ((player._mvx || 0) * 0.72 + ((player.x - prevX) / safeDt) * 0.28);
+    player._mvy = ((player._mvy || 0) * 0.72 + ((player.y - prevY) / safeDt) * 0.28);
+
     updatePlayerTrail(prevX, prevY, dt);
     clampCamera();
 }
@@ -4702,59 +4414,6 @@ function getAbilityRank(id) {
     return player?.abilityRanks?.[id] || 0;
 }
 
-function getAbilityEvolutionText(id, rank) {
-    const nextRank = rank + 1;
-    switch (id) {
-        case 'damage_boost':
-            return `Rank ${nextRank}: +22% total weapon damage`;
-        case 'rapid_fire':
-            return `Rank ${nextRank}: +14% faster firing`;
-        case 'multi':
-            return `Rank ${nextRank}: +1 projectile per volley`;
-        case 'pierce':
-            return `Rank ${nextRank}: +1 extra pierce`;
-        case 'chain_lightning':
-            return `Rank ${nextRank}: ${1 + (rank * 2)} chain targets, stronger arcs`;
-        case 'tornado_shot':
-            return `Rank ${nextRank}: more tornado blades and impact`;
-        case 'echo_shot':
-            return `Rank ${nextRank}: more frequent echo volleys`;
-        case 'ion_round':
-            return `Rank ${nextRank}: heavier ion burst and chain power`;
-        case 'shock_nova':
-            return `Rank ${nextRank}: nova triggers faster and hits harder`;
-        case 'heal_heart':
-            return rank > 0 ? `Rank ${nextRank}: heal and gain a burst of power` : 'Restore one heart';
-        case 'orbiter':
-            return `Rank ${nextRank}: add another orbit drone`;
-        default:
-            return '';
-    }
-}
-
-function getAbilityIconMarkup(id, fallback) {
-    const svgs = {
-        damage_boost: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 18 L13 5 L18 18"/><line x1="9.5" y1="14" x2="16.5" y2="14"/><line x1="13" y1="5" x2="13" y2="2"/><polyline points="10.5,4 13,2 15.5,4"/></svg>`,
-        rapid_fire: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="13" x2="20" y2="13"/><line x1="4" y1="18" x2="20" y2="18"/><polyline points="17,5.5 21,8 17,10.5" stroke-linejoin="round"/><polyline points="17,10.5 21,13 17,15.5" stroke-linejoin="round"/><polyline points="17,15.5 21,18 17,20.5" stroke-linejoin="round"/></svg>`,
-        multi: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="21" x2="13" y2="6"/><line x1="7" y1="21" x2="9" y2="6"/><line x1="19" y1="21" x2="17" y2="6"/><polyline points="11,8 13,6 15,8"/><polyline points="5.5,8.5 7.5,6.5 9.5,8.5"/><polyline points="16.5,8.5 18.5,6.5 20.5,8.5"/></svg>`,
-        pierce: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="3" y1="13" x2="23" y2="13"/><polyline points="18,9 23,13 18,17" stroke-linejoin="round"/><circle cx="8" cy="13" r="2.5"/><circle cx="15" cy="13" r="2.5"/></svg>`,
-        chain_lightning: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,2 9,13 13.5,13 10,24"/><line x1="4" y1="7" x2="8.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="22" y1="7" x2="17.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="4" y1="19" x2="9.5" y2="16.5" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="4" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="22" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="4" cy="19" r="1.8" fill="currentColor" stroke="none"/></svg>`,
-        tornado_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4,7 Q13,3.5 22,7" stroke-width="1.8"/><path d="M6.5,12 Q13,9.5 19.5,12" stroke-width="1.6"/><path d="M9,17 Q13,15 17,17" stroke-width="1.4"/><line x1="13" y1="17" x2="13" y2="22" stroke-width="1.6"/><path d="M11,22 Q13,24.5 15,22" stroke-width="1.3"/></svg>`,
-        echo_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3" stroke-width="1.8"/><circle cx="13" cy="13" r="6.5" stroke-width="1.2" stroke-dasharray="3 2"/><circle cx="13" cy="13" r="10" stroke-width="1" stroke-dasharray="2 3"/><line x1="13" y1="3" x2="13" y2="6.5" stroke-width="1.5"/><line x1="13" y1="19.5" x2="13" y2="23" stroke-width="1.5"/></svg>`,
-        ion_round: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="13" cy="13" rx="3.5" ry="10" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="2" fill="currentColor" stroke="none"/></svg>`,
-        shock_nova: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="5" stroke-width="1.8"/><line x1="13" y1="2" x2="13" y2="7" stroke-width="1.6"/><line x1="13" y1="19" x2="13" y2="24" stroke-width="1.6"/><line x1="2" y1="13" x2="7" y2="13" stroke-width="1.6"/><line x1="19" y1="13" x2="24" y2="13" stroke-width="1.6"/><line x1="5" y1="5" x2="8.2" y2="8.2" stroke-width="1.4"/><line x1="21" y1="5" x2="17.8" y2="8.2" stroke-width="1.4"/><line x1="5" y1="21" x2="8.2" y2="17.8" stroke-width="1.4"/><line x1="21" y1="21" x2="17.8" y2="17.8" stroke-width="1.4"/></svg>`,
-        heal_heart: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,21 C13,21 4,15 4,9 C4,6.2 6.2,4 9,4 C10.8,4 12.3,5 13,6.2 C13.7,5 15.2,4 17,4 C19.8,4 22,6.2 22,9 C22,15 13,21 13,21Z"/><line x1="13" y1="9" x2="13" y2="15"/><line x1="10" y1="12" x2="16" y2="12"/></svg>`,
-        orbiter: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="2.5" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(60 13 13)"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(120 13 13)"/></svg>`,
-        phoenix_drive: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,2 L15.5,9 L23,9 L17,14 L19.5,22 L13,17.5 L6.5,22 L9,14 L3,9 L10.5,9 Z"/></svg>`,
-        singularity: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="7" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="13" cy="13" r="10.5" stroke-width="1" stroke-dasharray="1 3"/><line x1="4" y1="4" x2="9" y2="9" stroke-width="1.3"/><line x1="22" y1="4" x2="17" y2="9" stroke-width="1.3"/><line x1="4" y1="22" x2="9" y2="17" stroke-width="1.3"/><line x1="22" y1="22" x2="17" y2="17" stroke-width="1.3"/></svg>`
-    };
-    const wrap = svgs[id];
-    if (wrap) return `<div class="ability-icon ability-${id}">${wrap}</div>`;
-    return fallback;
-}
-
-// Track which pick is currently focused (for the feature panel + take button)
-let _abilityPickFocusIdx = 0;
 
 function drawAbilityChoices() {
     const cards = document.getElementById('ability-cards');
@@ -5861,29 +5520,8 @@ function getRarityLabel(rarity) {
     return labels[rarity] || rarity;
 }
 
-function getCardVisualMarkup(cardId, compact = false) {
-    const variants = {
-        damage_chip: 'art-blade',
-        magnet_chip: 'art-orbit',
-        stability_chip: 'art-scan',
-        rpm_chip: 'art-barrels',
-        overcharge_core: 'art-core',
-        arc_battery: 'art-lightning',
-        siege_loader: 'art-anvil',
-        apex_emblem: 'art-crown',
-        minigun_protocol: 'art-minigun',
-        vortex_array: 'art-vortex',
-        solar_crown: 'art-sun',
-        crimson_zero: 'art-crimson'
-    };
-    return `
-        <div class="card-visual ${variants[cardId] || 'art-core'} ${compact ? 'compact' : ''}">
-            <span></span><span></span><span></span><span></span>
-        </div>
-    `;
-}
-
 function getPackOfferMarkup(item, packDef, premium = false) {
+
     if (!packDef) {
         // non-pack item — handled elsewhere via getShopItemMarkup
         return getShopItemMarkup(item, premium);
@@ -6035,203 +5673,366 @@ function getMiniArtSvgInline(id, type) {
 }
 
 // Big hero SVG art for pack-hero or peek tile
+let _svgUid = 0;
 function getRewardArtSvg(id, type) {
+    const gid = id + '_' + (_svgUid++);
     if (type === 'skin') {
         const skin = SKIN_DEFINITIONS[id];
         if (!skin) return '';
         const s = skin.style;
         const theme = skin.theme || 'arrow';
-        // Aura/glow background — common to all skins, intensity scales with rarity
-        const rarityIntensity = ({ blue: 0.85, dark: 1.0, purple: 1.15, red: 1.3, gold: 1.5 })[skin.rarity] || 1.0;
+        const ri = ({ blue: 0.85, dark: 1.0, purple: 1.15, red: 1.3, gold: 1.5 })[skin.rarity] || 1.0;
         const auraGrad = `<defs>
-            <radialGradient id="g-${id}" cx="50%" cy="55%" r="60%">
-                <stop offset="0%" stop-color="${s.pulse}" stop-opacity="${(0.95 * rarityIntensity).toFixed(2)}"/>
-                <stop offset="50%" stop-color="${s.core}" stop-opacity="${(0.5 * rarityIntensity).toFixed(2)}"/>
+            <radialGradient id="g-${gid}" cx="50%" cy="62%" r="58%">
+                <stop offset="0%"   stop-color="${s.pulse}" stop-opacity="${(ri * 1.0).toFixed(2)}"/>
+                <stop offset="40%"  stop-color="${s.core}"  stop-opacity="${(ri * 0.5).toFixed(2)}"/>
                 <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
             </radialGradient>
         </defs>
-        <circle cx="50" cy="55" r="44" fill="url(#g-${id})"/>`;
+        <circle cx="50" cy="62" r="46" fill="url(#g-${gid})"/>`;
 
-        // Each theme draws a unique ship + flair (heavy VFX)
         let body = '';
 
         if (theme === 'arrow') {
-            // Stock — clean white triangle with subtle glow ring
+            // STOCK — Ghost Frame: geometric needle fighter with hex ring system
             body = `
-                <circle cx="50" cy="50" r="36" fill="none" stroke="${s.pulse}" stroke-width="0.8" opacity="0.4" stroke-dasharray="2 2"/>
-                <polygon points="50,16 70,80 50,70 30,80" fill="${s.ship}" stroke="${s.core}" stroke-width="1.6" stroke-linejoin="round"/>
-                <circle cx="50" cy="50" r="8" fill="${s.core}"/>
-                <circle cx="50" cy="50" r="3.5" fill="#ffffff"/>
-                <line x1="36" y1="78" x2="64" y2="78" stroke="${s.trail}" stroke-width="3" stroke-linecap="round"/>`;
+            <defs>
+                <linearGradient id="eng-${gid}" x1="50" y1="60" x2="50" y2="85" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="${s.core}" stop-opacity="0.9"/>
+                    <stop offset="100%" stop-color="${s.core}" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="hull-${gid}" x1="50" y1="14" x2="50" y2="66" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="#ffffff"   stop-opacity="0.98"/>
+                    <stop offset="100%" stop-color="${s.core}" stop-opacity="0.65"/>
+                </linearGradient>
+            </defs>
+            <circle cx="9"  cy="12" r="0.9" fill="#fff" opacity="0.75"/>
+            <circle cx="87" cy="17" r="0.7" fill="${s.core}" opacity="0.65"/>
+            <circle cx="19" cy="79" r="0.8" fill="#fff" opacity="0.5"/>
+            <circle cx="83" cy="77" r="0.6" fill="${s.core}" opacity="0.45"/>
+            <circle cx="5"  cy="52" r="0.7" fill="#fff" opacity="0.6"/>
+            <circle cx="95" cy="43" r="0.6" fill="#fff" opacity="0.5"/>
+            <circle cx="29" cy="7"  r="0.5" fill="${s.core}" opacity="0.5"/>
+            <circle cx="71" cy="89" r="0.5" fill="#fff" opacity="0.4"/>
+            <circle cx="15" cy="34" r="0.4" fill="${s.core}" opacity="0.4"/>
+            <circle cx="85" cy="64" r="0.4" fill="#fff" opacity="0.4"/>
+            <polygon points="50,3 85,22 85,60 50,79 15,60 15,22" fill="none" stroke="${s.core}" stroke-width="0.65" opacity="0.22" stroke-linejoin="round"/>
+            <circle cx="50" cy="43" r="36" fill="none" stroke="${s.core}" stroke-width="0.55" stroke-dasharray="4 5" opacity="0.28"/>
+            <circle cx="50" cy="43" r="25" fill="none" stroke="#ffffff" stroke-width="0.45" stroke-dasharray="2 6" opacity="0.18"/>
+            <rect x="45.5" y="60" width="9" height="22" rx="4.5" fill="url(#eng-${gid})"/>
+            <ellipse cx="50" cy="61" rx="5.5" ry="2.2" fill="${s.core}" opacity="0.85"/>
+            <ellipse cx="50" cy="63" rx="3.5" ry="1.5" fill="#ffffff" opacity="0.65"/>
+            <polygon points="50,12 60,56 55,62 45,62 40,56" fill="url(#hull-${gid})" stroke="${s.core}" stroke-width="1.1" stroke-linejoin="round"/>
+            <polygon points="50,12 54,27 46,27" fill="#ffffff" opacity="0.88"/>
+            <line x1="50" y1="14" x2="50" y2="58" stroke="#ffffff" stroke-width="0.5" opacity="0.4"/>
+            <line x1="46" y1="30" x2="43" y2="52" stroke="${s.core}" stroke-width="0.5" opacity="0.32"/>
+            <line x1="54" y1="30" x2="57" y2="52" stroke="${s.core}" stroke-width="0.5" opacity="0.32"/>
+            <line x1="44" y1="42" x2="41" y2="52" stroke="${s.core}" stroke-width="0.4" opacity="0.22"/>
+            <line x1="56" y1="42" x2="59" y2="52" stroke="${s.core}" stroke-width="0.4" opacity="0.22"/>
+            <polygon points="40,56 18,70 30,62" fill="${s.ship}" opacity="0.62" stroke="${s.core}" stroke-width="0.8" stroke-linejoin="round"/>
+            <polygon points="60,56 82,70 70,62" fill="${s.ship}" opacity="0.62" stroke="${s.core}" stroke-width="0.8" stroke-linejoin="round"/>
+            <line x1="18" y1="70" x2="11" y2="64" stroke="${s.core}" stroke-width="0.9" opacity="0.5" stroke-linecap="round"/>
+            <line x1="82" y1="70" x2="89" y2="64" stroke="${s.core}" stroke-width="0.9" opacity="0.5" stroke-linecap="round"/>
+            <circle cx="18" cy="70" r="1.5" fill="${s.core}" opacity="0.6"/>
+            <circle cx="82" cy="70" r="1.5" fill="${s.core}" opacity="0.6"/>
+            <circle cx="50" cy="37" r="8"   fill="${s.core}" opacity="0.2"/>
+            <circle cx="50" cy="37" r="5"   fill="${s.core}" opacity="0.72"/>
+            <circle cx="50" cy="37" r="2.4" fill="#ffffff"/>
+            <circle cx="48.5" cy="35.5" r="1" fill="#ffffff" opacity="0.8"/>`;
         }
         else if (theme === 'molten') {
-            // EMBER BLADE — magma shell with glowing cracks + flame trail + embers
+            // EMBER BLADE — Volcanic Forge: lava cracks, ember particles, flame layers
             body = `
-                <defs>
-                    <linearGradient id="emb-${id}" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="${s.core}" stop-opacity="0.95"/>
-                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="1"/>
-                    </linearGradient>
-                </defs>
-                <!-- big flame trail behind ship -->
-                <path d="M 36 70 Q 30 85, 36 95 Q 50 88, 64 95 Q 70 85, 64 70 Z" fill="${s.pulse}" opacity="0.55"/>
-                <path d="M 40 72 Q 36 86, 42 92 Q 50 86, 58 92 Q 64 86, 60 72 Z" fill="${s.core}" opacity="0.85"/>
-                <!-- ship plate with magma gradient -->
-                <polygon points="50,14 72,76 50,68 28,76" fill="url(#emb-${id})" stroke="${s.core}" stroke-width="1.6" stroke-linejoin="round"/>
-                <!-- glowing cracks -->
-                <polyline points="50,20 46,38 52,46 44,60" fill="none" stroke="${s.core}" stroke-width="1.6" opacity="0.95"/>
-                <polyline points="50,22 56,40 48,48 56,62" fill="none" stroke="#ffe168" stroke-width="1.2" opacity="0.85"/>
-                <polyline points="50,26 50,60" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
-                <!-- core -->
-                <circle cx="50" cy="46" r="7" fill="#ffe168"/>
-                <circle cx="50" cy="46" r="3" fill="#ffffff"/>
-                <!-- floating embers -->
-                <circle cx="22" cy="38" r="1.6" fill="${s.core}" opacity="0.9"/>
-                <circle cx="76" cy="44" r="1.4" fill="${s.core}" opacity="0.85"/>
-                <circle cx="18" cy="58" r="1.2" fill="${s.pulse}" opacity="0.85"/>
-                <circle cx="80" cy="62" r="1.6" fill="${s.pulse}" opacity="0.9"/>`;
+            <defs>
+                <linearGradient id="emb-${gid}" x1="50" y1="9" x2="50" y2="70" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="#fff8d0"   stop-opacity="0.8"/>
+                    <stop offset="30%"  stop-color="${s.core}" stop-opacity="0.95"/>
+                    <stop offset="70%"  stop-color="${s.ship}" stop-opacity="0.92"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="1"/>
+                </linearGradient>
+                <radialGradient id="hglow-${gid}" cx="50%" cy="95%" r="48%">
+                    <stop offset="0%"   stop-color="${s.pulse}" stop-opacity="0.78"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+                </radialGradient>
+            </defs>
+            <ellipse cx="50" cy="96" rx="40" ry="14" fill="url(#hglow-${gid})"/>
+            <path d="M 28 70 Q 18 90 26 104 Q 50 94 74 104 Q 82 90 72 70 Z" fill="${s.pulse}" opacity="0.42"/>
+            <path d="M 34 70 Q 26 87 33 100 Q 50 92 67 100 Q 74 87 66 70 Z" fill="${s.ship}" opacity="0.58"/>
+            <path d="M 40 71 Q 35 85 40 96 Q 50 90 60 96 Q 65 85 60 71 Z" fill="${s.core}" opacity="0.82"/>
+            <path d="M 44 73 Q 42 83 45 91 Q 50 87 55 91 Q 58 83 56 73 Z" fill="#fff8d0" opacity="0.88"/>
+            <path d="M 32 66 Q 24 80 29 92 Q 36 85 33 70 Z" fill="${s.pulse}" opacity="0.48"/>
+            <path d="M 68 66 Q 76 80 71 92 Q 64 85 67 70 Z" fill="${s.pulse}" opacity="0.48"/>
+            <path d="M 24 72 Q 18 84 22 92 Q 28 86 25 74 Z" fill="${s.pulse}" opacity="0.35"/>
+            <path d="M 76 72 Q 82 84 78 92 Q 72 86 75 74 Z" fill="${s.pulse}" opacity="0.35"/>
+            <polygon points="50,9 75,70 50,59 25,70" fill="url(#emb-${gid})" stroke="${s.core}" stroke-width="1.5" stroke-linejoin="round"/>
+            <polygon points="50,9 56,26 44,26" fill="#fff8d0" opacity="0.62"/>
+            <line x1="50" y1="11" x2="50" y2="61" stroke="#ffffff" stroke-width="0.7" opacity="0.4"/>
+            <polyline points="43,17 40,32 45,42 38,55 43,62" fill="none" stroke="${s.core}" stroke-width="1.7" opacity="0.92" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="41,22 44,34 38,46" fill="none" stroke="#fff8d0" stroke-width="1.0" opacity="0.78" stroke-linecap="round"/>
+            <polyline points="57,17 60,30 55,42 62,54" fill="none" stroke="${s.core}" stroke-width="1.5" opacity="0.88" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="59,25 56,38 60,50" fill="none" stroke="#ffe168" stroke-width="0.9" opacity="0.72" stroke-linecap="round"/>
+            <line x1="50" y1="30" x2="46" y2="38" stroke="#ffffff" stroke-width="0.5" opacity="0.5"/>
+            <line x1="50" y1="30" x2="54" y2="40" stroke="#ffffff" stroke-width="0.5" opacity="0.5"/>
+            <line x1="50" y1="44" x2="44" y2="50" stroke="${s.core}" stroke-width="0.5" opacity="0.6"/>
+            <line x1="25" y1="70" x2="8"  y2="78" stroke="${s.pulse}" stroke-width="1.3" opacity="0.48" stroke-linecap="round"/>
+            <line x1="75" y1="70" x2="92" y2="78" stroke="${s.pulse}" stroke-width="1.3" opacity="0.48" stroke-linecap="round"/>
+            <circle cx="16" cy="28" r="2.1" fill="${s.core}"  opacity="0.88"/>
+            <circle cx="82" cy="34" r="1.8" fill="${s.core}"  opacity="0.82"/>
+            <circle cx="12" cy="54" r="1.6" fill="${s.pulse}" opacity="0.82"/>
+            <circle cx="86" cy="58" r="1.9" fill="${s.pulse}" opacity="0.88"/>
+            <circle cx="22" cy="14" r="1.4" fill="#fff8d0"    opacity="0.78"/>
+            <circle cx="78" cy="16" r="1.3" fill="${s.core}"  opacity="0.72"/>
+            <circle cx="8"  cy="72" r="1.7" fill="${s.pulse}" opacity="0.68"/>
+            <circle cx="92" cy="74" r="1.5" fill="${s.pulse}" opacity="0.72"/>
+            <circle cx="32" cy="6"  r="1.1" fill="${s.core}"  opacity="0.62"/>
+            <circle cx="68" cy="8"  r="1.0" fill="${s.core}"  opacity="0.62"/>
+            <circle cx="6"  cy="40" r="0.9" fill="#fff8d0"    opacity="0.55"/>
+            <circle cx="94" cy="46" r="0.9" fill="${s.core}"  opacity="0.55"/>
+            <circle cx="50" cy="37" r="10"  fill="${s.pulse}" opacity="0.25"/>
+            <circle cx="50" cy="37" r="6.5" fill="${s.core}"/>
+            <circle cx="50" cy="37" r="3.2" fill="#ffffff"/>`;
         }
         else if (theme === 'wave') {
-            // VIOLET DRIFT — translucent purple wing with rippling void waves + glow trails
+            // VIOLET DRIFT — Void Phantom: ghost wings, void rings, lightning arcs
             body = `
-                <defs>
-                    <linearGradient id="wave-${id}" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="${s.ship}" stop-opacity="0.95"/>
-                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.5"/>
-                    </linearGradient>
-                </defs>
-                <!-- void waves behind ship -->
-                <path d="M 8 78 Q 24 60, 50 74 T 92 78" fill="none" stroke="${s.trail}" stroke-width="2.4"/>
-                <path d="M 4 86 Q 22 68, 50 82 T 96 86" fill="none" stroke="${s.pulse}" stroke-width="2" opacity="0.75"/>
-                <path d="M 0 94 Q 20 76, 50 90 T 100 94" fill="none" stroke="${s.pulse}" stroke-width="1.4" opacity="0.55"/>
-                <!-- ship -->
-                <polygon points="50,14 76,78 50,66 24,78" fill="url(#wave-${id})" stroke="${s.pulse}" stroke-width="1.4"/>
-                <polygon points="50,28 64,68 50,58 36,68" fill="${s.pulse}" opacity="0.45"/>
-                <!-- core glow -->
-                <circle cx="50" cy="44" r="9" fill="${s.pulse}" opacity="0.4"/>
-                <circle cx="50" cy="44" r="6" fill="${s.core}"/>
-                <circle cx="50" cy="44" r="2.5" fill="#ffffff"/>
-                <!-- floating energy dots -->
-                <circle cx="20" cy="34" r="1.2" fill="#ffffff" opacity="0.85"/>
-                <circle cx="80" cy="38" r="1" fill="#ffffff" opacity="0.7"/>
-                <circle cx="14" cy="52" r="0.9" fill="${s.core}" opacity="0.8"/>
-                <circle cx="86" cy="56" r="1.1" fill="${s.core}" opacity="0.85"/>`;
+            <defs>
+                <linearGradient id="wave-${gid}" x1="50" y1="12" x2="50" y2="64" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="${s.ship}"  stop-opacity="0.92"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.55"/>
+                </linearGradient>
+                <radialGradient id="rift-${gid}" cx="50%" cy="62%" r="45%">
+                    <stop offset="0%"   stop-color="${s.pulse}" stop-opacity="0.65"/>
+                    <stop offset="60%"  stop-color="${s.pulse}" stop-opacity="0.15"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+                </radialGradient>
+            </defs>
+            <ellipse cx="50" cy="56" rx="32" ry="22" fill="url(#rift-${gid})"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="${s.pulse}" stroke-width="0.55" opacity="0.18" stroke-dasharray="3 6"/>
+            <circle cx="50" cy="50" r="35" fill="none" stroke="${s.core}"  stroke-width="0.7"  opacity="0.25" stroke-dasharray="2 5"/>
+            <circle cx="50" cy="50" r="27" fill="none" stroke="${s.pulse}" stroke-width="0.9"  opacity="0.32" stroke-dasharray="1 4"/>
+            <circle cx="50" cy="50" r="19" fill="none" stroke="${s.core}"  stroke-width="1.0"  opacity="0.4"/>
+            <circle cx="50" cy="50" r="12" fill="none" stroke="#d78fff"    stroke-width="0.8"  opacity="0.55"/>
+            <polygon points="36,32 2,64 18,57"  fill="${s.pulse}" opacity="0.14"/>
+            <polygon points="37,36 5,61 20,55"  fill="${s.ship}"  opacity="0.20"/>
+            <polygon points="38,40 9,59 22,54"  fill="${s.ship}"  opacity="0.28"/>
+            <polygon points="39,44 14,58 25,53" fill="${s.ship}"  opacity="0.35"/>
+            <polygon points="64,32 98,64 82,57"  fill="${s.pulse}" opacity="0.14"/>
+            <polygon points="63,36 95,61 80,55"  fill="${s.ship}"  opacity="0.20"/>
+            <polygon points="62,40 91,59 78,54"  fill="${s.ship}"  opacity="0.28"/>
+            <polygon points="61,44 86,58 75,53"  fill="${s.ship}"  opacity="0.35"/>
+            <line x1="2"   y1="64" x2="0"   y2="58" stroke="${s.core}" stroke-width="0.9" opacity="0.45" stroke-linecap="round"/>
+            <line x1="98"  y1="64" x2="100" y2="58" stroke="${s.core}" stroke-width="0.9" opacity="0.45" stroke-linecap="round"/>
+            <polygon points="50,12 70,62 50,52 30,62" fill="url(#wave-${gid})" stroke="${s.core}" stroke-width="1.4" stroke-linejoin="round"/>
+            <polygon points="50,22 64,56 50,47 36,56" fill="${s.pulse}" opacity="0.32"/>
+            <polyline points="24,26 17,38 27,46 16,55 23,64" fill="none" stroke="#d78fff" stroke-width="1.4" opacity="0.72" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="76,26 83,38 73,46 84,55 77,64" fill="none" stroke="#d78fff" stroke-width="1.4" opacity="0.72" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="17" cy="38" r="1.6" fill="#d78fff" opacity="0.88"/>
+            <circle cx="27" cy="46" r="1.3" fill="#ffffff"  opacity="0.82"/>
+            <circle cx="83" cy="38" r="1.6" fill="#d78fff" opacity="0.88"/>
+            <circle cx="73" cy="46" r="1.3" fill="#ffffff"  opacity="0.82"/>
+            <circle cx="16" cy="55" r="1.2" fill="${s.core}" opacity="0.75"/>
+            <circle cx="84" cy="55" r="1.2" fill="${s.core}" opacity="0.75"/>
+            <circle cx="10" cy="20" r="1.8" fill="${s.core}"  opacity="0.68"/>
+            <circle cx="90" cy="24" r="1.6" fill="${s.core}"  opacity="0.63"/>
+            <circle cx="7"  cy="74" r="1.5" fill="${s.pulse}" opacity="0.6"/>
+            <circle cx="93" cy="78" r="1.5" fill="${s.pulse}" opacity="0.62"/>
+            <circle cx="20" cy="10" r="1.1" fill="#d78fff"    opacity="0.55"/>
+            <circle cx="80" cy="12" r="1.0" fill="#d78fff"    opacity="0.55"/>
+            <circle cx="14" cy="46" r="0.9" fill="#ffffff"    opacity="0.5"/>
+            <circle cx="86" cy="42" r="0.9" fill="#ffffff"    opacity="0.5"/>
+            <path d="M 42 63 Q 38 78 43 88 Q 50 83 57 88 Q 62 78 58 63 Z" fill="${s.pulse}" opacity="0.48"/>
+            <path d="M 45 64 Q 43 75 47 83 Q 50 79 53 83 Q 57 75 55 64 Z" fill="${s.core}"  opacity="0.72"/>
+            <circle cx="50" cy="36" r="10"  fill="${s.pulse}" opacity="0.22"/>
+            <circle cx="50" cy="36" r="6.5" fill="${s.core}"/>
+            <circle cx="50" cy="36" r="3"   fill="#ffffff"/>`;
         }
         else if (theme === 'corona') {
-            // SOLAR FLARE — plasma sun with corona spikes (16 instead of 8) + sunspots + rotating rings
-            const spikesOuter = Array.from({ length: 16 }, (_, i) => {
-                const a = (i / 16) * Math.PI * 2;
-                const inR = 22, outR = i % 2 === 0 ? 38 : 32;
-                const x1 = 50 + Math.cos(a) * inR, y1 = 50 + Math.sin(a) * inR;
-                const x2 = 50 + Math.cos(a) * outR, y2 = 50 + Math.sin(a) * outR;
-                return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${s.core}" stroke-width="${i % 2 === 0 ? '2.8' : '1.6'}" opacity="${i % 2 === 0 ? '0.95' : '0.7'}" stroke-linecap="round"/>`;
+            // SOLAR FLARE — Crown of Stars: 24 spikes, solar prominences, nuclear core
+            const spikes = Array.from({length:24}, (_,i) => {
+                const a = (i/24)*Math.PI*2 - Math.PI/2;
+                const iR = 22;
+                const oR = i%3===0 ? 48 : i%3===1 ? 38 : 30;
+                const lw = i%3===0 ? '2.8' : i%3===1 ? '1.6' : '1.0';
+                const op = i%3===0 ? '0.92' : i%3===1 ? '0.70' : '0.45';
+                const col = i%3===0 ? s.core : (i%3===1 ? s.ship : s.pulse);
+                const x1=(50+Math.cos(a)*iR).toFixed(1), y1=(50+Math.sin(a)*iR).toFixed(1);
+                const x2=(50+Math.cos(a)*oR).toFixed(1), y2=(50+Math.sin(a)*oR).toFixed(1);
+                return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${lw}" opacity="${op}" stroke-linecap="round"/>`;
             }).join('');
-            // corona rings
             body = `
-                <defs>
-                    <radialGradient id="sun-${id}" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
-                        <stop offset="40%" stop-color="${s.core}" stop-opacity="1"/>
-                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.7"/>
-                    </radialGradient>
-                </defs>
-                ${spikesOuter}
-                <!-- outer corona ring -->
-                <circle cx="50" cy="50" r="34" fill="none" stroke="${s.core}" stroke-width="0.8" opacity="0.5" stroke-dasharray="3 3"/>
-                <circle cx="50" cy="50" r="28" fill="none" stroke="${s.pulse}" stroke-width="0.8" opacity="0.6" stroke-dasharray="2 2"/>
-                <!-- solar surface -->
-                <circle cx="50" cy="50" r="22" fill="url(#sun-${id})" stroke="${s.core}" stroke-width="1.5"/>
-                <!-- sunspots / plasma swirls -->
-                <circle cx="44" cy="46" r="3" fill="${s.pulse}" opacity="0.55"/>
-                <circle cx="56" cy="54" r="2.4" fill="${s.pulse}" opacity="0.5"/>
-                <circle cx="52" cy="42" r="1.6" fill="${s.pulse}" opacity="0.4"/>
-                <!-- bright core -->
-                <circle cx="50" cy="50" r="9" fill="#fff8d0"/>
-                <circle cx="50" cy="50" r="4" fill="#ffffff"/>`;
+            <defs>
+                <radialGradient id="sun-${gid}" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%"   stop-color="#ffffff"   stop-opacity="1"/>
+                    <stop offset="25%"  stop-color="#fffde0"   stop-opacity="1"/>
+                    <stop offset="55%"  stop-color="${s.core}" stop-opacity="1"/>
+                    <stop offset="80%"  stop-color="#ff9900"   stop-opacity="0.92"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.75"/>
+                </radialGradient>
+                <radialGradient id="corona-${gid}" cx="50%" cy="50%" r="50%">
+                    <stop offset="30%"  stop-color="${s.core}"  stop-opacity="0.45"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+                </radialGradient>
+            </defs>
+            <circle cx="50" cy="50" r="48" fill="url(#corona-${gid})"/>
+            <circle cx="50" cy="50" r="44" fill="none" stroke="${s.ship}" stroke-width="0.65" stroke-dasharray="5 4" opacity="0.32"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="${s.core}" stroke-width="0.5"  stroke-dasharray="2 6" opacity="0.22"/>
+            <path d="M 68 30 Q 94 6 80 36 Q 72 28 68 30" fill="none" stroke="${s.core}" stroke-width="2.2" opacity="0.72" stroke-linecap="round"/>
+            <path d="M 32 28 Q 6 4 20 36 Q 28 26 32 28" fill="none" stroke="${s.pulse}" stroke-width="1.8" opacity="0.62" stroke-linecap="round"/>
+            <path d="M 60 70 Q 72 86 58 78 Q 62 72 60 70" fill="none" stroke="${s.ship}" stroke-width="1.4" opacity="0.5" stroke-linecap="round"/>
+            ${spikes}
+            <circle cx="50" cy="50" r="22" fill="url(#sun-${gid})"/>
+            <circle cx="50" cy="50" r="22" fill="none" stroke="${s.core}" stroke-width="1.0" opacity="0.55"/>
+            <circle cx="43" cy="46" r="3.8" fill="#a06000" opacity="0.48"/>
+            <circle cx="57" cy="54" r="3.0" fill="#a06000" opacity="0.43"/>
+            <circle cx="52" cy="41" r="2.2" fill="#a06000" opacity="0.38"/>
+            <circle cx="44" cy="58" r="1.8" fill="#a06000" opacity="0.33"/>
+            <circle cx="50" cy="50" r="9"   fill="#fff8c0"/>
+            <circle cx="50" cy="50" r="4.5" fill="#ffffff"/>
+            <circle cx="91" cy="50" r="2.2" fill="${s.ship}" opacity="0.78"/>
+            <circle cx="9"  cy="50" r="1.9" fill="${s.ship}" opacity="0.72"/>
+            <circle cx="50" cy="7"  r="1.6" fill="${s.core}" opacity="0.68"/>
+            <circle cx="50" cy="93" r="1.8" fill="${s.core}" opacity="0.63"/>
+            <circle cx="78" cy="24" r="1.3" fill="${s.core}" opacity="0.68"/>
+            <circle cx="22" cy="26" r="1.1" fill="${s.core}" opacity="0.63"/>
+            <circle cx="82" cy="74" r="1.4" fill="${s.ship}" opacity="0.62"/>
+            <circle cx="18" cy="76" r="1.2" fill="${s.ship}" opacity="0.58"/>
+            <circle cx="84" cy="36" r="0.9" fill="${s.core}" opacity="0.55"/>
+            <circle cx="16" cy="64" r="0.9" fill="${s.ship}" opacity="0.5"/>`;
         }
         else if (theme === 'blade') {
-            // CRIMSON AFTERBURN — rocket-blade silhouette with TWIN afterburn cones + sparks + blood trail
+            // CRIMSON AFTERBURN — Speed Demon: massive twin flames, slim needle, energy wings
             body = `
-                <defs>
-                    <linearGradient id="blade-${id}" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="${s.ship}" stop-opacity="1"/>
-                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.85"/>
-                    </linearGradient>
-                    <linearGradient id="flame-${id}" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#fff8d0" stop-opacity="0"/>
-                        <stop offset="30%" stop-color="${s.core}" stop-opacity="0.95"/>
-                        <stop offset="100%" stop-color="${s.pulse}" stop-opacity="1"/>
-                    </linearGradient>
-                </defs>
-                <!-- twin afterburn cones (longer, more dramatic) -->
-                <polygon points="40,72 32,98 48,86" fill="url(#flame-${id})"/>
-                <polygon points="60,72 68,98 52,86" fill="url(#flame-${id})"/>
-                <polygon points="42,76 38,94 50,86" fill="${s.core}" opacity="0.85"/>
-                <polygon points="58,76 62,94 50,86" fill="${s.core}" opacity="0.85"/>
-                <polygon points="46,80 50,98 54,80" fill="${s.core}" opacity="0.7"/>
-                <!-- sharp blade silhouette -->
-                <polygon points="50,10 62,76 50,68 38,76" fill="url(#blade-${id})" stroke="${s.core}" stroke-width="1.4"/>
-                <!-- inner blade highlight -->
-                <polygon points="50,18 56,68 50,62 44,68" fill="#ffffff" opacity="0.35"/>
-                <!-- wing tips -->
-                <polygon points="38,76 30,64 36,72" fill="${s.ship}" opacity="0.85"/>
-                <polygon points="62,76 70,64 64,72" fill="${s.ship}" opacity="0.85"/>
-                <!-- core glow -->
-                <circle cx="50" cy="50" r="6" fill="${s.core}"/>
-                <circle cx="50" cy="50" r="2.5" fill="#ffffff"/>
-                <!-- sparks shooting from afterburners -->
-                <circle cx="28" cy="84" r="1.5" fill="${s.core}" opacity="0.9"/>
-                <circle cx="72" cy="86" r="1.4" fill="${s.core}" opacity="0.9"/>
-                <circle cx="22" cy="92" r="1" fill="#ffffff" opacity="0.85"/>
-                <circle cx="78" cy="92" r="1.1" fill="#ffffff" opacity="0.85"/>
-                <circle cx="50" cy="96" r="1.4" fill="#ffffff" opacity="0.9"/>`;
+            <defs>
+                <linearGradient id="blade-${gid}" x1="50" y1="8" x2="50" y2="68" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="#ffffff"   stop-opacity="0.92"/>
+                    <stop offset="35%"  stop-color="${s.ship}" stop-opacity="0.9"/>
+                    <stop offset="100%" stop-color="#7a000e"   stop-opacity="0.72"/>
+                </linearGradient>
+                <linearGradient id="flame-${gid}" x1="50" y1="64" x2="50" y2="100" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="#fff8d0"   stop-opacity="0"/>
+                    <stop offset="20%"  stop-color="${s.core}" stop-opacity="0.88"/>
+                    <stop offset="55%"  stop-color="${s.ship}" stop-opacity="0.85"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="wingL-${gid}" x1="44" y1="0" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="${s.pulse}" stop-opacity="0.82"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="wingR-${gid}" x1="56" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="${s.pulse}" stop-opacity="0.82"/>
+                    <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0"/>
+                </linearGradient>
+            </defs>
+            <line x1="0"   y1="22" x2="32"  y2="22" stroke="${s.pulse}" stroke-width="0.7" opacity="0.30" stroke-linecap="round"/>
+            <line x1="0"   y1="32" x2="24"  y2="32" stroke="${s.core}"  stroke-width="0.5" opacity="0.24" stroke-linecap="round"/>
+            <line x1="0"   y1="42" x2="18"  y2="42" stroke="${s.pulse}" stroke-width="0.4" opacity="0.18" stroke-linecap="round"/>
+            <line x1="100" y1="22" x2="68"  y2="22" stroke="${s.pulse}" stroke-width="0.7" opacity="0.30" stroke-linecap="round"/>
+            <line x1="100" y1="32" x2="76"  y2="32" stroke="${s.core}"  stroke-width="0.5" opacity="0.24" stroke-linecap="round"/>
+            <line x1="100" y1="42" x2="82"  y2="42" stroke="${s.pulse}" stroke-width="0.4" opacity="0.18" stroke-linecap="round"/>
+            <path d="M 26 66 Q 12 96 22 108 Q 50 96 78 108 Q 88 96 74 66 Z" fill="url(#flame-${gid})" opacity="0.45"/>
+            <polygon points="36,66 18,104 42,84" fill="url(#flame-${gid})"/>
+            <polygon points="64,66 82,104 58,84" fill="url(#flame-${gid})"/>
+            <polygon points="40,67 28,100 46,82" fill="${s.ship}" opacity="0.78"/>
+            <polygon points="60,67 72,100 54,82" fill="${s.ship}" opacity="0.78"/>
+            <polygon points="44,68 42,96 50,84 58,96 56,68" fill="${s.core}" opacity="0.82"/>
+            <polygon points="46,70 46,90 50,80 54,90 54,70" fill="#fff8d0" opacity="0.72"/>
+            <path d="M 34 20 Q 50 6 66 20" fill="none" stroke="${s.core}" stroke-width="1.0" opacity="0.42" stroke-linecap="round"/>
+            <path d="M 38 26 Q 50 14 62 26" fill="none" stroke="${s.core}" stroke-width="0.7" opacity="0.28" stroke-linecap="round"/>
+            <polygon points="50,8 58,64 54,70 46,70 42,64" fill="url(#blade-${gid})" stroke="${s.core}" stroke-width="1.3" stroke-linejoin="round"/>
+            <polygon points="50,8 54,22 46,22" fill="#ffffff" opacity="0.9"/>
+            <line x1="50" y1="10" x2="50" y2="66" stroke="${s.core}" stroke-width="0.65" opacity="0.55" stroke-linecap="round"/>
+            <polygon points="42,34 2,56 24,50" fill="url(#wingL-${gid})"/>
+            <polygon points="42,44 6,60 26,54" fill="${s.pulse}" opacity="0.22"/>
+            <polygon points="58,34 98,56 76,50" fill="url(#wingR-${gid})"/>
+            <polygon points="58,44 94,60 74,54" fill="${s.pulse}" opacity="0.22"/>
+            <line x1="2"   y1="56" x2="0"   y2="50" stroke="${s.pulse}" stroke-width="0.9" opacity="0.48" stroke-linecap="round"/>
+            <line x1="98"  y1="56" x2="100" y2="50" stroke="${s.pulse}" stroke-width="0.9" opacity="0.48" stroke-linecap="round"/>
+            <circle cx="14" cy="32" r="1.9" fill="${s.core}"  opacity="0.82"/>
+            <circle cx="86" cy="36" r="1.7" fill="${s.core}"  opacity="0.78"/>
+            <circle cx="8"  cy="64" r="1.5" fill="${s.pulse}" opacity="0.68"/>
+            <circle cx="92" cy="66" r="1.6" fill="${s.pulse}" opacity="0.72"/>
+            <circle cx="22" cy="16" r="1.2" fill="${s.core}"  opacity="0.62"/>
+            <circle cx="78" cy="18" r="1.2" fill="${s.core}"  opacity="0.62"/>
+            <circle cx="50" cy="44" r="8"   fill="${s.core}" opacity="0.28"/>
+            <circle cx="50" cy="44" r="5"   fill="${s.core}"/>
+            <circle cx="50" cy="44" r="2.2" fill="#ffffff"/>
+            <ellipse cx="50" cy="70" rx="5.5" ry="2"   fill="${s.core}"  opacity="0.82"/>
+            <ellipse cx="50" cy="72" rx="3.5" ry="1.5" fill="#ffffff" opacity="0.58"/>`;
         }
         else if (theme === 'aurora') {
-            // AURORA ZERO — prismatic foil with HUGE rainbow ribbon + halo + sparkles + multi-layer ship
+            // AURORA ZERO — Prismatic Light Show: aurora bands, rainbow rings, crystal ship
             body = `
-                <defs>
-                    <linearGradient id="aur-rainbow-${id}" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%"   stop-color="#7be8ff"/>
-                        <stop offset="25%"  stop-color="#fffbe8"/>
-                        <stop offset="50%"  stop-color="#ffd14d"/>
-                        <stop offset="75%"  stop-color="#ff8ba2"/>
-                        <stop offset="100%" stop-color="#bc13fe"/>
-                    </linearGradient>
-                    <radialGradient id="aur-halo-${id}" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%"   stop-color="#ffd14d" stop-opacity="0.8"/>
-                        <stop offset="60%"  stop-color="#7be8ff" stop-opacity="0.4"/>
-                        <stop offset="100%" stop-color="#bc13fe" stop-opacity="0"/>
-                    </radialGradient>
-                </defs>
-                <!-- big rotating halo -->
-                <circle cx="50" cy="50" r="42" fill="url(#aur-halo-${id})"/>
-                <!-- prismatic outer ring -->
-                <circle cx="50" cy="50" r="38" fill="none" stroke="url(#aur-rainbow-${id})" stroke-width="1.4" opacity="0.9" stroke-dasharray="6 3"/>
-                <circle cx="50" cy="50" r="32" fill="none" stroke="url(#aur-rainbow-${id})" stroke-width="0.8" opacity="0.6" stroke-dasharray="2 4"/>
-                <!-- rainbow ribbons (2 sweeps for depth) -->
-                <path d="M 6 84 Q 26 56, 50 76 T 94 84" stroke="url(#aur-rainbow-${id})" stroke-width="3.2" fill="none" opacity="0.95"/>
-                <path d="M 2 92 Q 24 64, 50 84 T 98 92" stroke="url(#aur-rainbow-${id})" stroke-width="2" fill="none" opacity="0.65"/>
-                <!-- ship with prismatic outline -->
-                <polygon points="50,12 74,80 50,68 26,80" fill="${s.ship}" opacity="0.95" stroke="url(#aur-rainbow-${id})" stroke-width="1.8"/>
-                <polygon points="50,24 64,72 50,62 36,72" fill="url(#aur-rainbow-${id})" opacity="0.45"/>
-                <!-- multi-layer core -->
-                <circle cx="50" cy="48" r="10" fill="${s.core}" opacity="0.55"/>
-                <circle cx="50" cy="48" r="6"  fill="${s.core}"/>
-                <circle cx="50" cy="48" r="3"  fill="#ffffff"/>
-                <!-- sparkle stars (8 around) -->
-                <polygon points="18,18 19,22 23,23 19,24 18,28 17,24 13,23 17,22" fill="#ffffff" opacity="0.95"/>
-                <polygon points="82,22 82.5,25 86,26 82.5,27 82,30 81.5,27 78,26 81.5,25" fill="#ffffff" opacity="0.85"/>
-                <polygon points="84,58 84.5,61 88,62 84.5,63 84,66 83.5,63 80,62 83.5,61" fill="#ffffff" opacity="0.85"/>
-                <polygon points="16,60 16.5,63 20,64 16.5,65 16,68 15.5,65 12,64 15.5,63" fill="#ffffff" opacity="0.85"/>
-                <circle cx="40" cy="20" r="1.2" fill="#ffffff" opacity="0.9"/>
-                <circle cx="60" cy="20" r="1" fill="#ffffff" opacity="0.85"/>
-                <circle cx="30" cy="40" r="0.9" fill="#ffd14d" opacity="0.8"/>
-                <circle cx="72" cy="42" r="0.9" fill="#7be8ff" opacity="0.8"/>`;
+            <defs>
+                <linearGradient id="aur-rainbow-${gid}" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%"   stop-color="#7be8ff"/>
+                    <stop offset="22%"  stop-color="#fffbe8"/>
+                    <stop offset="44%"  stop-color="#ffd14d"/>
+                    <stop offset="66%"  stop-color="#ff8ba2"/>
+                    <stop offset="100%" stop-color="#bc13fe"/>
+                </linearGradient>
+                <radialGradient id="aur-halo-${gid}" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%"   stop-color="#ffd14d"  stop-opacity="0.7"/>
+                    <stop offset="45%"  stop-color="#7be8ff"  stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#bc13fe"  stop-opacity="0"/>
+                </radialGradient>
+                <linearGradient id="aur-vert-${gid}" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stop-color="#7be8ff"/>
+                    <stop offset="33%"  stop-color="#ffd14d"/>
+                    <stop offset="66%"  stop-color="#ff8ba2"/>
+                    <stop offset="100%" stop-color="#bc13fe"/>
+                </linearGradient>
+                <linearGradient id="hull-au-${gid}" x1="50" y1="12" x2="50" y2="66" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%"   stop-color="${s.ship}" stop-opacity="0.95"/>
+                    <stop offset="100%" stop-color="${s.core}" stop-opacity="0.72"/>
+                </linearGradient>
+            </defs>
+            <circle cx="50" cy="50" r="47" fill="url(#aur-halo-${gid})"/>
+            <path d="M 0  18 Q 25  8 50 16 Q 75 24 100 12" fill="none" stroke="#7be8ff" stroke-width="5"   opacity="0.20" stroke-linecap="round"/>
+            <path d="M 0  26 Q 28 16 50 24 Q 72 32 100 20" fill="none" stroke="#fffbe8" stroke-width="4.5" opacity="0.17" stroke-linecap="round"/>
+            <path d="M 0  34 Q 26 25 50 32 Q 74 39 100 28" fill="none" stroke="#ffd14d" stroke-width="4"   opacity="0.19" stroke-linecap="round"/>
+            <path d="M 2  42 Q 27 34 50 40 Q 73 46 98 38"  fill="none" stroke="#ff8ba2" stroke-width="3.5" opacity="0.20" stroke-linecap="round"/>
+            <path d="M 4  50 Q 27 43 50 49 Q 73 55 96 47"  fill="none" stroke="#bc13fe" stroke-width="3"   opacity="0.22" stroke-linecap="round"/>
+            <circle cx="50" cy="50" r="43" fill="none" stroke="url(#aur-rainbow-${gid})" stroke-width="1.5" opacity="0.68" stroke-dasharray="6 3"/>
+            <circle cx="50" cy="50" r="35" fill="none" stroke="url(#aur-rainbow-${gid})" stroke-width="1.1" opacity="0.52" stroke-dasharray="3 5"/>
+            <circle cx="50" cy="50" r="27" fill="none" stroke="url(#aur-rainbow-${gid})" stroke-width="0.9" opacity="0.40" stroke-dasharray="2 6"/>
+            <polygon points="12,32 17,25 22,32 17,39" fill="#7be8ff" opacity="0.42"/>
+            <polygon points="78,30 83,23 88,30 83,37" fill="#ffd14d" opacity="0.42"/>
+            <polygon points="10,64 15,57 20,64 15,71" fill="#ff8ba2" opacity="0.38"/>
+            <polygon points="80,62 85,55 90,62 85,69" fill="#bc13fe" opacity="0.38"/>
+            <circle cx="11" cy="10" r="1.4" fill="#7be8ff" opacity="0.8"/>
+            <circle cx="89" cy="9"  r="1.2" fill="#ffd14d" opacity="0.75"/>
+            <circle cx="7"  cy="82" r="1.3" fill="#ff8ba2" opacity="0.7"/>
+            <circle cx="93" cy="80" r="1.4" fill="#bc13fe" opacity="0.7"/>
+            <circle cx="17" cy="46" r="1.0" fill="#fffbe8" opacity="0.65"/>
+            <circle cx="83" cy="42" r="1.0" fill="#7be8ff" opacity="0.65"/>
+            <circle cx="50" cy="5"  r="1.2" fill="#ffd14d" opacity="0.7"/>
+            <circle cx="50" cy="95" r="1.1" fill="#7be8ff" opacity="0.6"/>
+            <circle cx="28" cy="18" r="0.9" fill="#ff8ba2" opacity="0.6"/>
+            <circle cx="72" cy="16" r="0.9" fill="#bc13fe" opacity="0.6"/>
+            <circle cx="22" cy="70" r="0.8" fill="#ffd14d" opacity="0.55"/>
+            <circle cx="78" cy="72" r="0.8" fill="#7be8ff" opacity="0.55"/>
+            <circle cx="6"  cy="55" r="0.7" fill="#fffbe8" opacity="0.5"/>
+            <circle cx="94" cy="58" r="0.7" fill="#bc13fe" opacity="0.5"/>
+            <line x1="50" y1="12" x2="50" y2="22" stroke="url(#aur-vert-${gid})" stroke-width="1.6" opacity="0.52" stroke-linecap="round"/>
+            <line x1="50" y1="78" x2="50" y2="90" stroke="url(#aur-vert-${gid})" stroke-width="1.6" opacity="0.52" stroke-linecap="round"/>
+            <line x1="6"  y1="50" x2="18" y2="50" stroke="url(#aur-rainbow-${gid})" stroke-width="1.5" opacity="0.52" stroke-linecap="round"/>
+            <line x1="82" y1="50" x2="94" y2="50" stroke="url(#aur-rainbow-${gid})" stroke-width="1.5" opacity="0.52" stroke-linecap="round"/>
+            <path d="M 2  76 Q 26 62 50 72 Q 74 82 98 68" stroke="url(#aur-rainbow-${gid})" stroke-width="3.2" fill="none" opacity="0.88" stroke-linecap="round"/>
+            <path d="M 0  84 Q 24 70 50 80 Q 76 90 100 76" stroke="url(#aur-rainbow-${gid})" stroke-width="2.1" fill="none" opacity="0.62" stroke-linecap="round"/>
+            <polygon points="50,12 72,52 50,66 28,52" fill="url(#hull-au-${gid})" opacity="0.88" stroke="url(#aur-rainbow-${gid})" stroke-width="2.0" stroke-linejoin="round"/>
+            <polygon points="50,20 66,52 50,60 34,52" fill="url(#aur-rainbow-${gid})" opacity="0.38"/>
+            <line x1="50" y1="12" x2="50" y2="66" stroke="url(#aur-vert-${gid})" stroke-width="0.9" opacity="0.48"/>
+            <circle cx="50" cy="40" r="11"  fill="${s.core}"  opacity="0.25"/>
+            <circle cx="50" cy="40" r="7"   fill="${s.core}"/>
+            <circle cx="50" cy="40" r="3.5" fill="#ffffff"/>
+            <line x1="50" y1="28" x2="50" y2="38" stroke="#ffffff" stroke-width="1.4" opacity="0.75" stroke-linecap="round"/>
+            <line x1="42" y1="40" x2="52" y2="40" stroke="#ffffff" stroke-width="1.4" opacity="0.75" stroke-linecap="round"/>
+            <line x1="48" y1="32" x2="52" y2="36" stroke="${s.core}" stroke-width="0.8" opacity="0.6" stroke-linecap="round"/>`;
         }
         else {
             body = `
-                <polygon points="50,12 74,84 50,72 26,84" fill="${s.ship}" stroke="${s.core}" stroke-width="1.5"/>
-                <circle cx="50" cy="50" r="7" fill="${s.core}"/>`;
+            <polygon points="50,12 74,84 50,72 26,84" fill="${s.ship}" stroke="${s.core}" stroke-width="1.5"/>
+            <circle cx="50" cy="50" r="7" fill="${s.core}"/>`;
         }
 
         return `<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">${auraGrad}${body}</svg>`;
@@ -6241,7 +6042,6 @@ function getRewardArtSvg(id, type) {
         if (!chip) return '';
         const colorMap = { blue: '#2b96ff', dark: '#5566ff', purple: '#bc13fe', red: '#ff375f', gold: '#ffd14d' };
         const color = colorMap[chip.rarity] || '#fff';
-        // pick shape per chip
         const shapeMap = {
             damage_chip:      `<polyline points="50,15 32,55 50,55 42,85" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`,
             magnet_chip:      `<path d="M30 55 a20 20 0 0 1 40 0" fill="none" stroke="${color}" stroke-width="4"/><line x1="30" y1="55" x2="30" y2="78" stroke="${color}" stroke-width="4"/><line x1="70" y1="55" x2="70" y2="78" stroke="${color}" stroke-width="4"/>`,
@@ -6260,12 +6060,12 @@ function getRewardArtSvg(id, type) {
         return `
             <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
                 <defs>
-                    <radialGradient id="cg-${id}" cx="50%" cy="50%" r="55%">
+                    <radialGradient id="cg-${gid}" cx="50%" cy="50%" r="55%">
                         <stop offset="0%" stop-color="${color}" stop-opacity="0.45"/>
                         <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
                     </radialGradient>
                 </defs>
-                <circle cx="50" cy="50" r="42" fill="url(#cg-${id})"/>
+                <circle cx="50" cy="50" r="42" fill="url(#cg-${gid})"/>
                 ${shape}
             </svg>`;
     }
@@ -7160,12 +6960,19 @@ function renderLevelRoadmap() {
         </div>
     `;
 
-    // Scroll so the CURRENT node sits ~88% down the viewport. Future levels
-    // stack ABOVE it so the screen feels full instead of half-empty.
+    // Scroll so the CURRENT node sits ~88% down the visible area.
+    // RAF ensures the browser has computed scrollHeight before we set scrollTop.
+    // We use window.innerHeight - 340 instead of host.clientHeight because during
+    // the screenIn animation #fight-screen has a CSS transform applied (making it
+    // the containing block for fixed children), which can report clientHeight as 0.
+    // Using the pre-computed yFromTop avoids DOM offsetTop queries that are also
+    // unreliable at that moment.
     requestAnimationFrame(() => {
-        const currentEl = host.querySelector('.lr-node.current');
-        if (currentEl) {
-            const target = currentEl.offsetTop + currentEl.offsetHeight - host.clientHeight * 0.90;
+        const containerH = Math.min(totalHeight, window.innerHeight - 340);
+        const curP = positions.find(p => p.state === 'current');
+        if (curP) {
+            const nodeH = 80; // .lr-node.current { height: 80px }
+            const target = curP.yFromTop + nodeH - containerH * 0.90;
             host.scrollTop = Math.max(0, target);
         } else {
             host.scrollTop = host.scrollHeight;
@@ -7331,19 +7138,6 @@ function createPackCardMarkup(cardId) {
             <div class="pack-reel-art">${getRewardArtSvg(cardId, 'chip')}</div>
             <div class="pack-reel-name">${card.name}</div>
             <div class="pack-reel-sigil">${card.sigil || ''}</div>
-        </div>
-    `;
-}
-
-function getSkinVisualMarkup(skinId, compact = false) {
-    const skin = SKIN_DEFINITIONS[skinId] || SKIN_DEFINITIONS.stock;
-    const style = skin.style;
-    return `
-        <div class="skin-visual ${compact ? 'compact' : ''}" style="--skin-ship:${style.ship}; --skin-core:${style.core}; --skin-trail:${style.trail}; --skin-pulse:${style.pulse};">
-            <span class="skin-visual-aura"></span>
-            <span class="skin-visual-trail"></span>
-            <span class="skin-visual-ship"></span>
-            <span class="skin-visual-core"></span>
         </div>
     `;
 }

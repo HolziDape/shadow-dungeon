@@ -744,55 +744,8 @@ const PACK_DEFINITIONS = {
     }
 };
 
-// Skins now have unique themes — each one is a distinct ship silhouette,
-// colour palette, trail FX flavour and short flavour line. The `theme` key
-// drives a different SVG art template in getRewardArtSvg() and the runtime VFX.
-const SKIN_DEFINITIONS = {
-    stock: {
-        rarity: 'blue', weight: 1,
-        name: 'Stock White', sigil: 'STOCK',
-        desc: 'Clean factory frame. Neutral cyan engine signature.',
-        theme: 'arrow',
-        style: { ship: '#ffffff', core: '#00f2ff', trail: 'rgba(0,242,255,0.30)', shot: '#f5fbff', pulse: '#00f2ff' }
-    },
-    ember_blade: {
-        rarity: 'blue', weight: 34,
-        name: 'Ember Blade', sigil: 'EMBER',
-        desc: 'Hot magma plate with embers trailing the wake.',
-        theme: 'molten',
-        style: { ship: '#ff8030', core: '#ffe168', trail: 'rgba(255,120,30,0.55)', shot: '#ffd27d', pulse: '#ff7020' }
-    },
-    violet_drift: {
-        rarity: 'dark', weight: 24,
-        name: 'Violet Drift', sigil: 'DRIFT',
-        desc: 'Void wave envelope, leaves a glassy purple ribbon.',
-        theme: 'wave',
-        style: { ship: '#c890ff', core: '#bc13fe', trail: 'rgba(188,19,254,0.55)', shot: '#d78fff', pulse: '#bc13fe' }
-    },
-    solar_flare: {
-        rarity: 'purple', weight: 16,
-        name: 'Solar Flare', sigil: 'SOLAR',
-        desc: 'Stellar corona with heavy gold muzzle flash.',
-        theme: 'corona',
-        style: { ship: '#ffe698', core: '#ffd14d', trail: 'rgba(255,209,77,0.60)', shot: '#ffe698', pulse: '#ffd14d' }
-    },
-    crimson_afterburn: {
-        rarity: 'red', weight: 9,
-        name: 'Crimson Afterburn', sigil: 'BURN',
-        desc: 'Razor red blade with twin afterburn cones.',
-        theme: 'blade',
-        style: { ship: '#ff375f', core: '#ffe1e8', trail: 'rgba(255,55,95,0.65)', shot: '#ff8ba2', pulse: '#ff375f' },
-        exclusive: true
-    },
-    aurora_zero: {
-        rarity: 'gold', weight: 5,
-        name: 'Aurora Zero', sigil: 'AUR0',
-        desc: 'Prismatic aurora foil. Cyan-gold rainbow pulse.',
-        theme: 'aurora',
-        style: { ship: '#fffbe8', core: '#ffd14d', trail: 'rgba(123,232,255,0.7)', shot: '#fff4b0', pulse: '#7be8ff' },
-        exclusive: true
-    }
-};
+// SKIN_DEFINITIONS lives in skins.js (loaded before this file).
+// Each skin carries its own drawBody() — edit skins.js to add/change ships.
 
 const INVENTORY_CARDS = {
     damage_chip: { tier: 1, rarity: 'blue', weight: 36, icon: 'DMG', sigil: 'DMG+', name: 'Damage Chip', desc: '+8% base damage', effect: { damageMultiplier: 0.08 } },

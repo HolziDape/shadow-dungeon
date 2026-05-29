@@ -1216,89 +1216,93 @@ function ensureMusicEngine() {
     musicGain = audioContext.createGain();
     musicGain.gain.value = 0;
 
-    // gentle compressor on the bus to glue layers
     const comp = audioContext.createDynamicsCompressor();
-    comp.threshold.value = -22;
-    comp.knee.value = 28;
-    comp.ratio.value = 6;
-    comp.attack.value = 0.04;
-    comp.release.value = 0.18;
+    comp.threshold.value = -18;
+    comp.knee.value = 20;
+    comp.ratio.value = 5;
+    comp.attack.value = 0.02;
+    comp.release.value = 0.12;
     comp.connect(musicGain);
     musicGain.connect(audioContext.destination);
 
-    // ── PAD layer (lush triangle stack with slow filter sweep) ───
-    const padFilter = audioContext.createBiquadFilter();
-    padFilter.type = 'lowpass';
-    padFilter.frequency.value = 720;
-    padFilter.Q.value = 1.4;
-    const padGain = audioContext.createGain();
-    padGain.gain.value = 0.55;
-    padFilter.connect(padGain);
-    padGain.connect(comp);
-
-    // chord: A minor 9 (A2, E3, A3, C4, E4) — moody, future-bass-friendly
-    const padVoices = [
-        { freq: 110.00, type: 'triangle', gain: 0.18 },  // A2
-        { freq: 164.81, type: 'sine',     gain: 0.12 },  // E3
-        { freq: 220.00, type: 'triangle', gain: 0.10 },  // A3
-        { freq: 261.63, type: 'sine',     gain: 0.07 },  // C4
-        { freq: 329.63, type: 'sine',     gain: 0.06 }   // E4
-    ];
-    musicNodes = musicNodes || [];
-    padVoices.forEach((v) => {
-        const osc = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        osc.type = v.type;
-        osc.frequency.value = v.freq;
-        // gentle detune so it breathes
-        osc.detune.value = (Math.random() - 0.5) * 6;
-        g.gain.value = v.gain;
-        osc.connect(g); g.connect(padFilter);
-        osc.start();
-        musicNodes.push(osc);
-    });
-
-    // slow filter LFO on the pad (pulse)
-    const padLfo = audioContext.createOscillator();
-    const padLfoGain = audioContext.createGain();
-    padLfo.type = 'sine';
-    padLfo.frequency.value = 0.14;
-    padLfoGain.gain.value = 320;
-    padLfo.connect(padLfoGain);
-    padLfoGain.connect(padFilter.frequency);
-    padLfo.start();
-
-    // ── BASS layer (deep sine with rhythm) ──────────────────────
+    // ── BASS layer (square wave — punchy chiptune bass) ──
     const bassGain = audioContext.createGain();
-    bassGain.gain.value = 0.32;
+    bassGain.gain.value = 0.28;
     bassGain.connect(comp);
     musicBassGain = bassGain;
 
-    // ── PLUCK arpeggio (light, 8th notes) ───────────────────────
-    const pluckGain = audioContext.createGain();
-    pluckGain.gain.value = 0.20;
-    const pluckFilter = audioContext.createBiquadFilter();
-    pluckFilter.type = 'lowpass';
-    pluckFilter.frequency.value = 2400;
-    pluckGain.connect(comp);
-    musicPluckGain = pluckGain;
-    musicPluckFilter = pluckFilter;
+    // ── LEAD + ARP layer (square wave lead, triangle arp) ──
+    const leadGain = audioContext.createGain();
+    leadGain.gain.value = 0.22;
+    const leadFilter = audioContext.createBiquadFilter();
+    leadFilter.type = 'lowpass';
+    leadFilter.frequency.value = 3600;
+    leadFilter.Q.value = 0.8;
+    leadGain.connect(leadFilter);
+    leadFilter.connect(comp);
+    musicPluckGain = leadGain;
+    musicPluckFilter = leadFilter;
 
-    // Chord progression Am → F → C → G (vi-IV-I-V) — the classic uplifting loop
-    // 4 bars × 32 sixteenths = 128 step loop
+    musicNodes = [];
+
+    // ─────────────────────────────────────────────────────────
+    // Chord progression: Dm → Bb → F → C  (natural D minor)
+    // 130 BPM — energetic adventure feel (Terraria overworld)
+    // Each bar = 16 sixteenth-note steps.
+    // leads[]:  melody note per 16th step (null = rest)
+    // plucks[]: arpeggio note per 8th step (8 values)
+    // bassRoot: root frequency for bass line
+    // ─────────────────────────────────────────────────────────
+    const R = null; // rest shorthand
     musicProgression = [
-        // Am (root A2=55, 5th E3=82.4, 7th G3=98)
-        { bassRoots: [55, 55, 41.2, 55], plucks: [220.00, 261.63, 329.63, 392.00, 440.00, 392.00, 329.63, 261.63] },
-        // F  (root F2=43.65, 3rd A2, 5th C3)
-        { bassRoots: [43.65, 43.65, 32.7, 43.65], plucks: [174.61, 220.00, 261.63, 349.23, 440.00, 349.23, 261.63, 220.00] },
-        // C  (root C2=32.7, 3rd E2, 5th G2)
-        { bassRoots: [32.7, 32.7, 49.0, 32.7], plucks: [261.63, 329.63, 392.00, 523.25, 659.25, 523.25, 392.00, 329.63] },
-        // G  (root G2=49.0, 3rd B2, 5th D3)
-        { bassRoots: [49.0, 49.0, 36.7, 49.0], plucks: [196.00, 246.94, 293.66, 392.00, 493.88, 392.00, 293.66, 246.94] }
+        // ── Bar 0: Dm ──────────────────────────────────────────
+        {
+            bassRoot: 73.42,  // D2
+            leads: [
+                293.66, R,      349.23, R,      // D4  .  F4  .
+                440.00, R,      440.00, 349.23, // A4  .  A4  F4
+                329.63, R,      293.66, R,      // E4  .  D4  .
+                349.23, 440.00, 523.25, R       // F4  A4  C5  .
+            ],
+            plucks: [293.66, 349.23, 440.00, 587.33, 440.00, 349.23, 440.00, 293.66]
+        },
+        // ── Bar 1: Bb ──────────────────────────────────────────
+        {
+            bassRoot: 116.54,  // Bb2
+            leads: [
+                466.16, R,      392.00, R,      // Bb4  .  G4  .
+                349.23, R,      293.66, R,      // F4   .  D4  .
+                523.25, R,      440.00, R,      // C5   .  A4  .
+                392.00, 349.23, 329.63, R       // G4   F4  E4  .
+            ],
+            plucks: [466.16, 349.23, 293.66, 466.16, 349.23, 466.16, 587.33, 466.16]
+        },
+        // ── Bar 2: F ───────────────────────────────────────────
+        {
+            bassRoot: 87.31,   // F2
+            leads: [
+                440.00, R,      523.25, R,      // A4  .  C5  .
+                440.00, 392.00, 349.23, R,      // A4  G4  F4  .
+                329.63, R,      349.23, R,      // E4  .  F4  .
+                440.00, R,      392.00, 349.23  // A4  .  G4  F4
+            ],
+            plucks: [349.23, 440.00, 523.25, 440.00, 349.23, 261.63, 349.23, 440.00]
+        },
+        // ── Bar 3: C (resolves back to Dm) ─────────────────────
+        {
+            bassRoot: 65.41,   // C2
+            leads: [
+                329.63, R,      392.00, R,      // E4  .  G4  .
+                523.25, R,      440.00, 392.00, // C5  .  A4  G4
+                349.23, 329.63, 293.66, R,      // F4  E4  D4  .
+                293.66, R,      R,      R       // D4  .   .   .
+            ],
+            plucks: [261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 392.00, 261.63]
+        }
     ];
 
-    // ── Tempo clock (88 BPM = chiller) ──────────────────────────
-    const bpm = 88;
+    // 130 BPM
+    const bpm = 130;
     const sixteenth = 60 / bpm / 4;
     musicStep = 0;
     musicBar = 0;
@@ -1325,87 +1329,133 @@ function scheduleBeat(step, when, dur, bar = 0) {
     const chord = musicProgression && musicProgression[bar];
     if (!chord) return;
 
-    // Bass plays on each quarter beat (4 per bar). Pattern: root, root, octave-down, root.
+    // ── BASS: square wave, quarter notes with a short 8th-note pickup ──
     if (step % 4 === 0) {
-        const idx = (step / 4) % chord.bassRoots.length;
-        const freq = chord.bassRoots[idx];
+        const freq = chord.bassRoot;
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
-        o.type = 'sine';
+        o.type = 'square';
         o.frequency.value = freq;
-        const o2 = audioContext.createOscillator();
-        o2.type = 'triangle';
-        o2.frequency.value = freq * 0.5;
-        const g2 = audioContext.createGain();
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.5, when + 0.014);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.6);
-        g2.gain.setValueAtTime(0.0001, when);
-        g2.gain.exponentialRampToValueAtTime(0.22, when + 0.022);
-        g2.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.8);
-        o.connect(g); o2.connect(g2);
-        g.connect(musicBassGain); g2.connect(musicBassGain);
-        o.start(when); o2.start(when);
-        o.stop(when + dur * 4); o2.stop(when + dur * 4);
-
-        // Soft kick on beat 1 of each bar
-        if (step === 0) {
-            const noise = createNoiseSource(audioContext, dur);
-            if (noise) {
-                const f = audioContext.createBiquadFilter();
-                f.type = 'lowpass'; f.frequency.value = 180;
-                const kg = audioContext.createGain();
-                kg.gain.setValueAtTime(0.0001, when);
-                kg.gain.exponentialRampToValueAtTime(0.18, when + 0.005);
-                kg.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
-                noise.connect(f); f.connect(kg); kg.connect(musicBassGain);
-            }
-        }
+        g.gain.exponentialRampToValueAtTime(0.38, when + 0.009);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.4);
+        o.connect(g); g.connect(musicBassGain);
+        o.start(when); o.stop(when + dur * 3.8);
+    }
+    // 8th-note pickup on last 8th of each bar (step 14) — adds bounce
+    if (step === 14) {
+        const nextBar = (bar + 1) % musicProgression.length;
+        const nextFreq = musicProgression[nextBar].bassRoot;
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        o.type = 'square';
+        o.frequency.value = nextFreq * 2;  // octave up for pickup
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(0.16, when + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 1.4);
+        o.connect(g); g.connect(musicBassGain);
+        o.start(when); o.stop(when + dur * 1.6);
     }
 
-    // Pluck arpeggio on every 8th note, follows the current chord's pluck pattern
+    // ── LEAD MELODY: square wave, follows leads[] sequence ──
+    const leadFreq = chord.leads && chord.leads[step];
+    if (leadFreq) {
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        o.type = 'square';
+        o.frequency.value = leadFreq;
+        // Next step rest? sustain longer. Next has a note? cut short.
+        const nextHasNote = chord.leads[(step + 1) % 16];
+        const sustain = nextHasNote ? dur * 1.1 : dur * 1.85;
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(0.19, when + 0.007);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + sustain);
+        o.connect(g); g.connect(musicPluckFilter);
+        musicPluckFilter.connect(musicPluckGain);
+        o.start(when); o.stop(when + sustain + 0.02);
+    }
+
+    // ── ARPEGGIO: triangle wave, 8th notes — fast chiptune feel ──
     if (step % 2 === 0) {
         const idx = (step / 2) % chord.plucks.length;
         const freq = chord.plucks[idx];
+        const accent = step === 0 ? 1.5 : (step % 4 === 0 ? 1.1 : 0.72);
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
         o.type = 'triangle';
         o.frequency.value = freq;
-        // detune slightly between bars for organic feel
-        o.detune.value = (bar % 2 ? 4 : -3);
-        const accent = (step === 0 || step === 8) ? 1.5 : (step === 4 ? 1.2 : 0.85);
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.30 * accent, when + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 2.4);
+        g.gain.exponentialRampToValueAtTime(0.22 * accent, when + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 1.7);
         o.connect(g); g.connect(musicPluckFilter);
         musicPluckFilter.connect(musicPluckGain);
-        o.start(when); o.stop(when + dur * 2.6);
+        o.start(when); o.stop(when + dur * 1.9);
     }
 
-    // Hi-hat tick on the off-beats (steps 2, 6, 10, 14)
+    // ── KICK: beats 1 and 3 (steps 0 and 8) — pitched sine drop ──
+    if (step === 0 || step === 8) {
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(step === 0 ? 165 : 145, when);
+        o.frequency.exponentialRampToValueAtTime(38, when + 0.09);
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(step === 0 ? 0.52 : 0.42, when + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.15);
+        o.connect(g); g.connect(musicBassGain);
+        o.start(when); o.stop(when + 0.2);
+    }
+
+    // ── SNARE: beats 2 and 4 (steps 4 and 12) ──
+    if (step === 4 || step === 12) {
+        const noise = createNoiseSource(audioContext, dur * 3);
+        if (noise) {
+            const f = audioContext.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 0.55;
+            const g = audioContext.createGain();
+            g.gain.setValueAtTime(0.0001, when);
+            g.gain.exponentialRampToValueAtTime(0.16, when + 0.004);
+            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.13);
+            noise.connect(f); f.connect(g); g.connect(musicBassGain);
+        }
+        // Snare tone layer (adds body)
+        const os = audioContext.createOscillator();
+        const gs = audioContext.createGain();
+        os.type = 'triangle';
+        os.frequency.value = 220;
+        gs.gain.setValueAtTime(0.0001, when);
+        gs.gain.exponentialRampToValueAtTime(0.08, when + 0.003);
+        gs.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
+        os.connect(gs); gs.connect(musicBassGain);
+        os.start(when); os.stop(when + 0.1);
+    }
+
+    // ── OPEN HI-HAT: 8th note off-beats (steps 2, 6, 10, 14) ──
     if (step % 4 === 2) {
-        const noise = createNoiseSource(audioContext, dur * 1.5);
-        if (!noise) return;
-        const f = audioContext.createBiquadFilter();
-        f.type = 'highpass'; f.frequency.value = 6800;
-        const g = audioContext.createGain();
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.07, when + 0.003);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.06);
-        noise.connect(f); f.connect(g); g.connect(musicBassGain);
+        const noise = createNoiseSource(audioContext, dur * 2);
+        if (noise) {
+            const f = audioContext.createBiquadFilter();
+            f.type = 'highpass'; f.frequency.value = 7200;
+            const g = audioContext.createGain();
+            g.gain.setValueAtTime(0.0001, when);
+            g.gain.exponentialRampToValueAtTime(0.06, when + 0.003);
+            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.08);
+            noise.connect(f); f.connect(g); g.connect(musicBassGain);
+        }
     }
 
-    // Snare-ish noise hit on step 8 (backbeat)
-    if (step === 8) {
-        const noise = createNoiseSource(audioContext, dur * 2);
-        if (!noise) return;
-        const f = audioContext.createBiquadFilter();
-        f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.6;
-        const g = audioContext.createGain();
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.10, when + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.10);
-        noise.connect(f); f.connect(g); g.connect(musicBassGain);
+    // ── CLOSED HI-HAT: remaining 16th off-beats ──
+    if (step % 2 === 1 && step % 4 !== 2) {
+        const noise = createNoiseSource(audioContext, dur);
+        if (noise) {
+            const f = audioContext.createBiquadFilter();
+            f.type = 'highpass'; f.frequency.value = 8500;
+            const g = audioContext.createGain();
+            g.gain.setValueAtTime(0.0001, when);
+            g.gain.exponentialRampToValueAtTime(0.025, when + 0.002);
+            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.035);
+            noise.connect(f); f.connect(g); g.connect(musicBassGain);
+        }
     }
 }
 

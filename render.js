@@ -89,6 +89,35 @@ function drawHazards() {
             return;
         }
 
+        if (hazard.type === 'enemybullet') {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0.3, hazard.life / 1.6);
+            ctx.shadowBlur = 14;
+            ctx.shadowColor = hazard.color;
+            ctx.fillStyle = hazard.color;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+
+        if (hazard.type === 'empring') {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0.08, hazard.life / 1.4);
+            ctx.strokeStyle = hazard.color;
+            ctx.lineWidth = 5;
+            ctx.setLineDash([14, 8]);
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = hazard.color;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+            return;
+        }
+
         if (hazard.type === 'gravity') {
             ctx.save();
             ctx.globalAlpha = Math.max(0.14, hazard.life / 1.8);
@@ -229,7 +258,9 @@ function drawEnemies() {
         ctx.translate(enemy.x, enemy.y);
         ctx.rotate(enemy.ai === 'sprint' ? Math.sin(enemy.aiClock * 8) * 0.18 : 0);
 
-        const neonColor = enemy.hitFlash > 0 ? '#ffffff' : enemy.color;
+        // Chaser blink-ready glow: flicker purple when blinkPending
+        const blinkFlicker = enemy.blinkPending && Math.sin(enemy.aiClock * 18) > 0;
+        const neonColor = enemy.hitFlash > 0 ? '#ffffff' : (blinkFlicker ? '#e080ff' : enemy.color);
         ctx.shadowBlur = enemy.isBoss ? 30 : 16;
         ctx.shadowColor = neonColor;
         ctx.strokeStyle = neonColor;
@@ -241,30 +272,55 @@ function drawEnemies() {
 
         ctx.beginPath();
         if (enemy.isBoss) {
-            ctx.moveTo(0, -enemy.r);
-            ctx.lineTo(enemy.r * 0.7, -enemy.r * 0.2);
-            ctx.lineTo(enemy.r, enemy.r * 0.2);
-            ctx.lineTo(0, enemy.r);
-            ctx.lineTo(-enemy.r, enemy.r * 0.2);
-            ctx.lineTo(-enemy.r * 0.7, -enemy.r * 0.2);
+            // Hexagon
+            for (let i = 0; i < 6; i++) {
+                const a = (Math.PI / 3) * i - Math.PI / 2;
+                if (i === 0) ctx.moveTo(Math.cos(a) * enemy.r, Math.sin(a) * enemy.r);
+                else ctx.lineTo(Math.cos(a) * enemy.r, Math.sin(a) * enemy.r);
+            }
             ctx.closePath();
-        } else if (enemy.ai === 'heavy' || enemy.ai === 'crusher') {
+        } else if (enemy.ai === 'heavy') {
+            // Tank: square with inner X (EMP indicator)
             const r = enemy.r;
             ctx.rect(-r, -r, r * 2, r * 2);
+        } else if (enemy.ai === 'crusher') {
+            // Crusher: jagged 8-point star / cross-square
+            const r = enemy.r;
+            const notch = r * 0.62;
+            for (let i = 0; i < 8; i++) {
+                const a = (Math.PI / 4) * i - Math.PI / 8;
+                const rad = i % 2 === 0 ? r : notch;
+                if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+                else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+            }
+            ctx.closePath();
         } else if (enemy.ai === 'strafe') {
+            // Drone: diamond with a small barrel line toward player
             ctx.moveTo(0, -enemy.r);
             ctx.lineTo(enemy.r, 0);
             ctx.lineTo(0, enemy.r);
             ctx.lineTo(-enemy.r, 0);
             ctx.closePath();
-        } else if (enemy.ai === 'brute') {
-            // Hexagon
+        } else if (enemy.ai === 'swarm') {
+            // Swarmling: circle with a split line (ready to divide)
+            ctx.arc(0, 0, enemy.r, 0, Math.PI * 2);
+        } else if (enemy.ai === 'sprint') {
+            // Chaser: chevron/arrow pointing at player
+            const a = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+            ctx.rotate(a - Math.PI / 2);
             const r = enemy.r;
-            for (let i = 0; i < 6; i++) {
-                const a = (Math.PI / 3) * i - Math.PI / 2;
-                const x = Math.cos(a) * r;
-                const y = Math.sin(a) * r;
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            ctx.moveTo(0, -r);
+            ctx.lineTo(r * 0.85, r * 0.5);
+            ctx.lineTo(0, r * 0.1);
+            ctx.lineTo(-r * 0.85, r * 0.5);
+            ctx.closePath();
+        } else if (enemy.ai === 'brute') {
+            // Brute: thick pentagon (heavy, stompy)
+            const r = enemy.r;
+            for (let i = 0; i < 5; i++) {
+                const a = (Math.PI * 2 / 5) * i - Math.PI / 2;
+                if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+                else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
             }
             ctx.closePath();
         } else if (enemy.ai === 'sniper') {
@@ -282,27 +338,18 @@ function drawEnemies() {
             for (let i = 0; i < 10; i++) {
                 const a = (Math.PI / 5) * i - Math.PI / 2;
                 const rad = i % 2 === 0 ? r : inner;
-                const x = Math.cos(a) * rad;
-                const y = Math.sin(a) * rad;
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+                else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
             }
             ctx.closePath();
         } else if (enemy.ai === 'healer') {
             // Plus / cross
             const r = enemy.r;
             const t = r * 0.4;
-            ctx.moveTo(-t, -r);
-            ctx.lineTo(t, -r);
-            ctx.lineTo(t, -t);
-            ctx.lineTo(r, -t);
-            ctx.lineTo(r, t);
-            ctx.lineTo(t, t);
-            ctx.lineTo(t, r);
-            ctx.lineTo(-t, r);
-            ctx.lineTo(-t, t);
-            ctx.lineTo(-r, t);
-            ctx.lineTo(-r, -t);
-            ctx.lineTo(-t, -t);
+            ctx.moveTo(-t, -r); ctx.lineTo(t, -r); ctx.lineTo(t, -t);
+            ctx.lineTo(r, -t); ctx.lineTo(r, t); ctx.lineTo(t, t);
+            ctx.lineTo(t, r); ctx.lineTo(-t, r); ctx.lineTo(-t, t);
+            ctx.lineTo(-r, t); ctx.lineTo(-r, -t); ctx.lineTo(-t, -t);
             ctx.closePath();
         } else if (enemy.ai === 'shielder') {
             // Shielder body = square; shield ring drawn after.
@@ -316,7 +363,6 @@ function drawEnemies() {
             ctx.lineTo(-enemy.r * 0.95, enemy.r * 0.85);
             ctx.closePath();
         } else {
-            // swarmling, drone fallback, etc.
             ctx.arc(0, 0, enemy.r, 0, Math.PI * 2);
         }
         ctx.stroke();
@@ -324,6 +370,61 @@ function drawEnemies() {
             ctx.fillStyle = `rgba(255, 255, 255, 0.25)`;
             ctx.fill();
         }
+
+        // ── Swarmling: split dividing line ──
+        if (enemy.ai === 'swarm' && !enemy.hasSplit) {
+            ctx.globalAlpha = phaseAlpha * 0.7;
+            ctx.strokeStyle = neonColor;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(0, -enemy.r); ctx.lineTo(0, enemy.r);
+            ctx.stroke();
+        }
+
+        // ── Drone: barrel line pointing at player ──
+        if (enemy.ai === 'strafe') {
+            const ba = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+            const shootReady = (enemy.shootCooldown !== undefined && enemy.shootCooldown < 0.5);
+            ctx.globalAlpha = phaseAlpha * (shootReady ? 0.9 : 0.45);
+            ctx.strokeStyle = shootReady ? '#ffffff' : neonColor;
+            ctx.lineWidth = shootReady ? 2 : 1;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(ba) * (enemy.r * 0.5), Math.sin(ba) * (enemy.r * 0.5));
+            ctx.lineTo(Math.cos(ba) * (enemy.r + 8), Math.sin(ba) * (enemy.r + 8));
+            ctx.stroke();
+        }
+
+        // ── Tank: EMP pulse ring indicator when charging up ──
+        if (enemy.ai === 'heavy' && enemy.empCooldown !== undefined && enemy.empCooldown < 1.5) {
+            const pulse = 1 - enemy.empCooldown / 1.5;
+            ctx.globalAlpha = phaseAlpha * pulse * 0.7;
+            ctx.strokeStyle = '#ff9d00';
+            ctx.shadowColor = '#ff9d00';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 5]);
+            ctx.beginPath();
+            ctx.arc(0, 0, enemy.r + 5 + pulse * 6, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // ── Brute: stomp crack lines when about to slam ──
+        if (enemy.ai === 'brute' && enemy.slamCooldown !== undefined && enemy.slamCooldown < 0.6) {
+            const charge = 1 - enemy.slamCooldown / 0.6;
+            ctx.globalAlpha = phaseAlpha * charge * 0.8;
+            ctx.strokeStyle = '#ffaa00';
+            ctx.lineWidth = 1.2;
+            for (let i = 0; i < 4; i++) {
+                const a = (Math.PI / 2) * i + Math.PI / 4;
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(a) * enemy.r, Math.sin(a) * enemy.r);
+                ctx.lineTo(Math.cos(a) * (enemy.r + 8 + charge * 8), Math.sin(a) * (enemy.r + 8 + charge * 8));
+                ctx.stroke();
+            }
+        }
+
+        ctx.globalAlpha = phaseAlpha;
 
         // Shielder shield ring
         if (enemy.shieldHp > 0 && enemy.shieldMax > 0) {

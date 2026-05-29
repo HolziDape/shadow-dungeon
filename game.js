@@ -2516,6 +2516,12 @@ function createEnemy(type, x, y) {
         charging: false,          // crusher mid-dash
         chargeDirX: 0,
         chargeDirY: 0,
+        // ── Unique ability state ──
+        hasSplit: type.hasSplit || false,          // swarmling: prevent chain-split
+        shootCooldown: 1.5 + Math.random() * 1.0, // drone: directed shot
+        blinkPending: false,                       // chaser: blink-behind on sprint end
+        slamCooldown: 2.0 + Math.random(),         // brute: ground slam
+        empCooldown: 3.0 + Math.random() * 2.0,   // tank: EMP pulse
         // ── Status Effects ──
         frostSlow: 0,
         frostTimer: 0,
@@ -2751,6 +2757,11 @@ function updatePlayerTrail(prevX, prevY, dt) {
 }
 
 function updateAutoFire(dt) {
+    // ── Tank EMP stun: blocks shooting ──
+    if (player.empStunTimer > 0) {
+        player.empStunTimer -= dt;
+        return;
+    }
     player.shootTimer = Math.max(0, player.shootTimer - dt);
     const nearest = findNearestEnemy(player.range);
     if (!nearest) return;
@@ -3659,6 +3670,15 @@ function updateEnemies(dt) {
         }
 
         if (enemy.ai === 'strafe') {
+            // ── Unique: Pulse Shot — fires a directed projectile every ~2.5s ──
+            enemy.shootCooldown -= dt;
+            if (enemy.shootCooldown <= 0 && distance < 520) {
+                enemy.shootCooldown = 2.3 + Math.random() * 0.6;
+                hazards.push({ id: nextHazardId++, type: 'enemybullet',
+                    x: enemy.x, y: enemy.y, vx: nx * 310, vy: ny * 310,
+                    r: 5, life: 1.6, color: '#00f2ff', hit: false });
+                addP(enemy.x, enemy.y, '#00f2ff', 4, 50, 0.15, 1);
+            }
             moveX = nx * 0.72 + px * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
             moveY = ny * 0.72 + py * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
         } else if (enemy.ai === 'sprint') {
@@ -3667,17 +3687,39 @@ function updateEnemies(dt) {
                 moveX = enemy.sprintDirX;
                 moveY = enemy.sprintDirY;
                 speed *= 2.2;
+                // ── Unique: Blink — teleport behind player when sprint ends ──
+                if (enemy.blinkPending && enemy.sprintTime <= 0) {
+                    enemy.blinkPending = false;
+                    const behindAngle = Math.atan2(-ny, -nx);
+                    const bx = Math.max(WALL + enemy.r, Math.min(arena.width - WALL - enemy.r,
+                        player.x + Math.cos(behindAngle) * 110));
+                    const by = Math.max(arena.top + enemy.r, Math.min(arena.height - WALL - enemy.r,
+                        player.y + Math.sin(behindAngle) * 110));
+                    enemy.x = bx;
+                    enemy.y = by;
+                    addP(enemy.x, enemy.y, '#bc13fe', 12, 110, 0.3, 3);
+                }
             } else if (enemy.sprintCooldown <= 0 && distance > 110) {
                 enemy.sprintCooldown = 2.2 + Math.random();
                 enemy.sprintTime = 0.35;
                 enemy.sprintDirX = nx;
                 enemy.sprintDirY = ny;
+                enemy.blinkPending = true;
                 addP(enemy.x, enemy.y, enemy.glow, 8, 110, 0.35, 2);
             } else {
                 moveX = nx * 0.88 + px * 0.28 * Math.sin(enemy.aiClock * 4);
                 moveY = ny * 0.88 + py * 0.28 * Math.sin(enemy.aiClock * 4);
             }
         } else if (enemy.ai === 'heavy') {
+            // ── Unique: EMP Pulse — disables player shooting for 1.5s ──
+            enemy.empCooldown -= dt;
+            if (enemy.empCooldown <= 0 && distance < 420) {
+                enemy.empCooldown = 5.0 + Math.random();
+                hazards.push({ id: nextHazardId++, type: 'empring',
+                    x: enemy.x, y: enemy.y, radius: enemy.r,
+                    maxRadius: 220, speed: 200, life: 1.4, color: '#ff9d00', hit: false });
+                addP(enemy.x, enemy.y, '#ff9d00', 14, 140, 0.35, 3);
+            }
             moveX = nx + px * 0.18 * Math.cos(enemy.aiClock * 1.7);
             moveY = ny + py * 0.18 * Math.cos(enemy.aiClock * 1.7);
             speed *= 0.84;
@@ -3691,6 +3733,16 @@ function updateEnemies(dt) {
             moveX = nx * 0.92 + px * 0.34 * Math.sin(enemy.aiClock * 6.0);
             moveY = ny * 0.92 + py * 0.34 * Math.sin(enemy.aiClock * 6.0);
         } else if (enemy.ai === 'brute') {
+            // ── Unique: Ground Slam — shockwave ring every 3.5s ──
+            enemy.slamCooldown -= dt;
+            if (enemy.slamCooldown <= 0 && distance < 380) {
+                enemy.slamCooldown = 3.5 + Math.random() * 0.5;
+                hazards.push({ id: nextHazardId++, type: 'ring',
+                    x: enemy.x, y: enemy.y, radius: enemy.r,
+                    maxRadius: 180, speed: 260, life: 0.9, color: '#ffaa00', hit: false });
+                addP(enemy.x, enemy.y, '#ffaa00', 18, 130, 0.35, 4);
+                screenShake = Math.min(2.5, screenShake + 0.22);
+            }
             // Slow, relentless straight-line chaser.
             moveX = nx;
             moveY = ny;
@@ -4043,8 +4095,34 @@ function updateHazards(dt) {
                 });
             }
         }
+        // ── Drone: directed enemy bullet ──
+        if (hazard.type === 'enemybullet') {
+            hazard.x += hazard.vx * dt;
+            hazard.y += hazard.vy * dt;
+            const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
+            if (!hazard.hit && dist < player.r + hazard.r) {
+                hazard.hit = true;
+                hazard.life = 0;
+                damagePlayer('enemy');
+            }
+        }
+        // ── Tank: EMP ring — disables player shooting briefly ──
+        if (hazard.type === 'empring') {
+            hazard.radius += hazard.speed * dt;
+            const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
+            if (!hazard.hit && Math.abs(dist - hazard.radius) < 16) {
+                hazard.hit = true;
+                player.empStunTimer = (player.empStunTimer || 0) + 1.5;
+                addFxText(player.x, player.y - 30, 'EMP!', '#ff9d00', 0.6, 16);
+            }
+        }
     });
-    hazards = hazards.filter((hazard) => hazard.life > 0 && (hazard.type === 'singularity' || hazard.radius < hazard.maxRadius));
+    hazards = hazards.filter((hazard) => hazard.life > 0 && (
+        hazard.type === 'singularity' ||
+        hazard.type === 'enemybullet' ||
+        hazard.type === 'empring' ||
+        hazard.radius < hazard.maxRadius
+    ));
 }
 
 // ── Status Effects on Enemies ──
@@ -4184,6 +4262,18 @@ function checkWaveProgress() {
 function triggerKill(enemy) {
     if (!enemy.alive) return;
     enemy.alive = false;
+
+    // ── Swarmling: splits into 2 mini-swarmlings on death ──
+    if (enemy.ai === 'swarm' && !enemy.hasSplit) {
+        for (let i = 0; i < 2; i++) {
+            const angle = (i * Math.PI) + Math.random() * 0.8;
+            const sx = Math.max(WALL + 7, Math.min(arena.width - WALL - 7, enemy.x + Math.cos(angle) * 22));
+            const sy = Math.max(arena.top + 7, Math.min(arena.height - WALL - 7, enemy.y + Math.sin(angle) * 22));
+            const mini = createEnemy({ ...ENEMY_TYPES.swarmling, r: 6, hp: 1, spd: 2.5, exp: 0, hasSplit: true }, sx, sy);
+            enemies.push(mini);
+        }
+        addP(enemy.x, enemy.y, '#7be8ff', 8, 80, 0.25, 2);
+    }
 
     // ── Bomber: explosion on death (damages player + nearby enemies) ──
     if (enemy.ai === 'bomber') {

@@ -258,6 +258,10 @@ function drawEnemies() {
         ctx.translate(enemy.x, enemy.y);
         ctx.rotate(enemy.ai === 'sprint' ? Math.sin(enemy.aiClock * 8) * 0.18 : 0);
 
+        // Chaser: apply blink alpha fade
+        const blinkAlpha = (enemy.ai === 'sprint' && enemy.blinkAlpha !== undefined)
+            ? enemy.blinkAlpha : 1.0;
+
         // Chaser blink-ready glow: flicker purple when blinkPending
         const blinkFlicker = enemy.blinkPending && Math.sin(enemy.aiClock * 18) > 0;
         const neonColor = enemy.hitFlash > 0 ? '#ffffff' : (blinkFlicker ? '#e080ff' : enemy.color);
@@ -267,7 +271,7 @@ function drawEnemies() {
         ctx.lineWidth = enemy.isBoss ? 2 : 1.5;
 
         // Wraith fades out while phasing.
-        const phaseAlpha = enemy.phasing ? 0.35 : 1;
+        const phaseAlpha = enemy.phasing ? 0.35 : blinkAlpha;
         ctx.globalAlpha = phaseAlpha;
 
         ctx.beginPath();
@@ -409,25 +413,82 @@ function drawEnemies() {
             ctx.setLineDash([]);
         }
 
-        // ── Brute: stomp crack lines when about to slam ──
-        if (enemy.ai === 'brute' && enemy.slamCooldown !== undefined && enemy.slamCooldown < 0.6) {
-            const charge = 1 - enemy.slamCooldown / 0.6;
-            ctx.globalAlpha = phaseAlpha * charge * 0.8;
+        // ── Brute: expanding ground ring when about to slam ──
+        if (enemy.ai === 'brute' && enemy.slamCooldown !== undefined && enemy.slamCooldown < 0.7) {
+            const charge = 1 - enemy.slamCooldown / 0.7;
+            // Pulsing ring that grows outward — clear warning area
+            const ringR = enemy.r + charge * 14;
+            ctx.globalAlpha = phaseAlpha * charge * 0.9;
             ctx.strokeStyle = '#ffaa00';
-            ctx.lineWidth = 1.2;
-            for (let i = 0; i < 4; i++) {
-                const a = (Math.PI / 2) * i + Math.PI / 4;
-                ctx.beginPath();
-                ctx.moveTo(Math.cos(a) * enemy.r, Math.sin(a) * enemy.r);
-                ctx.lineTo(Math.cos(a) * (enemy.r + 8 + charge * 8), Math.sin(a) * (enemy.r + 8 + charge * 8));
-                ctx.stroke();
-            }
+            ctx.shadowColor = '#ffaa00';
+            ctx.shadowBlur = 16;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+            ctx.stroke();
+            // Second inner ring for depth
+            ctx.globalAlpha = phaseAlpha * charge * 0.4;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(0, 0, ringR * 0.7, 0, Math.PI * 2);
+            ctx.stroke();
         }
 
         ctx.globalAlpha = phaseAlpha;
 
-        // Shielder shield ring
-        if (enemy.shieldHp > 0 && enemy.shieldMax > 0) {
+        // ── Shielder: full overhaul ──
+        if (enemy.ai === 'shielder') {
+            const pct = enemy.shieldMax > 0 ? Math.max(0, Math.min(1, enemy.shieldHp / enemy.shieldMax)) : 0;
+            const isRaging = enemy.shieldRageTimer > 0;
+
+            if (pct > 0) {
+                // Thick directional shield arc facing player
+                const toPlayer = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                ctx.save();
+                ctx.rotate(toPlayer); // rotate so arc faces player
+                const shieldSpan = Math.PI * 0.75; // 135° arc
+                ctx.globalAlpha = phaseAlpha * (0.55 + 0.45 * pct);
+                ctx.strokeStyle = '#5cc1ff';
+                ctx.shadowColor = '#5cc1ff';
+                ctx.shadowBlur = 20 * pct;
+                ctx.lineWidth = 4 + pct * 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, enemy.r + 7, -shieldSpan / 2, shieldSpan / 2);
+                ctx.stroke();
+                // Glow fill inside arc
+                ctx.globalAlpha = phaseAlpha * pct * 0.15;
+                ctx.fillStyle = '#5cc1ff';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, enemy.r + 7, -shieldSpan / 2, shieldSpan / 2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Rage glow
+            if (isRaging) {
+                ctx.globalAlpha = phaseAlpha * 0.5;
+                ctx.strokeStyle = '#ff4444';
+                ctx.shadowColor = '#ff4444';
+                ctx.shadowBlur = 22;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, enemy.r + 3 + Math.sin(enemy.aiClock * 12) * 2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Shield regen pulse
+            if (!isRaging && pct > 0 && pct < 1 && enemy.shieldRegenTimer > 2.5) {
+                ctx.globalAlpha = phaseAlpha * 0.3 * Math.sin(enemy.aiClock * 6);
+                ctx.strokeStyle = '#5cc1ff';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(0, 0, enemy.r + 10, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        } else if (enemy.shieldHp > 0 && enemy.shieldMax > 0) {
+            // Other enemies with shields: simple arc
             const pct = Math.max(0, Math.min(1, enemy.shieldHp / enemy.shieldMax));
             ctx.globalAlpha = phaseAlpha * (0.55 + 0.35 * pct);
             ctx.strokeStyle = '#7ee2ff';

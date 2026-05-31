@@ -945,7 +945,6 @@ let resultPrimaryAction = null;
 let resultSecondaryAction = null;
 let resultHomeAction = null;
 let audioContext = null;
-let musicGain = null;
 let musicNodesStarted = false;
 
 // ── MP3 Music Manager ──────────────────────────────────────────────────────
@@ -970,31 +969,38 @@ const MusicManager = (() => {
     }
 
     function init() {
-        // Load menu tracks: menu.mp3, menu2.mp3, menu3.mp3 ... up to menu9.mp3
+        // Load menu tracks: menu.mp3, menu2.mp3 ... up to menu9.mp3
         const suffixes = ['', '2', '3', '4', '5', '6', '7', '8', '9'];
         suffixes.forEach(s => {
-            const el = loadAudio(`music/menu${s}.mp3`, false); // not looped — plays next on end
-            let ok = false;
-            el.addEventListener('canplaythrough', () => { if (!ok) { ok = true; menuTracks.push(el); } });
+            const el = loadAudio(`music/menu${s}.mp3`, false);
+            let added = false;
+            const add = () => { if (!added) { added = true; menuTracks.push(el); } };
+            // Accept file as soon as ANY data arrives — canplaythrough too slow on file://
+            el.addEventListener('canplaythrough', add);
+            el.addEventListener('loadedmetadata', add);  // fires earlier
             el.addEventListener('ended', () => { if (currentKey === 'menu') playNextMenu(); });
-            // ignore error — file simply doesn't exist
+            el.addEventListener('error', () => {});
+            el.load();
         });
 
-        // Load single tracks
+        // Load single tracks — mark ready on loadedmetadata not just canplaythrough
         ['fight', 'boss'].forEach(key => {
             const el = loadAudio(`music/${key}.mp3`, true);
-            el.addEventListener('canplaythrough', () => { loaded[key] = true; });
+            const markReady = () => { loaded[key] = true; };
+            el.addEventListener('canplaythrough', markReady);
+            el.addEventListener('loadedmetadata', markReady);
             el.addEventListener('error', () => { loaded[key] = false; tracks[key] = null; });
             tracks[key] = el;
+            el.load();
         });
 
-        // Shuffle menu tracks once loaded (wait 2s for canplaythrough events)
+        // Shuffle + finalize after 1s
         setTimeout(() => {
             for (let i = menuTracks.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [menuTracks[i], menuTracks[j]] = [menuTracks[j], menuTracks[i]];
             }
-        }, 2000);
+        }, 1000);
     }
 
     function getVolume() {
@@ -1002,7 +1008,7 @@ const MusicManager = (() => {
     }
 
     function fadeTo(el, targetVol, cb) {
-        const steps = 20; const interval = 30;
+        const steps = 12; const interval = 25;
         const startVol = el.volume;
         const delta = (targetVol - startVol) / steps;
         let step = 0;
@@ -1032,24 +1038,42 @@ const MusicManager = (() => {
         if (currentKey === key && key !== 'menu') return;
 
         if (key === 'menu') {
-            if (menuTracks.length === 0) return; // procedural fallback
+            if (menuTracks.length === 0) {
+                // Retry after a short delay in case files are still loading
+                setTimeout(() => { if (menuTracks.length > 0 && currentKey !== 'menu') play('menu'); }, 800);
+                return;
+            }
             currentKey = 'menu';
+            currentMusicMood = 'menu';
             stopCurrent(() => {
-                const track = menuTracks[menuIndex];
+                const track = menuTracks[menuIndex % menuTracks.length];
                 current = track;
                 track.currentTime = 0;
+                track.volume = 0;
                 track.play().catch(() => {});
                 fadeTo(track, getVolume(), null);
             });
         } else {
             const track = tracks[key];
-            if (!track || !loaded[key]) { currentKey = null; return; }
+            if (!track) return; // file doesn't exist
             currentKey = key;
-            stopCurrent(() => {
-                current = track;
-                track.currentTime = 0;
-                track.play().catch(() => {});
-                fadeTo(track, getVolume(), null);
+            currentMusicMood = key;
+            // Pause old track immediately, then start new one
+            if (current && current !== track) {
+                const old = current;
+                fadeTo(old, 0, () => { old.pause(); old.currentTime = 0; });
+            }
+            current = track;
+            track.currentTime = 0;
+            track.volume = 0;
+            const vol = getVolume();
+            track.play().then(() => {
+                fadeTo(track, vol, null);
+            }).catch(() => {
+                // Retry after a short delay
+                setTimeout(() => {
+                    track.play().then(() => fadeTo(track, vol, null)).catch(() => {});
+                }, 400);
             });
         }
     }
@@ -1069,21 +1093,15 @@ const MusicManager = (() => {
         return !!(tracks[key] && loaded[key]);
     }
 
-    return { init, play, stop, syncVolume, hasTrack };
+    // Returns true if we intend to play an MP3 (mutes procedural)
+    function isActive() {
+        return currentKey !== null && (menuTracks.length > 0 || tracks['fight'] !== null || tracks['boss'] !== null);
+    }
+
+    return { init, play, stop, syncVolume, hasTrack, isActive };
 })();
 let musicNodes = null;
-let musicBassGain = null;
-let musicBassFreqs = null;
-let musicPluckGain = null;
-let musicPluckFilter = null;
-let musicPluckFreqs = null;
-let musicProgression = null;
-let musicStep = 0;
-let musicBar = 0;
-let musicTotalBars = 0;  // total bars elapsed — drives section/climax logic
-let musicNextNoteTime = 0;
-let musicSixteenth = 0;
-let musicSchedulerInterval = null;
+let currentMusicMood = 'menu'; // tracked for state comparisons
 let packOpeningState = null;
 let packTickTimer = null;
 let packAnimationFrame = null;
@@ -1330,320 +1348,19 @@ function renderDailyLoginPanel() {
     }).join('');
 }
 
+
+// ── Audio engine — SFX only, music is handled by MusicManager (MP3) ──────────
 function ensureMusicEngine() {
     if (musicNodesStarted) return;
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
-
     audioContext = audioContext || new AudioCtx();
-    if (audioContext.state === 'suspended') {
-        audioContext.resume().catch(() => {});
-    }
-
-    // master music bus
-    musicGain = audioContext.createGain();
-    musicGain.gain.value = 0;
-
-    const comp = audioContext.createDynamicsCompressor();
-    comp.threshold.value = -18;
-    comp.knee.value = 20;
-    comp.ratio.value = 5;
-    comp.attack.value = 0.02;
-    comp.release.value = 0.12;
-    comp.connect(musicGain);
-    musicGain.connect(audioContext.destination);
-
-    // ── BASS layer (square wave — punchy chiptune bass) ──
-    const bassGain = audioContext.createGain();
-    bassGain.gain.value = 0.28;
-    bassGain.connect(comp);
-    musicBassGain = bassGain;
-
-    // ── LEAD + ARP layer (square wave lead, triangle arp) ──
-    const leadGain = audioContext.createGain();
-    leadGain.gain.value = 0.22;
-    const leadFilter = audioContext.createBiquadFilter();
-    leadFilter.type = 'lowpass';
-    leadFilter.frequency.value = 1800;  // tame the sawtooth — analog synth feel
-    leadFilter.Q.value = 1.2;
-    leadGain.connect(leadFilter);
-    leadFilter.connect(comp);
-    musicPluckGain = leadGain;
-    musicPluckFilter = leadFilter;
-
-    musicNodes = [];
-
-    // ─────────────────────────────────────────────────────────────
-    // Chord progression: Am → G → Dm → Em  (A Dorian / natural minor)
-    // Angular sci-fi game feel — minor with digital edge.
-    // leads[]:  melody note per 16th step (null = rest)
-    // plucks[]: arpeggio note per 8th step (8 values, sine wave)
-    // bassRoot: root for sine bass
-    // ─────────────────────────────────────────────────────────────
-    const R = null;
-    musicProgression = [
-        // ── Bar 0: Am ─────────────────────────────────────────────
-        {
-            bassRoot: 110.00,  // A2
-            leads: [
-                440.00, R,      523.25, R,      // A4  .  C5  .
-                659.25, R,      523.25, 440.00, // E5  .  C5  A4
-                329.63, R,      440.00, R,      // E4  .  A4  .
-                523.25, 659.25, 880.00, R       // C5  E5  A5  .
-            ],
-            plucks: [440.00, 659.25, 523.25, 880.00, 659.25, 523.25, 440.00, 659.25]
-        },
-        // ── Bar 1: G ──────────────────────────────────────────────
-        {
-            bassRoot: 98.00,   // G2
-            leads: [
-                392.00, R,      493.88, R,      // G4  .  B4  .
-                587.33, 493.88, 392.00, R,      // D5  B4  G4  .
-                493.88, R,      784.00, R,      // B4  .  G5  .
-                587.33, R,      493.88, 392.00  // D5  .  B4  G4
-            ],
-            plucks: [392.00, 587.33, 493.88, 784.00, 587.33, 493.88, 392.00, 587.33]
-        },
-        // ── Bar 2: Dm ─────────────────────────────────────────────
-        {
-            bassRoot: 73.42,   // D2
-            leads: [
-                293.66, R,      349.23, R,      // D4  .  F4  .
-                440.00, R,      587.33, R,      // A4  .  D5  .
-                440.00, 349.23, 293.66, R,      // A4  F4  D4  .
-                349.23, 440.00, 523.25, R       // F4  A4  C5  .
-            ],
-            plucks: [293.66, 440.00, 349.23, 587.33, 440.00, 349.23, 293.66, 440.00]
-        },
-        // ── Bar 3: Em (tension → resolves back to Am) ─────────────
-        {
-            bassRoot: 82.41,   // E2
-            leads: [
-                329.63, R,      392.00, R,      // E4  .  G4  .
-                493.88, 659.25, R,      493.88, // B4  E5  .   B4
-                392.00, 329.63, 392.00, R,      // G4  E4  G4  .
-                493.88, R,      659.25, R       // B4  .   E5  .
-            ],
-            plucks: [329.63, 493.88, 392.00, 659.25, 493.88, 392.00, 329.63, 493.88]
-        }
-    ];
-
-    // 115 BPM — energetic sci-fi game pace
-    const bpm = 115;
-    const sixteenth = 60 / bpm / 4;
-    musicSixteenth = sixteenth;
-    musicStep = 0;
-    musicBar = 0;
-    musicNextNoteTime = audioContext.currentTime + 0.05;
-
-    // Standard lookahead scheduler: fires every 80ms, schedules
-    // whatever notes fall within the next 0.25s window.
-    // This prevents drift and double-scheduling entirely.
-    musicSchedulerInterval = window.setInterval(() => {
-        if (!audioContext) return;
-        const lookahead = 0.25; // seconds ahead to schedule
-        while (musicNextNoteTime < audioContext.currentTime + lookahead) {
-            scheduleBeat(musicStep, musicNextNoteTime, musicSixteenth, musicBar);
-            musicNextNoteTime += musicSixteenth;
-            musicStep += 1;
-            if (musicStep >= 16) {
-                musicStep = 0;
-                musicBar = (musicBar + 1) % 4;
-                musicTotalBars += 1;
-            }
-        }
-    }, 80);
-
+    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
     musicNodesStarted = true;
-    syncMusicVolume();
-}
-
-function scheduleBeat(step, when, dur, bar = 0) {
-    if (!audioContext) return;
-    const chord = musicProgression && musicProgression[bar];
-    if (!chord) return;
-
-    // ── Section logic (16-bar cycle): ──────────────────────────────────
-    // 0-3:  Intro   — arp only, no lead, soft bass
-    // 4-7:  Verse   — arp + lead + full bass
-    // 8-11: Build   — verse + octave echo, extra kick on 3
-    // 12-15: Climax — everything + 16th arp, double lead, sub-bass
-    const section = Math.floor((musicTotalBars % 16) / 4);
-    const isIntro   = section === 0;
-    const isBuild   = section === 2;
-    const isClimax  = section === 3;
-    const bassVol   = isIntro ? 0.22 : isClimax ? 0.50 : 0.38;
-    const leadVol   = isClimax ? 0.26 : 0.19;
-    const arpVol    = isIntro  ? 0.16 : isClimax ? 0.30 : 0.22;
-
-    // ── BASS: square wave, quarter notes ──
-    if (step % 4 === 0) {
-        const freq = chord.bassRoot;
-        const o = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        o.type = 'sine';  // clean sine bass — no buzz
-        o.frequency.value = freq;
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(bassVol, when + 0.009);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.4);
-        o.connect(g); g.connect(musicBassGain);
-        o.start(when); o.stop(when + dur * 3.8);
-        // Climax: extra sub-bass one octave down
-        if (isClimax) {
-            const o2 = audioContext.createOscillator();
-            const g2 = audioContext.createGain();
-            o2.type = 'sine';
-            o2.frequency.value = freq * 0.5;
-            g2.gain.setValueAtTime(0.0001, when);
-            g2.gain.exponentialRampToValueAtTime(0.22, when + 0.012);
-            g2.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.2);
-            o2.connect(g2); g2.connect(musicBassGain);
-            o2.start(when); o2.stop(when + dur * 3.6);
-        }
-    }
-    // Pickup note on step 14 (into next bar)
-    if (step === 14) {
-        const nextFreq = musicProgression[(bar + 1) % musicProgression.length].bassRoot;
-        const o = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        o.type = 'sine';
-        o.frequency.value = nextFreq * 2;
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.14, when + 0.006);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 1.4);
-        o.connect(g); g.connect(musicBassGain);
-        o.start(when); o.stop(when + dur * 1.6);
-    }
-
-    // ── LEAD MELODY: square wave — verse/build/climax only ──
-    const leadFreq = !isIntro && chord.leads && chord.leads[step];
-    if (leadFreq) {
-        const nextHasNote = chord.leads[(step + 1) % 16];
-        const sustain = nextHasNote ? dur * 1.0 : dur * 1.8;
-        const o = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        o.type = 'sawtooth';  // analog synth lead — filtered below 1800Hz
-        o.frequency.value = leadFreq;
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(leadVol, when + 0.007);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + sustain);
-        o.connect(g); g.connect(musicPluckFilter);
-        musicPluckFilter.connect(musicPluckGain);
-        o.start(when); o.stop(when + sustain + 0.02);
-        // Build/Climax: add octave-up echo (slightly delayed, softer)
-        if (isBuild || isClimax) {
-            const o2 = audioContext.createOscillator();
-            const g2 = audioContext.createGain();
-            o2.type = 'sine';
-            o2.frequency.value = leadFreq * 2;
-            g2.gain.setValueAtTime(0.0001, when + 0.012);
-            g2.gain.exponentialRampToValueAtTime(isClimax ? 0.14 : 0.09, when + 0.020);
-            g2.gain.exponentialRampToValueAtTime(0.0001, when + sustain * 0.7);
-            o2.connect(g2); g2.connect(musicPluckFilter);
-            o2.start(when + 0.012); o2.stop(when + sustain);
-        }
-    }
-
-    // ── ARPEGGIO: triangle wave ──
-    // Verse/Build: 8th notes.  Climax: every 16th note.
-    const arpEvery = isClimax ? 1 : 2;
-    if (step % arpEvery === 0) {
-        const idx = isClimax ? (step % chord.plucks.length) : ((step / 2) % chord.plucks.length);
-        const freq = chord.plucks[idx];
-        const accent = step === 0 ? 1.5 : (step % 4 === 0 ? 1.1 : 0.72);
-        const arpDur = isClimax ? dur * 0.9 : dur * 1.7;
-        const o = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        o.type = 'sine';  // clean crystalline arp — no harmonics
-        o.frequency.value = freq;
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(arpVol * accent, when + 0.004);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + arpDur);
-        o.connect(g); g.connect(musicPluckFilter);
-        musicPluckFilter.connect(musicPluckGain);
-        o.start(when); o.stop(when + arpDur + 0.02);
-    }
-
-    // ── KICK: beats 1 and 3 (steps 0 and 8) ──
-    if (step === 0 || step === 8) {
-        const kickVol = isIntro ? 0 : isClimax ? 0.65 : (step === 0 ? 0.52 : 0.42);
-        if (kickVol > 0) {
-            const o = audioContext.createOscillator();
-            const g = audioContext.createGain();
-            o.type = 'sine';
-            o.frequency.setValueAtTime(step === 0 ? 165 : 145, when);
-            o.frequency.exponentialRampToValueAtTime(38, when + 0.09);
-            g.gain.setValueAtTime(0.0001, when);
-            g.gain.exponentialRampToValueAtTime(kickVol, when + 0.003);
-            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.15);
-            o.connect(g); g.connect(musicBassGain);
-            o.start(when); o.stop(when + 0.2);
-        }
-    }
-    // Build: extra kick on beat 3 offbeat (step 10) for tension
-    if (isBuild && step === 10) {
-        const o = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(120, when);
-        o.frequency.exponentialRampToValueAtTime(40, when + 0.07);
-        g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.28, when + 0.003);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.12);
-        o.connect(g); g.connect(musicBassGain);
-        o.start(when); o.stop(when + 0.16);
-    }
-
-    // ── SNARE: beats 2 and 4 — detuned square cluster, no noise ──
-    // Intro: no snare. Climax: louder.
-    if (!isIntro && (step === 4 || step === 12)) {
-        const snareVol = isClimax ? 1.5 : 1.0;
-        [[185, 0.10], [280, 0.07], [370, 0.05]].forEach(([freq, vol]) => {
-            const o = audioContext.createOscillator();
-            const g = audioContext.createGain();
-            o.type = 'square';
-            o.frequency.value = freq;
-            g.gain.setValueAtTime(0.0001, when);
-            g.gain.exponentialRampToValueAtTime(vol * snareVol, when + 0.004);
-            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.08);
-            o.connect(g); g.connect(musicBassGain);
-            o.start(when); o.stop(when + 0.1);
-        });
-    }
-
-    // ── HI-HAT tick on snare beats ──
-    if (!isIntro && (step === 4 || step === 12)) {
-        const o = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        o.type = 'square';
-        o.frequency.value = isClimax ? 3600 : 3200;
-        g.gain.setValueAtTime(0.0001, when + 0.01);
-        g.gain.exponentialRampToValueAtTime(isClimax ? 0.04 : 0.028, when + 0.013);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.045);
-        o.connect(g); g.connect(musicBassGain);
-        o.start(when + 0.01); o.stop(when + 0.06);
-    }
-    // Climax: extra hi-hat on every beat
-    if (isClimax && (step === 0 || step === 8)) {
-        const o = audioContext.createOscillator();
-        const g = audioContext.createGain();
-        o.type = 'square';
-        o.frequency.value = 2800;
-        g.gain.setValueAtTime(0.0001, when + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.022, when + 0.009);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.04);
-        o.connect(g); g.connect(musicBassGain);
-        o.start(when + 0.005); o.stop(when + 0.05);
-    }
 }
 
 function syncMusicVolume() {
     MusicManager.syncVolume();
-    if (!musicGain) return;
-    const target = Math.max(0, Math.min(1, save.settings?.music ?? 0.35)) * 0.18;
-    const now = audioContext ? audioContext.currentTime : 0;
-    musicGain.gain.cancelScheduledValues(now);
-    musicGain.gain.linearRampToValueAtTime(target, now + 0.18);
 }
 
 function playSfx(kind, intensity = 1) {
@@ -2872,7 +2589,7 @@ function spawnWave(index) {
     const wave = currentLevelWaves[index];
     // Switch to boss music when the boss wave spawns
     const hasBoss = wave.some(e => e.t === 'boss');
-    if (hasBoss) MusicManager.play('boss');
+    if (hasBoss) setTimeout(() => MusicManager.play('boss'), 200);
     waveSpawnQueue = buildSpawnQueue(wave);
     // Fire the very first batch instantly so the wave doesn't start empty.
     processWaveSpawnQueue(0);
@@ -2888,6 +2605,9 @@ function spawnEndlessWave(index) {
     const waveSet = getLevelWaves(scaledLevel);
     const templateWave = waveSet[index % waveSet.length] || waveSet[0] || [{ t: 'drone', n: 8 }];
     const fillMultiplier = 1 + Math.min(0.45, index * 0.02);
+    const hasBoss = templateWave.some(e => e.t === 'boss');
+    if (hasBoss) setTimeout(() => MusicManager.play('boss'), 200);
+    else if (currentMusicMood !== 'fight') setTimeout(() => MusicManager.play('fight'), 200);
     waveSpawnQueue = buildSpawnQueue(templateWave, { fillMultiplier });
     processWaveSpawnQueue(0);
 
@@ -8690,6 +8410,7 @@ function updateTestBuffs() {
     if (p.markOnHit) buffs.push('Mark');
     if (p.multiSpread > 0) buffs.push(`Spread +${(p.multiSpread*100).toFixed(0)}%`);
     if (p.damageMultiplier > 1.1) buffs.push(`DMG ×${p.damageMultiplier.toFixed(2)}`);
+    if (p.damageMultiplier > 1.1) buffs.push(`DMG ×${p.damageMultiplier.toFixed(2)}`);
     if (p.atkCooldown < 0.3) buffs.push(`AtkSpd ${p.atkCooldown.toFixed(3)}s`);
     if (p.orbiters && p.orbiters.length > 0) buffs.push(`Orbiters ×${p.orbiters.length}`);
 
@@ -8722,6 +8443,11 @@ window.addEventListener('load', () => {
     showFight();
     installSwipeNavigation();
     refreshRailBadges();
-    document.addEventListener('pointerdown', ensureMusicEngine, { once: true });
+    MusicManager.init();
+    setInterval(syncMusicVolume, 500);
+    document.addEventListener('pointerdown', () => {
+        ensureMusicEn
+        MusicManager.play('menu');
+    }, { once: true });
     window.addEventListener('resize', resizeCanvas);
 });

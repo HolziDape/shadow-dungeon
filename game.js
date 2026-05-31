@@ -913,6 +913,7 @@ let currentWave = 0;
 let currentMode = 'mission';
 let gameRunning = false;
 let abilityPicking = false;
+let _abilityPickFocusIdx = 0;
 let levelClearHandled = false;
 let player = null;
 let enemies = [];
@@ -946,6 +947,130 @@ let resultHomeAction = null;
 let audioContext = null;
 let musicGain = null;
 let musicNodesStarted = false;
+
+// ── MP3 Music Manager ──────────────────────────────────────────────────────
+// Supports multiple menu tracks: menu.mp3, menu2.mp3, menu3.mp3 ... (up to 9)
+// fight.mp3 and boss.mp3 are single tracks.
+// Falls back to procedural music if files are missing.
+const MusicManager = (() => {
+    // menuTracks: array of Audio elements for menu (shuffled each session)
+    const menuTracks = [];
+    let menuIndex = 0;
+    const tracks = { fight: null, boss: null };
+    const loaded = { fight: false, boss: false };
+    let current = null;
+    let currentKey = null;
+
+    function loadAudio(src, loop) {
+        const el = new Audio(src);
+        el.loop = loop;
+        el.volume = 0;
+        el.preload = 'auto';
+        return el;
+    }
+
+    function init() {
+        // Load menu tracks: menu.mp3, menu2.mp3, menu3.mp3 ... up to menu9.mp3
+        const suffixes = ['', '2', '3', '4', '5', '6', '7', '8', '9'];
+        suffixes.forEach(s => {
+            const el = loadAudio(`music/menu${s}.mp3`, false); // not looped — plays next on end
+            let ok = false;
+            el.addEventListener('canplaythrough', () => { if (!ok) { ok = true; menuTracks.push(el); } });
+            el.addEventListener('ended', () => { if (currentKey === 'menu') playNextMenu(); });
+            // ignore error — file simply doesn't exist
+        });
+
+        // Load single tracks
+        ['fight', 'boss'].forEach(key => {
+            const el = loadAudio(`music/${key}.mp3`, true);
+            el.addEventListener('canplaythrough', () => { loaded[key] = true; });
+            el.addEventListener('error', () => { loaded[key] = false; tracks[key] = null; });
+            tracks[key] = el;
+        });
+
+        // Shuffle menu tracks once loaded (wait 2s for canplaythrough events)
+        setTimeout(() => {
+            for (let i = menuTracks.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [menuTracks[i], menuTracks[j]] = [menuTracks[j], menuTracks[i]];
+            }
+        }, 2000);
+    }
+
+    function getVolume() {
+        return Math.max(0, Math.min(1, (window.save?.settings?.music ?? 0.35)));
+    }
+
+    function fadeTo(el, targetVol, cb) {
+        const steps = 20; const interval = 30;
+        const startVol = el.volume;
+        const delta = (targetVol - startVol) / steps;
+        let step = 0;
+        const t = setInterval(() => {
+            step++;
+            el.volume = Math.max(0, Math.min(1, startVol + delta * step));
+            if (step >= steps) { clearInterval(t); if (cb) cb(); }
+        }, interval);
+    }
+
+    function stopCurrent(cb) {
+        if (current) fadeTo(current, 0, () => { current.pause(); current.currentTime = 0; if (cb) cb(); });
+        else if (cb) cb();
+    }
+
+    function playNextMenu() {
+        if (menuTracks.length === 0) return;
+        menuIndex = (menuIndex + 1) % menuTracks.length;
+        const track = menuTracks[menuIndex];
+        current = track;
+        track.currentTime = 0;
+        track.play().catch(() => {});
+        fadeTo(track, getVolume(), null);
+    }
+
+    function play(key) {
+        if (currentKey === key && key !== 'menu') return;
+
+        if (key === 'menu') {
+            if (menuTracks.length === 0) return; // procedural fallback
+            currentKey = 'menu';
+            stopCurrent(() => {
+                const track = menuTracks[menuIndex];
+                current = track;
+                track.currentTime = 0;
+                track.play().catch(() => {});
+                fadeTo(track, getVolume(), null);
+            });
+        } else {
+            const track = tracks[key];
+            if (!track || !loaded[key]) { currentKey = null; return; }
+            currentKey = key;
+            stopCurrent(() => {
+                current = track;
+                track.currentTime = 0;
+                track.play().catch(() => {});
+                fadeTo(track, getVolume(), null);
+            });
+        }
+    }
+
+    function stop() {
+        stopCurrent(); currentKey = null; current = null;
+    }
+
+    function syncVolume() {
+        const vol = getVolume();
+        menuTracks.forEach(t => { if (t) t.volume = vol; });
+        Object.values(tracks).forEach(t => { if (t) t.volume = vol; });
+    }
+
+    function hasTrack(key) {
+        if (key === 'menu') return menuTracks.length > 0;
+        return !!(tracks[key] && loaded[key]);
+    }
+
+    return { init, play, stop, syncVolume, hasTrack };
+})();
 let musicNodes = null;
 let musicBassGain = null;
 let musicBassFreqs = null;
@@ -955,6 +1080,9 @@ let musicPluckFreqs = null;
 let musicProgression = null;
 let musicStep = 0;
 let musicBar = 0;
+let musicTotalBars = 0;  // total bars elapsed — drives section/climax logic
+let musicNextNoteTime = 0;
+let musicSixteenth = 0;
 let musicSchedulerInterval = null;
 let packOpeningState = null;
 let packTickTimer = null;
@@ -1236,8 +1364,8 @@ function ensureMusicEngine() {
     leadGain.gain.value = 0.22;
     const leadFilter = audioContext.createBiquadFilter();
     leadFilter.type = 'lowpass';
-    leadFilter.frequency.value = 3600;
-    leadFilter.Q.value = 0.8;
+    leadFilter.frequency.value = 1800;  // tame the sawtooth — analog synth feel
+    leadFilter.Q.value = 1.2;
     leadGain.connect(leadFilter);
     leadFilter.connect(comp);
     musicPluckGain = leadGain;
@@ -1245,80 +1373,86 @@ function ensureMusicEngine() {
 
     musicNodes = [];
 
-    // ─────────────────────────────────────────────────────────
-    // Chord progression: Dm → Bb → F → C  (natural D minor)
-    // 130 BPM — energetic adventure feel (Terraria overworld)
-    // Each bar = 16 sixteenth-note steps.
+    // ─────────────────────────────────────────────────────────────
+    // Chord progression: Am → G → Dm → Em  (A Dorian / natural minor)
+    // Angular sci-fi game feel — minor with digital edge.
     // leads[]:  melody note per 16th step (null = rest)
-    // plucks[]: arpeggio note per 8th step (8 values)
-    // bassRoot: root frequency for bass line
-    // ─────────────────────────────────────────────────────────
-    const R = null; // rest shorthand
+    // plucks[]: arpeggio note per 8th step (8 values, sine wave)
+    // bassRoot: root for sine bass
+    // ─────────────────────────────────────────────────────────────
+    const R = null;
     musicProgression = [
-        // ── Bar 0: Dm ──────────────────────────────────────────
+        // ── Bar 0: Am ─────────────────────────────────────────────
         {
-            bassRoot: 73.42,  // D2
-            leads: [
-                293.66, R,      349.23, R,      // D4  .  F4  .
-                440.00, R,      440.00, 349.23, // A4  .  A4  F4
-                329.63, R,      293.66, R,      // E4  .  D4  .
-                349.23, 440.00, 523.25, R       // F4  A4  C5  .
-            ],
-            plucks: [293.66, 349.23, 440.00, 587.33, 440.00, 349.23, 440.00, 293.66]
-        },
-        // ── Bar 1: Bb ──────────────────────────────────────────
-        {
-            bassRoot: 116.54,  // Bb2
-            leads: [
-                466.16, R,      392.00, R,      // Bb4  .  G4  .
-                349.23, R,      293.66, R,      // F4   .  D4  .
-                523.25, R,      440.00, R,      // C5   .  A4  .
-                392.00, 349.23, 329.63, R       // G4   F4  E4  .
-            ],
-            plucks: [466.16, 349.23, 293.66, 466.16, 349.23, 466.16, 587.33, 466.16]
-        },
-        // ── Bar 2: F ───────────────────────────────────────────
-        {
-            bassRoot: 87.31,   // F2
+            bassRoot: 110.00,  // A2
             leads: [
                 440.00, R,      523.25, R,      // A4  .  C5  .
-                440.00, 392.00, 349.23, R,      // A4  G4  F4  .
-                329.63, R,      349.23, R,      // E4  .  F4  .
-                440.00, R,      392.00, 349.23  // A4  .  G4  F4
+                659.25, R,      523.25, 440.00, // E5  .  C5  A4
+                329.63, R,      440.00, R,      // E4  .  A4  .
+                523.25, 659.25, 880.00, R       // C5  E5  A5  .
             ],
-            plucks: [349.23, 440.00, 523.25, 440.00, 349.23, 261.63, 349.23, 440.00]
+            plucks: [440.00, 659.25, 523.25, 880.00, 659.25, 523.25, 440.00, 659.25]
         },
-        // ── Bar 3: C (resolves back to Dm) ─────────────────────
+        // ── Bar 1: G ──────────────────────────────────────────────
         {
-            bassRoot: 65.41,   // C2
+            bassRoot: 98.00,   // G2
+            leads: [
+                392.00, R,      493.88, R,      // G4  .  B4  .
+                587.33, 493.88, 392.00, R,      // D5  B4  G4  .
+                493.88, R,      784.00, R,      // B4  .  G5  .
+                587.33, R,      493.88, 392.00  // D5  .  B4  G4
+            ],
+            plucks: [392.00, 587.33, 493.88, 784.00, 587.33, 493.88, 392.00, 587.33]
+        },
+        // ── Bar 2: Dm ─────────────────────────────────────────────
+        {
+            bassRoot: 73.42,   // D2
+            leads: [
+                293.66, R,      349.23, R,      // D4  .  F4  .
+                440.00, R,      587.33, R,      // A4  .  D5  .
+                440.00, 349.23, 293.66, R,      // A4  F4  D4  .
+                349.23, 440.00, 523.25, R       // F4  A4  C5  .
+            ],
+            plucks: [293.66, 440.00, 349.23, 587.33, 440.00, 349.23, 293.66, 440.00]
+        },
+        // ── Bar 3: Em (tension → resolves back to Am) ─────────────
+        {
+            bassRoot: 82.41,   // E2
             leads: [
                 329.63, R,      392.00, R,      // E4  .  G4  .
-                523.25, R,      440.00, 392.00, // C5  .  A4  G4
-                349.23, 329.63, 293.66, R,      // F4  E4  D4  .
-                293.66, R,      R,      R       // D4  .   .   .
+                493.88, 659.25, R,      493.88, // B4  E5  .   B4
+                392.00, 329.63, 392.00, R,      // G4  E4  G4  .
+                493.88, R,      659.25, R       // B4  .   E5  .
             ],
-            plucks: [261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 392.00, 261.63]
+            plucks: [329.63, 493.88, 392.00, 659.25, 493.88, 392.00, 329.63, 493.88]
         }
     ];
 
-    // 130 BPM
-    const bpm = 130;
+    // 115 BPM — energetic sci-fi game pace
+    const bpm = 115;
     const sixteenth = 60 / bpm / 4;
+    musicSixteenth = sixteenth;
     musicStep = 0;
     musicBar = 0;
+    musicNextNoteTime = audioContext.currentTime + 0.05;
+
+    // Standard lookahead scheduler: fires every 80ms, schedules
+    // whatever notes fall within the next 0.25s window.
+    // This prevents drift and double-scheduling entirely.
     musicSchedulerInterval = window.setInterval(() => {
         if (!audioContext) return;
-        const now = audioContext.currentTime;
-        for (let i = 0; i < 8; i++) {
-            const stepTime = now + i * sixteenth;
-            const step = (musicStep + i) % 16;
-            const bar = (musicBar + Math.floor((musicStep + i) / 16)) % 4;
-            scheduleBeat(step, stepTime, sixteenth, bar);
+        const lookahead = 0.25; // seconds ahead to schedule
+        while (musicNextNoteTime < audioContext.currentTime + lookahead) {
+            scheduleBeat(musicStep, musicNextNoteTime, musicSixteenth, musicBar);
+            musicNextNoteTime += musicSixteenth;
+            musicStep += 1;
+            if (musicStep >= 16) {
+                musicStep = 0;
+                musicBar = (musicBar + 1) % 4;
+                musicTotalBars += 1;
+            }
         }
-        const advance = musicStep + 8;
-        musicBar = (musicBar + Math.floor(advance / 16)) % 4;
-        musicStep = advance % 16;
-    }, sixteenth * 8 * 1000 * 0.9);
+    }, 80);
 
     musicNodesStarted = true;
     syncMusicVolume();
@@ -1329,137 +1463,182 @@ function scheduleBeat(step, when, dur, bar = 0) {
     const chord = musicProgression && musicProgression[bar];
     if (!chord) return;
 
-    // ── BASS: square wave, quarter notes with a short 8th-note pickup ──
+    // ── Section logic (16-bar cycle): ──────────────────────────────────
+    // 0-3:  Intro   — arp only, no lead, soft bass
+    // 4-7:  Verse   — arp + lead + full bass
+    // 8-11: Build   — verse + octave echo, extra kick on 3
+    // 12-15: Climax — everything + 16th arp, double lead, sub-bass
+    const section = Math.floor((musicTotalBars % 16) / 4);
+    const isIntro   = section === 0;
+    const isBuild   = section === 2;
+    const isClimax  = section === 3;
+    const bassVol   = isIntro ? 0.22 : isClimax ? 0.50 : 0.38;
+    const leadVol   = isClimax ? 0.26 : 0.19;
+    const arpVol    = isIntro  ? 0.16 : isClimax ? 0.30 : 0.22;
+
+    // ── BASS: square wave, quarter notes ──
     if (step % 4 === 0) {
         const freq = chord.bassRoot;
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
-        o.type = 'square';
+        o.type = 'sine';  // clean sine bass — no buzz
         o.frequency.value = freq;
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.38, when + 0.009);
+        g.gain.exponentialRampToValueAtTime(bassVol, when + 0.009);
         g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.4);
         o.connect(g); g.connect(musicBassGain);
         o.start(when); o.stop(when + dur * 3.8);
+        // Climax: extra sub-bass one octave down
+        if (isClimax) {
+            const o2 = audioContext.createOscillator();
+            const g2 = audioContext.createGain();
+            o2.type = 'sine';
+            o2.frequency.value = freq * 0.5;
+            g2.gain.setValueAtTime(0.0001, when);
+            g2.gain.exponentialRampToValueAtTime(0.22, when + 0.012);
+            g2.gain.exponentialRampToValueAtTime(0.0001, when + dur * 3.2);
+            o2.connect(g2); g2.connect(musicBassGain);
+            o2.start(when); o2.stop(when + dur * 3.6);
+        }
     }
-    // 8th-note pickup on last 8th of each bar (step 14) — adds bounce
+    // Pickup note on step 14 (into next bar)
     if (step === 14) {
-        const nextBar = (bar + 1) % musicProgression.length;
-        const nextFreq = musicProgression[nextBar].bassRoot;
+        const nextFreq = musicProgression[(bar + 1) % musicProgression.length].bassRoot;
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
-        o.type = 'square';
-        o.frequency.value = nextFreq * 2;  // octave up for pickup
+        o.type = 'sine';
+        o.frequency.value = nextFreq * 2;
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.16, when + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.14, when + 0.006);
         g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 1.4);
         o.connect(g); g.connect(musicBassGain);
         o.start(when); o.stop(when + dur * 1.6);
     }
 
-    // ── LEAD MELODY: square wave, follows leads[] sequence ──
-    const leadFreq = chord.leads && chord.leads[step];
+    // ── LEAD MELODY: square wave — verse/build/climax only ──
+    const leadFreq = !isIntro && chord.leads && chord.leads[step];
     if (leadFreq) {
+        const nextHasNote = chord.leads[(step + 1) % 16];
+        const sustain = nextHasNote ? dur * 1.0 : dur * 1.8;
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
-        o.type = 'square';
+        o.type = 'sawtooth';  // analog synth lead — filtered below 1800Hz
         o.frequency.value = leadFreq;
-        // Next step rest? sustain longer. Next has a note? cut short.
-        const nextHasNote = chord.leads[(step + 1) % 16];
-        const sustain = nextHasNote ? dur * 1.1 : dur * 1.85;
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.19, when + 0.007);
+        g.gain.exponentialRampToValueAtTime(leadVol, when + 0.007);
         g.gain.exponentialRampToValueAtTime(0.0001, when + sustain);
         o.connect(g); g.connect(musicPluckFilter);
         musicPluckFilter.connect(musicPluckGain);
         o.start(when); o.stop(when + sustain + 0.02);
+        // Build/Climax: add octave-up echo (slightly delayed, softer)
+        if (isBuild || isClimax) {
+            const o2 = audioContext.createOscillator();
+            const g2 = audioContext.createGain();
+            o2.type = 'sine';
+            o2.frequency.value = leadFreq * 2;
+            g2.gain.setValueAtTime(0.0001, when + 0.012);
+            g2.gain.exponentialRampToValueAtTime(isClimax ? 0.14 : 0.09, when + 0.020);
+            g2.gain.exponentialRampToValueAtTime(0.0001, when + sustain * 0.7);
+            o2.connect(g2); g2.connect(musicPluckFilter);
+            o2.start(when + 0.012); o2.stop(when + sustain);
+        }
     }
 
-    // ── ARPEGGIO: triangle wave, 8th notes — fast chiptune feel ──
-    if (step % 2 === 0) {
-        const idx = (step / 2) % chord.plucks.length;
+    // ── ARPEGGIO: triangle wave ──
+    // Verse/Build: 8th notes.  Climax: every 16th note.
+    const arpEvery = isClimax ? 1 : 2;
+    if (step % arpEvery === 0) {
+        const idx = isClimax ? (step % chord.plucks.length) : ((step / 2) % chord.plucks.length);
         const freq = chord.plucks[idx];
         const accent = step === 0 ? 1.5 : (step % 4 === 0 ? 1.1 : 0.72);
+        const arpDur = isClimax ? dur * 0.9 : dur * 1.7;
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
-        o.type = 'triangle';
+        o.type = 'sine';  // clean crystalline arp — no harmonics
         o.frequency.value = freq;
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(0.22 * accent, when + 0.004);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + dur * 1.7);
+        g.gain.exponentialRampToValueAtTime(arpVol * accent, when + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + arpDur);
         o.connect(g); g.connect(musicPluckFilter);
         musicPluckFilter.connect(musicPluckGain);
-        o.start(when); o.stop(when + dur * 1.9);
+        o.start(when); o.stop(when + arpDur + 0.02);
     }
 
-    // ── KICK: beats 1 and 3 (steps 0 and 8) — pitched sine drop ──
+    // ── KICK: beats 1 and 3 (steps 0 and 8) ──
     if (step === 0 || step === 8) {
+        const kickVol = isIntro ? 0 : isClimax ? 0.65 : (step === 0 ? 0.52 : 0.42);
+        if (kickVol > 0) {
+            const o = audioContext.createOscillator();
+            const g = audioContext.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(step === 0 ? 165 : 145, when);
+            o.frequency.exponentialRampToValueAtTime(38, when + 0.09);
+            g.gain.setValueAtTime(0.0001, when);
+            g.gain.exponentialRampToValueAtTime(kickVol, when + 0.003);
+            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.15);
+            o.connect(g); g.connect(musicBassGain);
+            o.start(when); o.stop(when + 0.2);
+        }
+    }
+    // Build: extra kick on beat 3 offbeat (step 10) for tension
+    if (isBuild && step === 10) {
         const o = audioContext.createOscillator();
         const g = audioContext.createGain();
         o.type = 'sine';
-        o.frequency.setValueAtTime(step === 0 ? 165 : 145, when);
-        o.frequency.exponentialRampToValueAtTime(38, when + 0.09);
+        o.frequency.setValueAtTime(120, when);
+        o.frequency.exponentialRampToValueAtTime(40, when + 0.07);
         g.gain.setValueAtTime(0.0001, when);
-        g.gain.exponentialRampToValueAtTime(step === 0 ? 0.52 : 0.42, when + 0.003);
-        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.15);
+        g.gain.exponentialRampToValueAtTime(0.28, when + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.12);
         o.connect(g); g.connect(musicBassGain);
-        o.start(when); o.stop(when + 0.2);
+        o.start(when); o.stop(when + 0.16);
     }
 
-    // ── SNARE: beats 2 and 4 (steps 4 and 12) ──
-    if (step === 4 || step === 12) {
-        const noise = createNoiseSource(audioContext, dur * 3);
-        if (noise) {
-            const f = audioContext.createBiquadFilter();
-            f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 0.55;
+    // ── SNARE: beats 2 and 4 — detuned square cluster, no noise ──
+    // Intro: no snare. Climax: louder.
+    if (!isIntro && (step === 4 || step === 12)) {
+        const snareVol = isClimax ? 1.5 : 1.0;
+        [[185, 0.10], [280, 0.07], [370, 0.05]].forEach(([freq, vol]) => {
+            const o = audioContext.createOscillator();
             const g = audioContext.createGain();
+            o.type = 'square';
+            o.frequency.value = freq;
             g.gain.setValueAtTime(0.0001, when);
-            g.gain.exponentialRampToValueAtTime(0.16, when + 0.004);
-            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.13);
-            noise.connect(f); f.connect(g); g.connect(musicBassGain);
-        }
-        // Snare tone layer (adds body)
-        const os = audioContext.createOscillator();
-        const gs = audioContext.createGain();
-        os.type = 'triangle';
-        os.frequency.value = 220;
-        gs.gain.setValueAtTime(0.0001, when);
-        gs.gain.exponentialRampToValueAtTime(0.08, when + 0.003);
-        gs.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
-        os.connect(gs); gs.connect(musicBassGain);
-        os.start(when); os.stop(when + 0.1);
-    }
-
-    // ── OPEN HI-HAT: 8th note off-beats (steps 2, 6, 10, 14) ──
-    if (step % 4 === 2) {
-        const noise = createNoiseSource(audioContext, dur * 2);
-        if (noise) {
-            const f = audioContext.createBiquadFilter();
-            f.type = 'highpass'; f.frequency.value = 7200;
-            const g = audioContext.createGain();
-            g.gain.setValueAtTime(0.0001, when);
-            g.gain.exponentialRampToValueAtTime(0.06, when + 0.003);
+            g.gain.exponentialRampToValueAtTime(vol * snareVol, when + 0.004);
             g.gain.exponentialRampToValueAtTime(0.0001, when + 0.08);
-            noise.connect(f); f.connect(g); g.connect(musicBassGain);
-        }
+            o.connect(g); g.connect(musicBassGain);
+            o.start(when); o.stop(when + 0.1);
+        });
     }
 
-    // ── CLOSED HI-HAT: remaining 16th off-beats ──
-    if (step % 2 === 1 && step % 4 !== 2) {
-        const noise = createNoiseSource(audioContext, dur);
-        if (noise) {
-            const f = audioContext.createBiquadFilter();
-            f.type = 'highpass'; f.frequency.value = 8500;
-            const g = audioContext.createGain();
-            g.gain.setValueAtTime(0.0001, when);
-            g.gain.exponentialRampToValueAtTime(0.025, when + 0.002);
-            g.gain.exponentialRampToValueAtTime(0.0001, when + 0.035);
-            noise.connect(f); f.connect(g); g.connect(musicBassGain);
-        }
+    // ── HI-HAT tick on snare beats ──
+    if (!isIntro && (step === 4 || step === 12)) {
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        o.type = 'square';
+        o.frequency.value = isClimax ? 3600 : 3200;
+        g.gain.setValueAtTime(0.0001, when + 0.01);
+        g.gain.exponentialRampToValueAtTime(isClimax ? 0.04 : 0.028, when + 0.013);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.045);
+        o.connect(g); g.connect(musicBassGain);
+        o.start(when + 0.01); o.stop(when + 0.06);
+    }
+    // Climax: extra hi-hat on every beat
+    if (isClimax && (step === 0 || step === 8)) {
+        const o = audioContext.createOscillator();
+        const g = audioContext.createGain();
+        o.type = 'square';
+        o.frequency.value = 2800;
+        g.gain.setValueAtTime(0.0001, when + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.022, when + 0.009);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.04);
+        o.connect(g); g.connect(musicBassGain);
+        o.start(when + 0.005); o.stop(when + 0.05);
     }
 }
 
 function syncMusicVolume() {
+    MusicManager.syncVolume();
     if (!musicGain) return;
     const target = Math.max(0, Math.min(1, save.settings?.music ?? 0.35)) * 0.18;
     const now = audioContext ? audioContext.currentTime : 0;
@@ -1636,6 +1815,62 @@ function playSfx(kind, intensity = 1) {
         type = 'square';
         cutoff = 4600;
         peak = 0.03;
+    } else if (kind === 'teleportOut') {
+        // Chaser vanishing — descending digital whoosh
+        startFreq = 1200;
+        endFreq = 120;
+        duration = 0.18;
+        type = 'sawtooth';
+        cutoff = 2400;
+        peak = 0.028;
+    } else if (kind === 'teleportIn') {
+        // Chaser appearing — sharp rising zing
+        startFreq = 180;
+        endFreq = 1400;
+        duration = 0.14;
+        type = 'square';
+        cutoff = 3000;
+        peak = 0.022;
+    } else if (kind === 'enemyShoot') {
+        // Drone bullet — quick electronic pop
+        startFreq = 640;
+        endFreq = 240;
+        duration = 0.055;
+        type = 'square';
+        cutoff = 2000;
+        peak = 0.018;
+    } else if (kind === 'groundSlam') {
+        // Brute slam — heavy low thud
+        startFreq = 180;
+        endFreq = 45;
+        duration = 0.28;
+        type = 'sawtooth';
+        cutoff = 600;
+        peak = 0.055;
+    } else if (kind === 'empBlast') {
+        // Tank EMP — electric crackle
+        startFreq = 880;
+        endFreq = 220;
+        duration = 0.32;
+        type = 'sawtooth';
+        cutoff = 3200;
+        peak = 0.038;
+    } else if (kind === 'shieldBash') {
+        // Shielder charge — metallic crash
+        startFreq = 320;
+        endFreq = 90;
+        duration = 0.2;
+        type = 'triangle';
+        cutoff = 1400;
+        peak = 0.042;
+    } else if (kind === 'sniperShot') {
+        // Sniper ring — high-pitched ping
+        startFreq = 1600;
+        endFreq = 800;
+        duration = 0.13;
+        type = 'sine';
+        cutoff = 3200;
+        peak = 0.026;
     } else if (kind === 'tap') {
         startFreq = 880;
         endFreq = 540;
@@ -2427,6 +2662,7 @@ window.buildRoadmap = function() {
 };
 
 function startLevel() {
+    MusicManager.play('fight');         // switch to fight music
     gameRunning = true;
     abilityPicking = false;
     levelClearHandled = false;
@@ -2570,8 +2806,14 @@ function createEnemy(type, x, y) {
         hasSplit: type.hasSplit || false,          // swarmling: prevent chain-split
         shootCooldown: 1.5 + Math.random() * 1.0, // drone: directed shot
         blinkPending: false,                       // chaser: blink-behind on sprint end
+        blinkPhase: 'none',                        // chaser: 'none'|'vanishing'|'appearing'
+        blinkAlpha: 1.0,                           // chaser: fade in/out alpha
+        blinkTimer: 0,                             // chaser: phase timer
         slamCooldown: 2.0 + Math.random(),         // brute: ground slam
         empCooldown: 3.0 + Math.random() * 2.0,   // tank: EMP pulse
+        bashCooldown: 2.5 + Math.random() * 1.5,  // shielder: shield bash charge
+        shieldRegenTimer: 0,                       // shielder: regen delay
+        shieldRageTimer: 0,                        // shielder: rage after shield breaks
         // ── Status Effects ──
         frostSlow: 0,
         frostTimer: 0,
@@ -2628,6 +2870,9 @@ function spawnWave(index) {
     if (index >= currentLevelWaves.length) return;
     currentWave = index;
     const wave = currentLevelWaves[index];
+    // Switch to boss music when the boss wave spawns
+    const hasBoss = wave.some(e => e.t === 'boss');
+    if (hasBoss) MusicManager.play('boss');
     waveSpawnQueue = buildSpawnQueue(wave);
     // Fire the very first batch instantly so the wave doesn't start empty.
     processWaveSpawnQueue(0);
@@ -2810,6 +3055,8 @@ function updateAutoFire(dt) {
     // ── Tank EMP stun: blocks shooting ──
     if (player.empStunTimer > 0) {
         player.empStunTimer -= dt;
+        // Sparks around player gun while stunned
+        if (Math.random() < 0.35) addP(player.x, player.y, '#ff9d00', 2, 55, 0.22, 2);
         return;
     }
     player.shootTimer = Math.max(0, player.shootTimer - dt);
@@ -3689,8 +3936,17 @@ function updateEnemies(dt) {
             }
             if (enemy.shieldHp > 0 && drop > 0) {
                 const absorbed = Math.min(enemy.shieldHp, drop);
+                const wasAlive = enemy.shieldHp > 0;
                 enemy.shieldHp -= absorbed;
                 enemy.hp = Math.min(enemy.maxHp, enemy.hp + absorbed);
+                enemy.shieldRegenTimer = 0; // reset regen on hit
+                // Shield just broke → trigger rage
+                if (wasAlive && enemy.shieldHp <= 0 && enemy.ai === 'shielder') {
+                    enemy.shieldRageTimer = 2.2;
+                    addP(enemy.x, enemy.y, '#ff4444', 18, 150, 0.4, 3);
+                    addP(enemy.x, enemy.y, '#5cc1ff', 12, 120, 0.3, 2);
+                    screenShake = Math.min(2.5, screenShake + 0.2);
+                }
             }
         }
         enemy._prevHp = enemy.hp;
@@ -3727,27 +3983,59 @@ function updateEnemies(dt) {
                 hazards.push({ id: nextHazardId++, type: 'enemybullet',
                     x: enemy.x, y: enemy.y, vx: nx * 310, vy: ny * 310,
                     r: 5, life: 1.6, color: '#00f2ff', hit: false });
+                playSfx('enemyShoot', 0.6);
                 addP(enemy.x, enemy.y, '#00f2ff', 4, 50, 0.15, 1);
             }
             moveX = nx * 0.72 + px * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
             moveY = ny * 0.72 + py * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
         } else if (enemy.ai === 'sprint') {
-            if (enemy.sprintTime > 0) {
+            // ── Unique: Phased Blink ──────────────────────────────────
+            if (enemy.blinkPhase === 'vanishing') {
+                enemy.blinkTimer -= dt;
+                enemy.blinkAlpha = Math.max(0, enemy.blinkTimer / 0.2);
+                // Sparkle trail while fading out
+                if (Math.random() < 0.5) addP(enemy.x, enemy.y, '#e080ff', 3, 60, 0.18, 2);
+                speed = 0; // frozen while vanishing
+                if (enemy.blinkTimer <= 0) {
+                    // Departure burst
+                    addP(enemy.x, enemy.y, '#bc13fe', 20, 160, 0.5, 4);
+                    addP(enemy.x, enemy.y, '#ffffff', 8, 100, 0.2, 2);
+                    // Teleport behind player
+                    const behindAngle = Math.atan2(-ny, -nx);
+                    const bx = Math.max(WALL + enemy.r, Math.min(arena.width - WALL - enemy.r,
+                        player.x + Math.cos(behindAngle) * 115));
+                    const by = Math.max(arena.top + enemy.r, Math.min(arena.height - WALL - enemy.r,
+                        player.y + Math.sin(behindAngle) * 115));
+                    enemy.x = bx;
+                    enemy.y = by;
+                    enemy.blinkPhase = 'appearing';
+                    enemy.blinkTimer = 0.25;
+                    playSfx('teleportIn', 0.9);
+                    // Arrival burst
+                    addP(enemy.x, enemy.y, '#e080ff', 24, 180, 0.5, 4);
+                    addP(enemy.x, enemy.y, '#ffffff', 10, 120, 0.25, 3);
+                    screenShake = Math.min(2.5, screenShake + 0.18);
+                }
+            } else if (enemy.blinkPhase === 'appearing') {
+                enemy.blinkTimer -= dt;
+                enemy.blinkAlpha = Math.min(1, 1 - enemy.blinkTimer / 0.25);
+                if (enemy.blinkTimer <= 0) {
+                    enemy.blinkPhase = 'none';
+                    enemy.blinkAlpha = 1.0;
+                }
+                moveX = nx; moveY = ny;
+                speed *= 0.6; // slow materialise
+            } else if (enemy.sprintTime > 0) {
                 enemy.sprintTime -= dt;
                 moveX = enemy.sprintDirX;
                 moveY = enemy.sprintDirY;
                 speed *= 2.2;
-                // ── Unique: Blink — teleport behind player when sprint ends ──
                 if (enemy.blinkPending && enemy.sprintTime <= 0) {
                     enemy.blinkPending = false;
-                    const behindAngle = Math.atan2(-ny, -nx);
-                    const bx = Math.max(WALL + enemy.r, Math.min(arena.width - WALL - enemy.r,
-                        player.x + Math.cos(behindAngle) * 110));
-                    const by = Math.max(arena.top + enemy.r, Math.min(arena.height - WALL - enemy.r,
-                        player.y + Math.sin(behindAngle) * 110));
-                    enemy.x = bx;
-                    enemy.y = by;
-                    addP(enemy.x, enemy.y, '#bc13fe', 12, 110, 0.3, 3);
+                    enemy.blinkPhase = 'vanishing';
+                    enemy.blinkTimer = 0.2;
+                    playSfx('teleportOut', 0.8);
+                    addP(enemy.x, enemy.y, '#bc13fe', 10, 90, 0.25, 2);
                 }
             } else if (enemy.sprintCooldown <= 0 && distance > 110) {
                 enemy.sprintCooldown = 2.2 + Math.random();
@@ -3768,6 +4056,7 @@ function updateEnemies(dt) {
                 hazards.push({ id: nextHazardId++, type: 'empring',
                     x: enemy.x, y: enemy.y, radius: enemy.r,
                     maxRadius: 220, speed: 200, life: 1.4, color: '#ff9d00', hit: false });
+                playSfx('empBlast', 0.9);
                 addP(enemy.x, enemy.y, '#ff9d00', 14, 140, 0.35, 3);
             }
             moveX = nx + px * 0.18 * Math.cos(enemy.aiClock * 1.7);
@@ -3790,6 +4079,7 @@ function updateEnemies(dt) {
                 hazards.push({ id: nextHazardId++, type: 'ring',
                     x: enemy.x, y: enemy.y, radius: enemy.r,
                     maxRadius: 180, speed: 260, life: 0.9, color: '#ffaa00', hit: false });
+                playSfx('groundSlam', 1.0);
                 addP(enemy.x, enemy.y, '#ffaa00', 18, 130, 0.35, 4);
                 screenShake = Math.min(2.5, screenShake + 0.22);
             }
@@ -3815,6 +4105,7 @@ function updateEnemies(dt) {
             enemy.attackCooldown -= dt;
             if (enemy.attackCooldown <= 0 && distance < 600) {
                 enemy.attackCooldown = 2.4 + Math.random() * 0.6;
+                playSfx('sniperShot', 0.85);
                 hazards.push({
                     id: nextHazardId++,
                     type: 'ring',
@@ -3857,10 +4148,42 @@ function updateEnemies(dt) {
                 addP(enemy.x, enemy.y, '#34ffae', 10, 130, 0.45, 3);
             }
         } else if (enemy.ai === 'shielder') {
-            // Slow tank with a damage-absorbing shield (handled above).
-            moveX = nx;
-            moveY = ny;
-            speed *= 0.85;
+            // ── Shield Bash: charges at player when shield is strong ──
+            enemy.bashCooldown -= dt;
+            if (enemy.shieldHp > enemy.shieldMax * 0.5 && enemy.bashCooldown <= 0 && distance < 340 && !enemy.charging) {
+                enemy.bashCooldown = 4.5 + Math.random();
+                enemy.charging = true;
+                enemy.chargeDirX = nx;
+                enemy.chargeDirY = ny;
+                enemy.chargeTimer = 0.55;
+                hazards.push({ id: nextHazardId++, type: 'ring',
+                    x: enemy.x, y: enemy.y, radius: enemy.r,
+                    maxRadius: 170, speed: 310, life: 0.75, color: '#5cc1ff', hit: false });
+                playSfx('shieldBash', 0.9);
+                addP(enemy.x, enemy.y, '#5cc1ff', 16, 130, 0.35, 3);
+                screenShake = Math.min(2.5, screenShake + 0.15);
+            }
+            if (enemy.charging) {
+                enemy.chargeTimer -= dt;
+                moveX = enemy.chargeDirX; moveY = enemy.chargeDirY;
+                speed *= 2.2;
+                if (enemy.chargeTimer <= 0) enemy.charging = false;
+            } else {
+                moveX = nx; moveY = ny;
+                // ── Rage mode when shield is broken ──
+                if (enemy.shieldRageTimer > 0) {
+                    enemy.shieldRageTimer -= dt;
+                    speed *= 1.7;
+                    if (Math.random() < 0.3) addP(enemy.x, enemy.y, '#ff4444', 3, 60, 0.2, 2);
+                } else {
+                    speed *= 0.85;
+                }
+            }
+            // ── Shield regen: slowly recharges after 2.5s of no damage ──
+            enemy.shieldRegenTimer += dt;
+            if (enemy.shieldRegenTimer > 2.5 && enemy.shieldHp < enemy.shieldMax) {
+                enemy.shieldHp = Math.min(enemy.shieldMax, enemy.shieldHp + enemy.shieldMax * 0.04 * dt);
+            }
         } else if (enemy.ai === 'wraith') {
             // Periodically phases — invulnerable while phasing.
             enemy.phaseTimer -= dt;
@@ -4163,7 +4486,11 @@ function updateHazards(dt) {
             if (!hazard.hit && Math.abs(dist - hazard.radius) < 16) {
                 hazard.hit = true;
                 player.empStunTimer = (player.empStunTimer || 0) + 1.5;
-                addFxText(player.x, player.y - 30, 'EMP!', '#ff9d00', 0.6, 16);
+                // Big screen flash + prominent text
+                addFxText(player.x, player.y - 40, '⚡ EMP! ⚡', '#ff9d00', 1.4, 28);
+                addP(player.x, player.y, '#ff9d00', 24, 200, 0.5, 4);
+                powerPulse = Math.min(2.5, powerPulse + 1.2);
+                screenShake = Math.min(2.5, screenShake + 0.4);
             }
         }
     });
@@ -5284,6 +5611,7 @@ function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, sec
 }
 
 function gameOver() {
+    MusicManager.play('menu');  // back to menu music on death
     // Capture this run's skill ranks before closing so the post-run summary works.
     if (player && player.abilityRanks) {
         save.lastRunSkills = Object.assign({}, player.abilityRanks);
@@ -5341,6 +5669,7 @@ function gameOver() {
 }
 
 function victory() {
+    MusicManager.play('menu');  // back to menu music after win
     if (currentMode === 'endless') return;
     // Snapshot leaderboard rank BEFORE the score bumps so we can show the delta.
     const lbBefore = (function() {
@@ -8348,6 +8677,7 @@ function updateTestBuffs() {
     if (p.shardsOnHit) buffs.push(`Shards ×${p.shardCount}`);
     if (p.arcOnHit) buffs.push(`Arc /${p.arcEvery}`);
     if (p.critExplode) buffs.push('Crit Bomb');
+    if (p.frenzyOnKill) buffs.push('Frenzy');
     if (p.frenzyOnKill) buffs.push('Frenzy');
     if (p.killSpeedBoost) buffs.push('Trigger');
     if (p.comboBuff) buffs.push('Combo');

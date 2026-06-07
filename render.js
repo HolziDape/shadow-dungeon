@@ -1,4 +1,7 @@
+let _renderNow = 0;
+
 function render() {
+    _renderNow = performance.now();
     const width = window.GW || window.innerWidth;
     const height = window.GH || window.innerHeight;
     const shakeX = screenShake > 0 ? (Math.random() - 0.5) * 12 * screenShake : 0;
@@ -16,6 +19,8 @@ function render() {
     drawOrbiters();
     drawPlayer();
     drawParticles();
+    drawVfxRings();
+    drawVfxSparks();
     drawFxTexts();
     ctx.restore();
     drawOffscreenEnemyIndicators(width, height);
@@ -25,11 +30,12 @@ function render() {
 
 function drawLightningBolts() {
     lightningBolts.forEach((bolt) => {
+        const fade = bolt.life / bolt.maxLife;
         ctx.save();
-        ctx.globalAlpha = bolt.life / bolt.maxLife;
+        ctx.globalAlpha = fade;
         ctx.strokeStyle = bolt.color;
         ctx.lineWidth = bolt.width;
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 18;
         ctx.shadowColor = bolt.color;
         ctx.beginPath();
         ctx.moveTo(bolt.points[0].x, bolt.points[0].y);
@@ -37,33 +43,67 @@ function drawLightningBolts() {
             ctx.lineTo(bolt.points[i].x, bolt.points[i].y);
         }
         ctx.stroke();
+        // Second thinner branch — offset each point slightly for a forked look
+        if (bolt.points.length > 2) {
+            ctx.globalAlpha = fade * 0.45;
+            ctx.lineWidth = bolt.width * 0.5;
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.moveTo(bolt.points[0].x, bolt.points[0].y);
+            for (let i = 1; i < bolt.points.length; i++) {
+                const perp = i % 2 === 0 ? 1 : -1;
+                ctx.lineTo(bolt.points[i].x + perp * 4, bolt.points[i].y + perp * 4);
+            }
+            ctx.stroke();
+        }
         ctx.restore();
     });
 }
 
+let _gridCanvas = null;
+let _gridCtx = null;
+let _gridW = 0, _gridH = 0, _gridOffX = 0, _gridOffY = 0;
+
 function drawBackgroundGrid(width, height) {
     const pulse = 0.03 + Math.min(0.06, powerPulse * 0.03);
-    ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
-    ctx.lineWidth = 0.5;
     const size = 48;
     const camX = camera?.x || 0;
     const camY = camera?.y || 0;
     const offsetX = -((camX % size) + size) % size;
     const offsetY = -((camY % size) + size) % size;
 
-    for (let x = offsetX; x < width + size; x += size) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
+    // Rebuild offscreen grid only when dimensions or camera-tile-offset changes
+    if (!_gridCanvas || _gridW !== width || _gridH !== height ||
+        _gridOffX !== offsetX || _gridOffY !== offsetY) {
+        _gridW = width; _gridH = height;
+        _gridOffX = offsetX; _gridOffY = offsetY;
+
+        if (!_gridCanvas) {
+            _gridCanvas = document.createElement('canvas');
+            _gridCtx = _gridCanvas.getContext('2d');
+        }
+        _gridCanvas.width = width;
+        _gridCanvas.height = height;
+        _gridCtx.clearRect(0, 0, width, height);
+        _gridCtx.strokeStyle = 'rgba(255,255,255,1)';
+        _gridCtx.lineWidth = 0.5;
+        for (let x = offsetX; x < width + size; x += size) {
+            _gridCtx.beginPath();
+            _gridCtx.moveTo(x, 0);
+            _gridCtx.lineTo(x, height);
+            _gridCtx.stroke();
+        }
+        for (let y = offsetY; y < height + size; y += size) {
+            _gridCtx.beginPath();
+            _gridCtx.moveTo(0, y);
+            _gridCtx.lineTo(width, y);
+            _gridCtx.stroke();
+        }
     }
 
-    for (let y = offsetY; y < height + size; y += size) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-    }
+    ctx.globalAlpha = pulse;
+    ctx.drawImage(_gridCanvas, 0, 0);
+    ctx.globalAlpha = 1;
 
     if (typeof arena !== 'undefined') {
         const left = -camX;
@@ -133,6 +173,198 @@ function drawHazards() {
             ctx.arc(hazard.x, hazard.y, hazard.radius * 0.42, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
+        }
+
+        // ── Singularity shot: traveling black hole ──
+        if (hazard.type === 'singularity_shot') {
+            ctx.save();
+            const sr = hazard.radius;
+            const now = _renderNow * 0.001;
+            // Void core gradient
+            const grad = ctx.createRadialGradient(hazard.x, hazard.y, 0, hazard.x, hazard.y, sr * 2.8);
+            grad.addColorStop(0,   '#000000');
+            grad.addColorStop(0.45,'#12002a');
+            grad.addColorStop(1,   'rgba(188,19,254,0)');
+            ctx.globalAlpha = 0.95;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, sr * 2.8, 0, Math.PI * 2);
+            ctx.fill();
+            // Spinning accretion disk (flat ellipse)
+            ctx.globalAlpha = 0.75;
+            ctx.strokeStyle = '#e060ff';
+            ctx.lineWidth = 2.5;
+            ctx.shadowBlur = 22;
+            ctx.shadowColor = '#bc13fe';
+            ctx.beginPath();
+            ctx.ellipse(hazard.x, hazard.y, sr * 3.0, sr * 0.9, now * 2.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Second smaller ring at different angle
+            ctx.globalAlpha = 0.45;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.ellipse(hazard.x, hazard.y, sr * 2.2, sr * 0.6, now * 1.5 + 1.1, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+
+        // ── Singularity pull field: black hole at rest ──
+        if (hazard.type === 'singularity') {
+            ctx.save();
+            const alpha = Math.max(0.08, hazard.life / hazard.maxLife);
+            const r = hazard.radius;
+            const now = _renderNow * 0.001;
+            // Pull zone — dashed outer ring
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.strokeStyle = '#bc13fe';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([8, 6]);
+            ctx.shadowBlur = 16;
+            ctx.shadowColor = '#bc13fe';
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Dark void core
+            const coreGrad = ctx.createRadialGradient(hazard.x, hazard.y, 0, hazard.x, hazard.y, r * 0.48);
+            coreGrad.addColorStop(0,   '#000000');
+            coreGrad.addColorStop(0.65,'#110022');
+            coreGrad.addColorStop(1,   'rgba(188,19,254,0)');
+            ctx.globalAlpha = alpha * 0.9;
+            ctx.fillStyle = coreGrad;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, r * 0.48, 0, Math.PI * 2);
+            ctx.fill();
+            // Spinning accretion disk
+            ctx.globalAlpha = alpha * 0.65;
+            ctx.strokeStyle = '#e060ff';
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 28;
+            ctx.shadowColor = '#e060ff';
+            ctx.beginPath();
+            ctx.ellipse(hazard.x, hazard.y, r * 0.38, r * 0.12, now * 3.5, 0, Math.PI * 2);
+            ctx.stroke();
+            // Spiraling debris particles drawn as small arcs at varying radii
+            ctx.shadowBlur = 8;
+            for (let si = 0; si < 6; si++) {
+                const sa = now * (2.8 + si * 0.4) + (si / 6) * Math.PI * 2;
+                const sr2 = r * (0.25 + (si % 3) * 0.1);
+                const sx = hazard.x + Math.cos(sa) * sr2;
+                const sy = hazard.y + Math.sin(sa) * sr2 * 0.35;
+                ctx.globalAlpha = alpha * 0.5;
+                ctx.fillStyle = si % 2 === 0 ? '#bc13fe' : '#e060ff';
+                ctx.beginPath();
+                ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+            return;
+        }
+
+        // ── Magnetmine ──
+        if (hazard.type === 'magnetmine') {
+            ctx.save();
+            const armFrac = hazard.armed ? 1 : 1 - Math.max(0, hazard.armTimer / 0.8);
+            ctx.globalAlpha = 0.85;
+            ctx.shadowBlur = 14;
+            ctx.shadowColor = hazard.color;
+            ctx.strokeStyle = hazard.color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+            ctx.stroke();
+            // Trigger radius indicator (fades in as mine arms)
+            ctx.globalAlpha = armFrac * 0.2;
+            ctx.strokeStyle = hazard.color;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.triggerR, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Blinking core
+            ctx.globalAlpha = hazard.armed ? (0.6 + 0.4 * Math.sin(_renderNow * 0.01)) : 0.4;
+            ctx.fillStyle = hazard.color;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+
+        // ── Slowzone ──
+        if (hazard.type === 'slowzone') {
+            ctx.save();
+            const frac = hazard.life / hazard.maxLife;
+            ctx.globalAlpha = frac * 0.22;
+            ctx.fillStyle = hazard.color;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = frac * 0.45;
+            ctx.strokeStyle = hazard.color;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 5]);
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+            return;
+        }
+
+        // ── Ricochet bullet ──
+        if (hazard.type === 'ricochet') {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0.3, hazard.life / 1.6);
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = hazard.color;
+            ctx.fillStyle = hazard.color;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+            ctx.fill();
+            // Speed trail
+            ctx.globalAlpha *= 0.4;
+            ctx.beginPath();
+            ctx.arc(hazard.x - hazard.vx * 0.02, hazard.y - hazard.vy * 0.02, hazard.r * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+
+        // ── Grenade ──
+        if (hazard.type === 'grenade') {
+            ctx.save();
+            ctx.shadowBlur = 16;
+            ctx.shadowColor = hazard.color;
+            ctx.fillStyle = hazard.color;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
+
+        // ── Clone (wraith decoy) ──
+        if (hazard.type === 'clone') {
+            ctx.save();
+            const frac = hazard.life / hazard.maxLife;
+            ctx.globalAlpha = frac * 0.65;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = hazard.color;
+            ctx.strokeStyle = hazard.color;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+            ctx.stroke();
+            // Pulsing cross
+            ctx.globalAlpha = frac * 0.5 * (0.5 + 0.5 * Math.sin(_renderNow * 0.012));
+            ctx.fillStyle = hazard.color;
+            ctx.fillRect(hazard.x - 6, hazard.y - 1.5, 12, 3);
+            ctx.fillRect(hazard.x - 1.5, hazard.y - 6, 3, 12);
+            ctx.restore();
+            return;
         }
     });
 }
@@ -228,24 +460,40 @@ function drawProjectiles() {
             return;
         }
 
-        ctx.shadowBlur = projectile.tornado ? 18 : 12;
+        ctx.shadowBlur = projectile.tornado ? 22 : 12;
         ctx.shadowColor = glowColor;
         ctx.strokeStyle = shotColor;
         ctx.lineWidth = 1.7;
         ctx.beginPath();
         if (projectile.tornado) {
+            // Tornado: layered rotating diamond rings for swirl look
+            const now2 = _renderNow * 0.001;
             ctx.moveTo(0, -projectile.r);
             ctx.lineTo(projectile.r, 0);
             ctx.lineTo(0, projectile.r);
             ctx.lineTo(-projectile.r, 0);
             ctx.closePath();
+            ctx.stroke();
+            // Second inner ring, counter-rotated
+            ctx.save();
+            ctx.rotate(now2 * 4);
+            ctx.globalAlpha = 0.45;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, -projectile.r * 0.6);
+            ctx.lineTo(projectile.r * 0.6, 0);
+            ctx.lineTo(0, projectile.r * 0.6);
+            ctx.lineTo(-projectile.r * 0.6, 0);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
         } else {
             ctx.arc(0, 0, projectile.r, 0, Math.PI * 2);
+            ctx.stroke();
         }
-        ctx.stroke();
         ctx.fillStyle = shotColor;
         ctx.globalAlpha = 0.25;
-        ctx.fill();
+        if (!projectile.tornado) ctx.fill();
         ctx.restore();
     });
 }
@@ -585,7 +833,7 @@ function drawPlayer() {
 
     // ── Phoenix Aura ──────────────────────────────────────────────────────────
     if (player.phoenixAura && player.phoenixAuraRadius > 0) {
-        const t = (performance.now() / 1000) % 1000;
+        const t = (_renderNow / 1000) % 1000;
         const r = player.phoenixAuraRadius;
         const wobble = 1 + Math.sin(t * 4.2) * 0.04;
         ctx.save();
@@ -601,6 +849,20 @@ function drawPlayer() {
         ctx.strokeStyle = 'rgba(255, 180, 80, 0.7)';
         ctx.lineWidth = 1.4; ctx.shadowBlur = 18; ctx.shadowColor = '#ff7035';
         ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+        // ── Flame wisps orbiting the aura edge ──
+        ctx.shadowBlur = 12; ctx.shadowColor = '#ff5510';
+        for (let i = 0; i < 7; i++) {
+            const wa = t * 1.8 + (i / 7) * Math.PI * 2;
+            const wr = r * (0.92 + Math.sin(t * 3.1 + i) * 0.06);
+            const wx = Math.cos(wa) * wr;
+            const wy = Math.sin(wa) * wr;
+            const ws = 0.3 + Math.abs(Math.sin(t * 2.4 + i * 1.3)) * 0.35;
+            ctx.globalAlpha = ws * 0.7;
+            ctx.fillStyle = i % 2 === 0 ? '#ff7035' : '#ffb040';
+            ctx.beginPath();
+            ctx.arc(wx, wy, 3 + ws * 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
         ctx.restore();
     }
 
@@ -795,7 +1057,7 @@ function drawHearts(x, y, hp) {
     const fullHearts = Math.max(0, Math.floor(hp));
     // Compute damage-flash factor (0 = idle, 1 = just damaged, decays in 0.6s)
     const damageT = (typeof window.__heartDamageTime === 'number')
-        ? Math.max(0, 1 - (performance.now() - window.__heartDamageTime) / 600)
+        ? Math.max(0, 1 - (_renderNow - window.__heartDamageTime) / 600)
         : 0;
     // Lost-heart index: which heart got depleted? Animate it shaking out
     const lostHeartIdx = (typeof window.__heartLostIdx === 'number') ? window.__heartLostIdx : -1;
@@ -832,75 +1094,6 @@ function drawHearts(x, y, hp) {
         drawHeartShape(color);
         ctx.restore();
     }
-}
-
-function drawInGameHud(width) {
-    if (!player) return;
-
-    const barLeft = 20;
-    const barTop = 74;
-    const barWidth = width - 40;
-    const abilityPct = Math.min(1, player.abilityXp / player.nextAbilityXp);
-
-    drawHearts(20, 20, player.hp);
-
-    const _tt = (typeof t === 'function') ? t : ((k) => k);
-    const pills = [
-        { text: `${_tt('hud.waveShort')} ${currentMode === 'endless' ? `${currentWave + 1}/∞` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`, color: '#ffffff' },
-        { text: `${_tt('hud.levelShort')} ${currentLevel}`, color: '#ffffff' },
-        { text: `GOLD ${save.gold}`, color: '#ffd14d' },
-        { text: `GEMS ${save.gems}`, color: '#d98cff' }
-    ];
-
-    let rightX = width - 18;
-    ctx.textAlign = 'right';
-    pills.slice().reverse().forEach((pill) => {
-        ctx.font = '700 11px Orbitron';
-        const textWidth = ctx.measureText(pill.text).width;
-        const pillWidth = textWidth + 20;
-        const pillX = rightX - pillWidth;
-        ctx.fillStyle = 'rgba(8, 12, 26, 0.72)';
-        ctx.strokeStyle = pill.color === '#ffd14d' ? 'rgba(255,209,77,0.28)' : pill.color === '#d98cff' ? 'rgba(217,140,255,0.28)' : 'rgba(255,255,255,0.1)';
-        ctx.lineWidth = 1;
-        ctx.shadowBlur = 16;
-        ctx.shadowColor = pill.color === '#ffffff' ? 'rgba(255,255,255,0.06)' : pill.color;
-        ctx.beginPath();
-        ctx.roundRect(pillX, 12, pillWidth, 26, 13);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = pill.color;
-        ctx.fillText(pill.text, rightX - 10, 30);
-        ctx.shadowBlur = 0;
-        rightX = pillX - 6;
-    });
-
-    if (killStreak > 2) {
-        ctx.textAlign = 'center';
-        ctx.font = '700 14px Orbitron';
-        ctx.fillStyle = '#ff9d00';
-        ctx.fillText(`${_tt('hud.hitRush')} x${killStreak}`, width * 0.5, 30);
-    }
-
-    ctx.textAlign = 'left';
-    ctx.font = '700 13px Rajdhani';
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fillText(`${_tt('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`, barLeft, 60);
-
-    ctx.fillStyle = 'rgba(4, 8, 20, 0.42)';
-    ctx.beginPath();
-    ctx.roundRect(barLeft, barTop, barWidth, 8, 999);
-    ctx.fill();
-    ctx.fillStyle = '#bc13fe';
-    ctx.beginPath();
-    ctx.roundRect(barLeft, barTop, Math.max(12, barWidth * abilityPct), 8, 999);
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(12, 100);
-    ctx.lineTo(width - 12, 100);
-    ctx.stroke();
 }
 
 function drawHeartShape(color) {
@@ -1155,4 +1348,52 @@ function drawExtraHearts(x, y, count) {
         ctx.stroke();
         ctx.restore();
     }
+}
+
+// ── VFX Rings ─────────────────────────────────────────────────────────────────
+function drawVfxRings() {
+    if (!vfxRings || vfxRings.length === 0) return;
+    ctx.save();
+    for (let i = 0; i < vfxRings.length; i++) {
+        const ring = vfxRings[i];
+        const fade = ring.life / ring.maxLife;
+        ctx.globalAlpha = fade * 0.85;
+        ctx.strokeStyle = ring.color;
+        ctx.lineWidth = ring.lineWidth * (0.5 + fade * 0.5);
+        ctx.shadowBlur = 10 * fade;
+        ctx.shadowColor = ring.color;
+        ctx.beginPath();
+        ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
+}
+
+// ── VFX Sparks ────────────────────────────────────────────────────────────────
+function drawVfxSparks() {
+    if (!vfxSparks || vfxSparks.length === 0) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let i = 0; i < vfxSparks.length; i++) {
+        const s = vfxSparks[i];
+        const fade = s.life / s.maxLife;
+        ctx.globalAlpha = fade * 0.9;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 1.2 * fade + 0.4;
+        ctx.shadowBlur = 6 * fade;
+        ctx.shadowColor = s.color;
+        const speed = Math.hypot(s.vx, s.vy);
+        const nx = speed > 0.1 ? s.vx / speed : 0;
+        const ny = speed > 0.1 ? s.vy / speed : 0;
+        const tailLen = s.len * fade;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x - nx * tailLen, s.y - ny * tailLen);
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
 }

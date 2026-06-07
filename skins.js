@@ -63,9 +63,9 @@ stock: {
         ctx.lineTo(Math.cos(scanA)*42*sc, Math.sin(scanA)*42*sc); ctx.stroke();
         ctx.restore();
 
-        // Dashed orbit ring
+        // Dashed orbit ring — slowly rotating
         ctx.save(); ctx.strokeStyle=style.pulse; ctx.lineWidth=0.6; ctx.globalAlpha=ia*0.28;
-        ctx.setLineDash([2,3]);
+        ctx.setLineDash([2,3]); ctx.rotate(t*0.22);
         ctx.beginPath(); ctx.arc(0,-2*sc,37*sc,0,Math.PI*2); ctx.stroke();
         ctx.setLineDash([]); ctx.restore();
 
@@ -77,12 +77,15 @@ stock: {
         ctx.shadowBlur=4; ctx.shadowColor='#fff'; ctx.strokeStyle='rgba(255,255,255,0.85)';
         ctx.lineWidth=0.9; _shipPath(ctx,pts); ctx.stroke(); ctx.restore();
 
-        // Panel lines
+        // Panel lines — spine sways, cross-bars slide laterally
         ctx.save(); ctx.strokeStyle='rgba(0,242,255,0.45)'; ctx.lineWidth=0.6;
         ctx.shadowBlur=4; ctx.shadowColor=style.core; ctx.globalAlpha=ia*0.7; ctx.lineCap='round';
-        ctx.beginPath(); ctx.moveTo(0,-28*sc); ctx.lineTo(0,18*sc); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-10*sc,-4*sc); ctx.lineTo(10*sc,-4*sc); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-6*sc, 8*sc); ctx.lineTo( 6*sc, 8*sc); ctx.stroke();
+        const sw=Math.sin(t*1.6)*1.8*sc; // sway
+        ctx.beginPath(); ctx.moveTo(0,-28*sc);
+        ctx.quadraticCurveTo(sw,-6*sc,0,18*sc); ctx.stroke();
+        const slide=Math.sin(t*2.2)*2*sc;
+        ctx.beginPath(); ctx.moveTo((-10+slide)*sc,-4*sc); ctx.lineTo((10+slide)*sc,-4*sc); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo((-6-slide)*sc,8*sc); ctx.lineTo((6-slide)*sc,8*sc); ctx.stroke();
         ctx.restore();
 
         // Wing-tip nav lights — blink faster when moving
@@ -153,18 +156,21 @@ ember_blade: {
             ctx.beginPath(); ctx.moveTo(-hw*sc,20*sc); ctx.lineTo(0,h*sc*fi); ctx.lineTo(hw*sc,20*sc); ctx.closePath(); ctx.fill();
         }); ctx.restore();
 
-        // Lava drips from wing tips — longer when moving
+        // Lava drips from wing tips — longer when moving, sway side to side
         ctx.save(); ctx.lineCap='round';
         [-22,22].forEach((wx,si)=>{
             const dy=Math.sin(t*2.5+si)*6;
             const dripLen=(40+fwd*14+dy);
-            const dg=ctx.createLinearGradient(wx*sc,26*sc,wx*sc,dripLen*sc);
+            const sway=Math.sin(t*1.8+si*1.7)*4*sc; // lateral sway
+            const cx=wx*sc+sway*0.5, cy=(26+dripLen)*0.5*sc; // control point midway
+            const dg=ctx.createLinearGradient(wx*sc,26*sc,wx*sc+sway,dripLen*sc);
             dg.addColorStop(0,style.pulse); dg.addColorStop(1,'rgba(255,80,0,0)');
             ctx.strokeStyle=dg; ctx.lineWidth=2.2+fwd*1.2;
             ctx.shadowBlur=8+fwd*6; ctx.shadowColor=style.pulse; ctx.globalAlpha=ia*(0.7+fwd*0.2);
-            ctx.beginPath(); ctx.moveTo(wx*sc,26*sc); ctx.lineTo(wx*sc,dripLen*sc); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(wx*sc,26*sc);
+            ctx.quadraticCurveTo(cx, cy, wx*sc+sway, dripLen*sc); ctx.stroke();
             ctx.fillStyle=style.core; ctx.shadowBlur=6; ctx.globalAlpha=ia*0.9;
-            ctx.beginPath(); ctx.arc(wx*sc,dripLen*sc,2.2+fwd,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(wx*sc+sway,dripLen*sc,2.2+fwd,0,Math.PI*2); ctx.fill();
         }); ctx.restore();
 
         // Hull fill + glow
@@ -173,18 +179,23 @@ ember_blade: {
         ctx.save(); ctx.globalAlpha=ia;
         _glowStroke(ctx,()=>_shipPath(ctx,pts),style.core,1.8,26+spd*8,9); ctx.restore();
 
-        // Glowing crack network — pulses harder at speed
+        // Glowing crack network — vertices wobble, pulses harder at speed
         ctx.save(); ctx.lineCap='round'; ctx.shadowColor=style.core; ctx.shadowBlur=6+spd*8;
         [
             [[-2,-24],[2,-14],[-4,-4],[0,8]],
             [[4,-18],[1,-6],[4,4]],
             [[-5,-10],[-8,0],[-6,10]],
             [[5,-8],[8,2],[6,10]]
-        ].forEach((crack)=>{
+        ].forEach((crack,ci)=>{
             const pulse=0.4+Math.sin(t*3+crack[0][0])*0.25+spd*0.3;
             ctx.globalAlpha=ia*Math.min(0.9,0.5+pulse*0.3); ctx.strokeStyle=style.core; ctx.lineWidth=0.8+spd*0.5;
             ctx.beginPath(); ctx.moveTo(crack[0][0]*sc,crack[0][1]*sc);
-            for(let i=1;i<crack.length;i++) ctx.lineTo(crack[i][0]*sc,crack[i][1]*sc);
+            for(let i=1;i<crack.length;i++){
+                // each interior vertex jiggles slightly on its own frequency
+                const jx=Math.sin(t*2.8+ci*1.7+i*0.9)*1.1*sc;
+                const jy=Math.cos(t*2.3+ci*2.1+i*1.3)*0.7*sc;
+                ctx.lineTo(crack[i][0]*sc+jx, crack[i][1]*sc+jy);
+            }
             ctx.stroke();
         }); ctx.restore();
 
@@ -250,15 +261,20 @@ violet_drift: {
             });
         }); ctx.restore();
 
-        // 5 concentric void rings
+        // 5 concentric void rings — alternating rings counter-rotate, radius breathes
         ctx.save();
         [[24,0.9,0.50],[30,0.7,0.38],[36,0.5,0.27],[42,0.35,0.18],[50,0.2,0.10]].forEach(([rad,lw,ba],ri)=>{
             const pulse=0.5+Math.sin(t*1.8-ri*0.5)*0.35+spd*0.2;
+            const breath=1+Math.sin(t*1.1+ri*0.6)*0.025; // subtle radius breathe
+            const rotDir=ri%2===0?1:-1;
+            ctx.save();
+            ctx.rotate(t*(0.08+ri*0.04)*rotDir); // slow ring rotation
             ctx.strokeStyle=style.pulse; ctx.lineWidth=lw+spd*0.3;
             ctx.shadowBlur=ri===0?12+spd*6:4; ctx.shadowColor=style.pulse;
             ctx.globalAlpha=ia*ba*pulse; ctx.setLineDash(ri%2===0?[]:[3,4]);
-            ctx.beginPath(); ctx.arc(0,0,rad*sc,0,Math.PI*2); ctx.stroke();
-        }); ctx.setLineDash([]); ctx.restore();
+            ctx.beginPath(); ctx.arc(0,0,rad*breath*sc,0,Math.PI*2); ctx.stroke();
+            ctx.setLineDash([]); ctx.restore();
+        }); ctx.restore();
 
         // Hull fill + glow
         ctx.save(); _shipPath(ctx,pts);
@@ -279,11 +295,19 @@ violet_drift: {
             ctx.lineTo(sign*(9+jag)*sc,-4*sc); ctx.stroke();
         }); ctx.restore();
 
-        // Inner void phase
+        // Inner void phase — vertices morph with slow sine displacement
         ctx.save();
         const ip=0.28+Math.abs(Math.sin(t*1.8))*0.2+spd*0.15;
         ctx.fillStyle=style.pulse; ctx.shadowBlur=10+spd*8; ctx.shadowColor=style.pulse; ctx.globalAlpha=ia*Math.min(0.7,ip);
-        ctx.beginPath(); ctx.moveTo(0,-22*sc); ctx.lineTo(14*sc,18*sc); ctx.lineTo(0,8*sc); ctx.lineTo(-14*sc,18*sc); ctx.closePath(); ctx.fill(); ctx.restore();
+        const vm=[
+            [0+Math.sin(t*1.3)*2, -22+Math.cos(t*1.1)*2],
+            [14+Math.sin(t*1.7+1)*2.5,  18+Math.cos(t*1.5+1)*1.5],
+            [0+Math.sin(t*2.1+2)*1.5,    8+Math.cos(t*1.9+2)*2],
+            [-14+Math.sin(t*1.4+3)*2.5, 18+Math.cos(t*1.6+3)*1.5]
+        ];
+        ctx.beginPath(); ctx.moveTo(vm[0][0]*sc,vm[0][1]*sc);
+        vm.slice(1).forEach(([vx,vy])=>ctx.lineTo(vx*sc,vy*sc));
+        ctx.closePath(); ctx.fill(); ctx.restore();
 
         // Core glow
         ctx.save(); ctx.shadowBlur=20+spd*8; ctx.shadowColor=style.core; ctx.globalAlpha=ia;
@@ -361,10 +385,11 @@ solar_flare: {
             ctx.beginPath(); ctx.moveTo(bx,by); ctx.quadraticCurveTo(cpx,cpy,ex,ey); ctx.stroke();
         }); ctx.restore();
 
-        // Dashed inner ring
+        // Dashed inner ring — slowly rotates
         ctx.save(); ctx.strokeStyle=style.core; ctx.lineWidth=0.9;
         ctx.globalAlpha=ia*(0.28+Math.abs(Math.sin(t*1.5))*0.2);
         ctx.setLineDash([3,3]); ctx.shadowBlur=12; ctx.shadowColor=style.core;
+        ctx.rotate(t*0.18);
         ctx.beginPath(); ctx.arc(0,0,34*sc,0,Math.PI*2); ctx.stroke();
         ctx.setLineDash([]); ctx.restore();
 
@@ -377,11 +402,12 @@ solar_flare: {
         ctx.strokeStyle=style.core; ctx.lineWidth=1.4; ctx.shadowBlur=8;
         ctx.beginPath(); ctx.arc(0,0,22*sc,0,Math.PI*2); ctx.stroke(); ctx.restore();
 
-        // 4 sunspots
+        // 4 sunspots — slowly drift in small orbits
         ctx.save();
-        [[-6,-4,3],[6,4,2.4],[2,-8,1.6],[-3,7,2.0]].forEach(([sx,sy,sr])=>{
+        [[-6,-4,3,0.28],[6,4,2.4,0.21],[2,-8,1.6,0.35],[-3,7,2.0,0.18]].forEach(([sx,sy,sr,spd2],i)=>{
+            const ox=Math.cos(t*spd2+i*1.6)*2.5, oy=Math.sin(t*spd2*0.8+i*2.1)*2;
             ctx.globalAlpha=ia*0.48; ctx.fillStyle='#b07000'; ctx.shadowBlur=0;
-            ctx.beginPath(); ctx.arc(sx*sc,sy*sc,sr*sc,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc((sx+ox)*sc,(sy+oy)*sc,sr*sc,0,Math.PI*2); ctx.fill();
         }); ctx.restore();
 
         // Inner hot-spot
@@ -459,15 +485,16 @@ crimson_afterburn: {
         ctx.beginPath(); ctx.moveTo(-4*sc,28*sc); ctx.lineTo(0,(50+fwd*18)*sc*fl); ctx.lineTo(4*sc,28*sc); ctx.closePath(); ctx.fill();
         ctx.restore();
 
-        // Energy wing canards
+        // Energy wing canards — tip flexes up/down like flapping
         ctx.save(); ctx.shadowBlur=10+spd*6; ctx.shadowColor=style.pulse;
         [-1,1].forEach(sign=>{
+            const flex=Math.sin(t*3.5+sign*0.8)*3*sc; // tip flex
             [[0.85,1.0],[0.5,0.6]].forEach(([ga,scale])=>{
                 ctx.fillStyle=style.pulse; ctx.globalAlpha=ia*ga;
                 ctx.beginPath();
-                ctx.moveTo(-12*sign*sc,26*sc);
-                ctx.lineTo(-20*sign*sc*scale,14*sc);
-                ctx.lineTo(-14*sign*sc*scale,22*sc);
+                ctx.moveTo(-12*sign*sc, 26*sc);
+                ctx.lineTo(-20*sign*sc*scale, 14*sc + flex*scale);
+                ctx.lineTo(-14*sign*sc*scale, 22*sc + flex*scale*0.5);
                 ctx.closePath(); ctx.fill();
             });
         }); ctx.restore();
@@ -480,10 +507,12 @@ crimson_afterburn: {
         ctx.save(); ctx.globalAlpha=ia;
         _glowStroke(ctx,()=>_shipPath(ctx,pts),style.core,1.6,30+spd*8,10); ctx.restore();
 
-        // Spine line
+        // Spine line — subtle S-curve wave
         ctx.save(); ctx.strokeStyle=style.core; ctx.lineWidth=1+spd*0.5;
         ctx.shadowBlur=12+spd*6; ctx.shadowColor=style.core; ctx.lineCap='round'; ctx.globalAlpha=ia*0.75;
-        ctx.beginPath(); ctx.moveTo(0,-38*sc); ctx.lineTo(0,16*sc); ctx.stroke(); ctx.restore();
+        const sw2=Math.sin(t*2.5)*2.5*sc;
+        ctx.beginPath(); ctx.moveTo(0,-38*sc);
+        ctx.bezierCurveTo(sw2,-20*sc, -sw2,-2*sc, 0,16*sc); ctx.stroke(); ctx.restore();
 
         // 2 shockwave arcs — more visible + further out at speed
         ctx.save(); ctx.strokeStyle=style.pulse; ctx.lineCap='round';

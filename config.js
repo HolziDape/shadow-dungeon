@@ -17,9 +17,9 @@ const PLAYER_STATS = {
 // Seed costs are CHEAPER for the first 5 levels (fast progress) and the tail
 // growth is SHARPER (slow progress later), so the curve feels Clash-Royale-y.
 const UPGRADES = [
-    { id: 'dmg',     name: 'Schaden',   icon: 'DMG', color: '#ffb100', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [18, 26, 38, 56, 84, 132, 198], tailGrowth: 1.32, tailFlat: 60, majorCostMultiplier: 1.95, max: 42, desc: 'Mehr Basisschaden pro Run.' },
-    { id: 'atkSpd',  name: 'Feuerrate', icon: 'RPM', color: '#1ec8ff', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [20, 30, 42, 60, 92, 144, 214], tailGrowth: 1.33, tailFlat: 62, majorCostMultiplier: 1.92, max: 42, desc: 'Schnellere Volleys und fluessigeres Combat.' },
-    { id: 'economy', name: 'Einkommen', icon: 'GLD', color: '#00ff9d', cycleRange: [5, 7], cycleOffset: 2, seedCosts: [16, 24, 34, 50, 76, 122, 184], tailGrowth: 1.30, tailFlat: 56, majorCostMultiplier: 1.98, max: 42, desc: 'Mehr Gold aus Kills und Missionen.' }
+    { id: 'dmg',     name: 'Schaden',   icon: 'DMG', color: '#ffb100', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [14, 20, 30, 44, 66, 104, 156], tailGrowth: 1.24, tailFlat: 50, majorCostMultiplier: 1.65, max: 42, desc: 'Mehr Basisschaden pro Run.' },
+    { id: 'atkSpd',  name: 'Feuerrate', icon: 'RPM', color: '#1ec8ff', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [16, 24, 34, 48, 72, 114, 168], tailGrowth: 1.25, tailFlat: 52, majorCostMultiplier: 1.62, max: 42, desc: 'Schnellere Volleys und fluessigeres Combat.' },
+    { id: 'economy', name: 'Einkommen', icon: 'GLD', color: '#00ff9d', cycleRange: [5, 7], cycleOffset: 2, seedCosts: [12, 18, 26, 40, 60, 96, 144], tailGrowth: 1.22, tailFlat: 46, majorCostMultiplier: 1.68, max: 42, desc: 'Mehr Gold aus Kills und Missionen.' }
 ];
 
 const DAILY_LOGIN_REWARDS = [
@@ -460,44 +460,49 @@ function getAbilityRankDef(ability, rank) {
 // ─────────────────────────────────────────────────────────────────────────────
 const ENEMY_TYPES = {
     // ── Original ──
-    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#00f2ff', glow: '#00f2ff', exp: 1, ai: 'strafe',  unlockLevel: 1 },
-    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#bc13fe', glow: '#bc13fe', exp: 2, ai: 'sprint',  unlockLevel: 4 },
-    tank:      { hp: 38, spd: 0.95, r: 20, color: '#ff9d00', glow: '#ff9d00', exp: 4, ai: 'heavy',   unlockLevel: 12 },
-    boss:      { hp: 26, spd: 1.08, r: 50, color: '#ff375f', glow: '#ff375f', exp: 10, ai: 'boss',   isBoss: true, unlockLevel: 1 },
+    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#00f2ff', glow: '#00f2ff', exp: 2, ai: 'strafe',  unlockLevel: 1 },
+    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#bc13fe', glow: '#bc13fe', exp: 3, ai: 'sprint',  unlockLevel: 4 },
+    tank:      { hp: 38, spd: 0.95, r: 20, color: '#ff9d00', glow: '#ff9d00', exp: 5, ai: 'heavy',   unlockLevel: 12 },
+    boss:      { hp: 26, spd: 1.08, r: 50, color: '#ff375f', glow: '#ff375f', exp: 14, ai: 'boss',   isBoss: true, unlockLevel: 1 },
 
     // ── New enemy types (8-9), gated to later levels ──
     swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#7be8ff', glow: '#7be8ff', exp: 1, ai: 'swarm',     unlockLevel: 1 },
-    brute:     { hp: 22, spd: 0.85, r: 17, color: '#ffaa00', glow: '#ffaa00', exp: 4, ai: 'brute',     unlockLevel: 8 },
-    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#ff5dad', glow: '#ff5dad', exp: 3, ai: 'sniper',    unlockLevel: 12 },
-    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#ff7035', glow: '#ff7035', exp: 4, ai: 'bomber',    unlockLevel: 15 },
-    healer:    { hp: 14, spd: 1.05, r: 14, color: '#34ffae', glow: '#34ffae', exp: 5, ai: 'healer',    unlockLevel: 18 },
-    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#5cc1ff', glow: '#5cc1ff', exp: 5, ai: 'shielder',  unlockLevel: 22, shieldHp: 30 },
-    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9f57ff', glow: '#9f57ff', exp: 5, ai: 'wraith',    unlockLevel: 26 },
-    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#ff5040', glow: '#ff5040', exp: 8, ai: 'crusher',   unlockLevel: 30 },
-    berserker: { hp: 16, spd: 1.20, r: 13, color: '#ff2030', glow: '#ff2030', exp: 6, ai: 'berserker', unlockLevel: 35 }
+    brute:     { hp: 22, spd: 0.85, r: 17, color: '#ffaa00', glow: '#ffaa00', exp: 5, ai: 'brute',     unlockLevel: 8 },
+    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#ff5dad', glow: '#ff5dad', exp: 4, ai: 'sniper',    unlockLevel: 12 },
+    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#ff7035', glow: '#ff7035', exp: 5, ai: 'bomber',    unlockLevel: 15 },
+    healer:    { hp: 14, spd: 1.05, r: 14, color: '#34ffae', glow: '#34ffae', exp: 6, ai: 'healer',    unlockLevel: 18 },
+    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#5cc1ff', glow: '#5cc1ff', exp: 6, ai: 'shielder',  unlockLevel: 22, shieldHp: 30 },
+    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9f57ff', glow: '#9f57ff', exp: 6, ai: 'wraith',    unlockLevel: 26 },
+    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#ff5040', glow: '#ff5040', exp: 10, ai: 'crusher',   unlockLevel: 30 },
+    berserker: { hp: 16, spd: 1.20, r: 13, color: '#ff2030', glow: '#ff2030', exp: 7, ai: 'berserker', unlockLevel: 35 }
 };
 
 function getEnemyLevelStats(typeKey, level) {
     const base = ENEMY_TYPES[typeKey];
-    // SMOOTHED scaling — was too brutal (12x in 15 levels = 1k HP drones at lvl 20).
-    // New: gentle exponential that lets player upgrades keep pace.
-    let scale = 2 + ((Math.max(1, level) - 1) * 1.4);
+    const lv = Math.max(1, level);
 
-    if (level > 10 && level <= 25) {
-        const t = (level - 10) / 15;
-        // 4x growth across 15 levels (not 12x). At lvl 20 ≈ 16, at lvl 25 ≈ 60.
-        scale = 16 * Math.pow(4, t);
-    } else if (level > 25 && level <= 50) {
-        const t = (level - 25) / 25;
-        // Moderate ramp 60 → 600 across 25 levels (not 100x in same span).
-        scale = 60 * Math.pow(10, t);
-    } else if (level > 50) {
-        scale = 600 * Math.pow(1.10, level - 50);
+    // Smooth piecewise scaling — designed so player upgrades keep pace at every tier.
+    // lv 1→10 : linear 2.5 → 10   (early game stays forgiving)
+    // lv 10→25: exponential 10 → 30 (mid ramp)
+    // lv 25→50: exponential 30 → 120 (late ramp, much gentler than before)
+    // lv 50+  : +8% per level
+    let scale;
+    if (lv <= 10) {
+        scale = 2.5 + (lv - 1) * 0.83;
+    } else if (lv <= 25) {
+        const t = (lv - 10) / 15;
+        scale = 10 * Math.pow(3, t);
+    } else if (lv <= 50) {
+        const t = (lv - 25) / 25;
+        scale = 30 * Math.pow(4, t);
+    } else {
+        scale = 120 * Math.pow(1.08, lv - 50);
     }
 
+    const bossMult = base.isBoss ? 1.25 : 1;
     return {
         ...base,
-        hp: Math.max(2, Math.round(base.hp * scale))
+        hp: Math.max(2, Math.round(base.hp * scale * bossMult))
     };
 }
 

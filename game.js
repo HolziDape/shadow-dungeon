@@ -923,6 +923,8 @@ let particles = [];
 let hazards = [];
 let fxTexts = [];
 let lightningBolts = [];
+let vfxRings = [];
+let vfxSparks = [];
 let keys = {};
 let lastTime = 0;
 let currentLevelWaves = [];
@@ -1609,6 +1611,22 @@ function playSfx(kind, intensity = 1) {
         type = 'triangle';
         cutoff = 2200;
         peak = 0.04;
+    } else if (kind === 'singularityShoot') {
+        // Deep descending gravity whoosh — the void opening
+        startFreq = 380;
+        endFreq = 38;
+        duration = 0.38;
+        type = 'sawtooth';
+        cutoff = 700;
+        peak = 0.06;
+    } else if (kind === 'singularityPull') {
+        // Heavy implosion rumble when the field activates
+        startFreq = 160;
+        endFreq = 32;
+        duration = 0.52;
+        type = 'sawtooth';
+        cutoff = 550;
+        peak = 0.075;
     }
 
     osc.type = type;
@@ -2393,6 +2411,8 @@ function startLevel() {
     hazards = [];
     fxTexts = [];
     lightningBolts = [];
+    vfxRings = [];
+    vfxSparks = [];
     waveSpawnQueue = [];
     keys = {};
     save.bonusAbilityXp = 0;
@@ -2644,6 +2664,8 @@ function update(dt) {
     updateLightningBolts(dt);
     updateFxTexts(dt);
     updateParticles(dt);
+    updateVfxRings(dt);
+    updateVfxSparks(dt);
     updateStatusEffects(dt);
     updateAbilityTimers(dt);
     player.invulnerable = Math.max(0, player.invulnerable - dt);
@@ -2682,10 +2704,12 @@ function updatePhoenixAura(dt) {
 }
 
 function updateLightningBolts(dt) {
-    lightningBolts.forEach((bolt) => {
-        bolt.life -= dt;
-    });
-    lightningBolts = lightningBolts.filter((bolt) => bolt.life > 0);
+    let w = 0;
+    for (let i = 0; i < lightningBolts.length; i++) {
+        lightningBolts[i].life -= dt;
+        if (lightningBolts[i].life > 0) lightningBolts[w++] = lightningBolts[i];
+    }
+    lightningBolts.length = w;
 }
 
 function updatePlayerMovement(dt) {
@@ -2715,10 +2739,13 @@ function updatePlayerMovement(dt) {
     if (magnitude > 0) {
         const nx = vx / magnitude;
         const ny = vy / magnitude;
-        player.x += nx * player.spd * dt;
-        player.y += ny * player.spd * dt;
+        const slowMult = player.slowOverride > 0 ? player.slowOverride : 1;
+        player.x += nx * player.spd * slowMult * dt;
+        player.y += ny * player.spd * slowMult * dt;
         player.angle = Math.atan2(ny, nx) + Math.PI / 2;
     }
+    // Decay slowzone override (set each frame by updateHazards if player is inside)
+    player.slowOverride = 0;
 
     const topBoundary = arena.top;
     player.x = Math.max(WALL + player.r, Math.min(arena.width - WALL - player.r, player.x));
@@ -2768,7 +2795,12 @@ function updatePlayerTrail(prevX, prevY, dt) {
         }
     }
 
-    player.trailPoints = trail.filter((point, index) => point.life > 0.08 && index < 16);
+    let tw = 0;
+    for (let i = 0; i < trail.length && tw < 16; i++) {
+        if (trail[i].life > 0.08) trail[tw++] = trail[i];
+    }
+    trail.length = tw;
+    player.trailPoints = trail;
 }
 
 function updateAutoFire(dt) {
@@ -2992,25 +3024,47 @@ function updateBoomerangLauncher(dt) {
     playSfx('ability', 0.95);
 }
 
-// ── Singularity pull field ──
+// ── Singularity — shoots a traveling black-hole projectile ──
 function spawnSingularity(tx, ty) {
     const rank = Math.max(1, getAbilityRank('singularity'));
+    const angle = Math.atan2(ty - player.y, tx - player.x);
+    const speed = 300 + rank * 20;
+    hazards.push({
+        id: nextHazardId++,
+        type: 'singularity_shot',
+        x: player.x, y: player.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 2.0,
+        maxLife: 2.0,
+        radius: 12 + rank * 2,  // collision radius
+        rank,
+        implode: player.singularityImplode,
+        spawned: false
+    });
+    addP(player.x, player.y, '#bc13fe', 10, 70, 0.22, 2.5);
+    playSfx('singularityShoot', 1.0);
+}
+
+// Internal: convert singularity_shot into the pull field at position
+function _deployPullField(hazard) {
+    const rank = hazard.rank || 1;
     hazards.push({
         id: nextHazardId++,
         type: 'singularity',
-        x: tx, y: ty,
-        radius: 80 + rank * 12,
-        life: 1.2 + rank * 0.3,
-        maxLife: 1.2 + rank * 0.3,
-        pullStrength: 180 + rank * 40,
+        x: hazard.x, y: hazard.y,
+        radius: 85 + rank * 14,
+        life: 1.3 + rank * 0.35,
+        maxLife: 1.3 + rank * 0.35,
+        pullStrength: 190 + rank * 45,
         damage: player.dmg * player.damageMultiplier * 0.1,
-        implode: player.singularityImplode,
+        implode: hazard.implode,
         color: '#bc13fe',
         hit: false
     });
-    addP(tx, ty, '#bc13fe', 18, 120, 0.3, 4);
-    addFxText(tx, ty - 20, 'PULL', '#bc13fe', 0.35, 16);
-    playSfx('ability', 0.9);
+    addP(hazard.x, hazard.y, '#bc13fe', 22, 140, 0.35, 5);
+    addFxText(hazard.x, hazard.y - 24, '⬛ PULL', '#bc13fe', 0.4, 17);
+    playSfx('singularityPull', 1.05);
 }
 
 function spawnProjectile(config) {
@@ -3286,20 +3340,22 @@ function updateProjectiles(dt) {
 
             const dmgApplied = finalDmg * (projectile.tornado ? dt * 8 : 1);
             enemy.hp -= dmgApplied;
+            // ── Blood Rage: berserker stacks speed on hit ──
+            if (enemy.ai === 'berserker' && !projectile.tornado) {
+                enemy.bloodRageStacks = Math.min(16, (enemy.bloodRageStacks || 0) + 1);
+            }
             enemy.hitFlash = isCrit ? 0.16 : 0.08;
             enemy.lastHitBy = projectile.id;
 
             // Floating damage number — every hit, sized + coloured by impact tier
             showDamagePopup(enemy.x, enemy.y - enemy.r, dmgApplied, { crit: isCrit });
 
+            triggerHitVfx(projectile.x, projectile.y, enemy.glow, isCrit, projectile.vx, projectile.vy);
             if (isCrit) {
-                addP(projectile.x, projectile.y, '#ffd14d', 8, 120, 0.2, 3);
                 // ── Crit Bomb AOE ──
                 if (player.critExplode) {
                     triggerCritExplosion(projectile.x, projectile.y, finalDmg);
                 }
-            } else {
-                addP(projectile.x, projectile.y, enemy.glow, projectile.tornado ? 4 : 3, 90, 0.16, 2);
             }
 
             // ── Lifesteal (Vampire) ──
@@ -3462,7 +3518,11 @@ function updateProjectiles(dt) {
     // Add forked/shard projectiles
     for (const np of newProjectiles) projectiles.push(np);
 
-    projectiles = projectiles.filter((projectile) => projectile.life > 0);
+    let pw = 0;
+    for (let i = 0; i < projectiles.length; i++) {
+        if (projectiles[i].life > 0) projectiles[pw++] = projectiles[i];
+    }
+    projectiles.length = pw;
 }
 
 // ── Echo Shock — small AOE on impact, replaces old "echo bullet" mechanic ──
@@ -3696,7 +3756,7 @@ function updateEnemies(dt) {
         }
 
         if (enemy.ai === 'strafe') {
-            // ── Unique: Pulse Shot — fires a directed projectile every ~2.5s ──
+            // ── Pulse Shot ──
             enemy.shootCooldown -= dt;
             if (enemy.shootCooldown <= 0 && distance < 520) {
                 enemy.shootCooldown = 2.3 + Math.random() * 0.6;
@@ -3705,6 +3765,16 @@ function updateEnemies(dt) {
                     r: 5, life: 1.6, color: '#00f2ff', hit: false });
                 playSfx('enemyShoot', 0.6);
                 addP(enemy.x, enemy.y, '#00f2ff', 4, 50, 0.15, 1);
+            }
+            // ── Magnetmine: drops a proximity mine every 8s ──
+            enemy.mineCooldown = (enemy.mineCooldown || 8) - dt;
+            if (enemy.mineCooldown <= 0) {
+                enemy.mineCooldown = 7 + Math.random() * 3;
+                hazards.push({ id: nextHazardId++, type: 'magnetmine',
+                    x: enemy.x, y: enemy.y, r: 14, triggerR: 70,
+                    life: 12, armed: false, armTimer: 0.8,
+                    color: '#00f2ff', damage: player.maxHp > 1 ? 1 : 0.5 });
+                addSparks(enemy.x, enemy.y, '#00f2ff', 4, 80, 0.2, Math.PI * 2);
             }
             moveX = nx * 0.72 + px * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
             moveY = ny * 0.72 + py * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
@@ -3758,13 +3828,20 @@ function updateEnemies(dt) {
                     addP(enemy.x, enemy.y, '#bc13fe', 10, 90, 0.25, 2);
                 }
             } else if (enemy.sprintCooldown <= 0 && distance > 110) {
-                enemy.sprintCooldown = 2.2 + Math.random();
+                // ── Rage-Blink: under 30% HP the blink cooldown halves ──
+                const raging = enemy.hp / enemy.maxHp < 0.3;
+                enemy.sprintCooldown = raging ? 1.0 + Math.random() * 0.5 : 2.2 + Math.random();
                 enemy.sprintTime = 0.35;
                 enemy.sprintDirX = nx;
                 enemy.sprintDirY = ny;
                 enemy.blinkPending = true;
-                addP(enemy.x, enemy.y, enemy.glow, 8, 110, 0.35, 2);
+                addP(enemy.x, enemy.y, raging ? '#ff00ff' : enemy.glow, raging ? 14 : 8, 110, 0.35, 2);
+                if (raging) addRing(enemy.x, enemy.y, '#ff00ff', 220, 80, 0.3, 1.5);
             } else {
+                // Rage-Blink afterimage trail
+                if (enemy.hp / enemy.maxHp < 0.3 && Math.random() < 0.35) {
+                    addP(enemy.x, enemy.y, '#cc00ff', 2, 30, 0.22, 3);
+                }
                 moveX = nx * 0.88 + px * 0.28 * Math.sin(enemy.aiClock * 4);
                 moveY = ny * 0.88 + py * 0.28 * Math.sin(enemy.aiClock * 4);
             }
@@ -3778,6 +3855,22 @@ function updateEnemies(dt) {
                     maxRadius: 220, speed: 200, life: 1.4, color: '#ff9d00', hit: false });
                 playSfx('empBlast', 0.9);
                 addP(enemy.x, enemy.y, '#ff9d00', 14, 140, 0.35, 3);
+                // ── Ketten-EMP: nearby tanks get +30% speed +20% dmg for 3s ──
+                for (let k = 0; k < enemies.length; k++) {
+                    const ally = enemies[k];
+                    if (ally !== enemy && ally.ai === 'heavy') {
+                        const dx2 = ally.x - enemy.x, dy2 = ally.y - enemy.y;
+                        if (dx2 * dx2 + dy2 * dy2 < 280 * 280) {
+                            ally.empBuffTimer = 3.0;
+                        }
+                    }
+                }
+            }
+            // Apply Ketten-EMP buff
+            if (enemy.empBuffTimer > 0) {
+                enemy.empBuffTimer -= dt;
+                speed *= 1.3;
+                if (Math.random() < 0.2) addP(enemy.x, enemy.y, '#ff9d00', 1, 40, 0.15, 2);
             }
             moveX = nx + px * 0.18 * Math.cos(enemy.aiClock * 1.7);
             moveY = ny + py * 0.18 * Math.cos(enemy.aiClock * 1.7);
@@ -3791,6 +3884,13 @@ function updateEnemies(dt) {
             // Tight chase with twitchy zig-zag.
             moveX = nx * 0.92 + px * 0.34 * Math.sin(enemy.aiClock * 6.0);
             moveY = ny * 0.92 + py * 0.34 * Math.sin(enemy.aiClock * 6.0);
+            // ── Kontakt-Explosion: mini swarmlings (hasSplit) explode on touch ──
+            if (enemy.hasSplit && distance < enemy.r + player.r + 4) {
+                addRing(enemy.x, enemy.y, '#ffe000', 280, 60, 0.35, 2.0);
+                addSparks(enemy.x, enemy.y, '#ffe000', 8, 150, 0.3, Math.PI * 2);
+                damagePlayer(0.5);
+                enemy.hp = 0;
+            }
         } else if (enemy.ai === 'brute') {
             // ── Unique: Ground Slam — shockwave ring every 3.5s ──
             enemy.slamCooldown -= dt;
@@ -3802,6 +3902,10 @@ function updateEnemies(dt) {
                 playSfx('groundSlam', 1.0);
                 addP(enemy.x, enemy.y, '#ffaa00', 18, 130, 0.35, 4);
                 screenShake = Math.min(2.5, screenShake + 0.22);
+                // ── Riss-Welle: slam leaves a persistent slow zone for 3s ──
+                hazards.push({ id: nextHazardId++, type: 'slowzone',
+                    x: enemy.x, y: enemy.y, r: 80, life: 3.0, maxLife: 3.0,
+                    color: '#ffaa00' });
             }
             // Slow, relentless straight-line chaser.
             moveX = nx;
@@ -3826,24 +3930,38 @@ function updateEnemies(dt) {
             if (enemy.attackCooldown <= 0 && distance < 600) {
                 enemy.attackCooldown = 2.4 + Math.random() * 0.6;
                 playSfx('sniperShot', 0.85);
+                // ── Bounce-Shot: directed bullet that can ricochet once ──
+                const shotSpd = 400;
+                const useRicochet = Math.random() < 0.4; // 40% chance bounce shot
                 hazards.push({
                     id: nextHazardId++,
-                    type: 'ring',
-                    x: enemy.x,
-                    y: enemy.y,
-                    radius: 6,
-                    maxRadius: 90,
-                    speed: 360,
-                    life: 0.9,
+                    type: useRicochet ? 'ricochet' : 'enemybullet',
+                    x: enemy.x, y: enemy.y,
+                    vx: nx * shotSpd, vy: ny * shotSpd,
+                    r: 6, life: 1.6, bounces: 1, hit: false,
                     color: '#ff5dad',
-                    hit: false
+                    // ── Player Mark: next hit after mark deals +40% dmg ──
+                    onHitMark: !useRicochet && Math.random() < 0.5
                 });
                 addP(enemy.x, enemy.y, '#ff5dad', 6, 60, 0.18, 2);
+                // Visual mark indicator on player
+                if (!useRicochet) addRing(player.x, player.y, '#ff5dad', 180, 50, 0.4, 1.5);
             }
         } else if (enemy.ai === 'bomber') {
             // Charges at the player; explosion is in triggerKill().
             moveX = nx;
             moveY = ny;
+            // ── Cluster-Granate: throws a grenade every 5s that splits into 3 ──
+            enemy.grenadeCooldown = (enemy.grenadeCooldown || 5) - dt;
+            if (enemy.grenadeCooldown <= 0 && distance < 480) {
+                enemy.grenadeCooldown = 4.5 + Math.random() * 1.5;
+                hazards.push({ id: nextHazardId++, type: 'grenade',
+                    x: enemy.x, y: enemy.y,
+                    vx: nx * 200 + (Math.random() - 0.5) * 60,
+                    vy: ny * 200 + (Math.random() - 0.5) * 60,
+                    r: 8, life: 1.2, color: '#ff6600', hit: false });
+                addSparks(enemy.x, enemy.y, '#ff6600', 5, 100, 0.2, Math.PI * 2);
+            }
         } else if (enemy.ai === 'healer') {
             // Stays back and pulses healing.
             if (distance < 240) {
@@ -3867,6 +3985,26 @@ function updateEnemies(dt) {
                 }
                 addP(enemy.x, enemy.y, '#34ffae', 10, 130, 0.45, 3);
             }
+            // ── Resurrection: once per wave, revives one nearby dead enemy at 30% HP ──
+            if (!enemy.hasResurrected) {
+                enemy.resurrectCooldown = (enemy.resurrectCooldown || 8) - dt;
+                if (enemy.resurrectCooldown <= 0) {
+                    for (let k = 0; k < enemies.length; k++) {
+                        const corpse = enemies[k];
+                        if (!corpse.alive && corpse !== enemy &&
+                            Math.hypot(corpse.x - enemy.x, corpse.y - enemy.y) < 240) {
+                            corpse.alive = true;
+                            corpse.hp = Math.round(corpse.maxHp * 0.3);
+                            enemy.hasResurrected = true;
+                            addRing(corpse.x, corpse.y, '#34ffae', 200, 70, 0.6, 2.0);
+                            addSparks(corpse.x, corpse.y, '#34ffae', 10, 120, 0.5, Math.PI * 2);
+                            addP(corpse.x, corpse.y, '#34ffae', 14, 150, 0.5, 3);
+                            break;
+                        }
+                    }
+                    enemy.resurrectCooldown = 99; // effectively once
+                }
+            }
         } else if (enemy.ai === 'shielder') {
             // ── Shield Bash: charges at player when shield is strong ──
             enemy.bashCooldown -= dt;
@@ -3883,11 +4021,27 @@ function updateEnemies(dt) {
                 addP(enemy.x, enemy.y, '#5cc1ff', 16, 130, 0.35, 3);
                 screenShake = Math.min(2.5, screenShake + 0.15);
             }
+            // ── Ramm-Charge: when shield is broken, charge at 3x speed ──
+            if (enemy.shieldHp <= 0 && !enemy.charging && enemy.rammCooldown <= 0 && distance < 360) {
+                enemy.rammCooldown = 3.5;
+                enemy.charging = true;
+                enemy.chargeDirX = nx;
+                enemy.chargeDirY = ny;
+                enemy.chargeTimer = 0.4;
+                enemy.isRammCharge = true;
+                addRing(enemy.x, enemy.y, '#ff4444', 260, 80, 0.35, 2.0);
+                addSparks(enemy.x, enemy.y, '#ff4444', 10, 160, 0.3, Math.PI * 2);
+                screenShake = Math.min(2.5, screenShake + 0.12);
+            }
+            enemy.rammCooldown = (enemy.rammCooldown || 0) - dt;
             if (enemy.charging) {
                 enemy.chargeTimer -= dt;
                 moveX = enemy.chargeDirX; moveY = enemy.chargeDirY;
-                speed *= 2.2;
-                if (enemy.chargeTimer <= 0) enemy.charging = false;
+                speed *= enemy.isRammCharge ? 3.0 : 2.2;
+                if (enemy.chargeTimer <= 0) {
+                    enemy.charging = false;
+                    enemy.isRammCharge = false;
+                }
             } else {
                 moveX = nx; moveY = ny;
                 // ── Rage mode when shield is broken ──
@@ -3908,9 +4062,16 @@ function updateEnemies(dt) {
             // Periodically phases — invulnerable while phasing.
             enemy.phaseTimer -= dt;
             if (enemy.phaseTimer <= 0) {
+                const wasPhasing = enemy.phasing;
                 enemy.phasing = !enemy.phasing;
                 enemy.phaseTimer = enemy.phasing ? 0.5 : 1.6;
-                if (enemy.phasing) addP(enemy.x, enemy.y, '#9f57ff', 6, 80, 0.25, 2);
+                if (enemy.phasing) {
+                    addP(enemy.x, enemy.y, '#9f57ff', 6, 80, 0.25, 2);
+                    // ── Phase-Klon: leave a decoy that explodes after 2s ──
+                    hazards.push({ id: nextHazardId++, type: 'clone',
+                        x: enemy.x, y: enemy.y, r: enemy.r,
+                        life: 2.0, maxLife: 2.0, color: '#9f57ff' });
+                }
             }
             moveX = nx * 1.05 + px * 0.45 * Math.sin(enemy.aiClock * 3.5);
             moveY = ny * 1.05 + py * 0.45 * Math.sin(enemy.aiClock * 3.5);
@@ -3937,6 +4098,22 @@ function updateEnemies(dt) {
                     enemy.chargeTimer = 1.8;
                 }
             }
+            // ── Stomp-Welle: 3 sequential ring waves every 4s ──
+            enemy.stompCooldown = (enemy.stompCooldown || 4) - dt;
+            if (enemy.stompCooldown <= 0 && distance < 500) {
+                enemy.stompCooldown = 4.0 + Math.random();
+                // Stagger 3 rings with slight delay built into their initial radius offset
+                for (let w = 0; w < 3; w++) {
+                    hazards.push({ id: nextHazardId++, type: 'ring',
+                        x: enemy.x, y: enemy.y,
+                        radius: enemy.r + w * 28, maxRadius: 200 + w * 20,
+                        speed: 240, life: 0.9 - w * 0.05,
+                        color: '#ff5040', hit: false });
+                }
+                playSfx('groundSlam', 0.85);
+                screenShake = Math.min(2.5, screenShake + 0.3);
+                addP(enemy.x, enemy.y, '#ff5040', 20, 160, 0.4, 4);
+            }
         } else if (enemy.ai === 'berserker') {
             // Speeds up as HP drops (up to ~1.9x).
             const hpFrac = Math.max(0, enemy.hp / Math.max(1, enemy.maxHp));
@@ -3944,6 +4121,12 @@ function updateEnemies(dt) {
             moveX = nx;
             moveY = ny;
             speed *= rage;
+            // ── Blood Rage: each hit taken gives +6% speed stack (max 2x base) ──
+            if (enemy.bloodRageStacks > 0) {
+                const stackMult = Math.min(2.0, 1 + enemy.bloodRageStacks * 0.06);
+                speed *= stackMult;
+                if (Math.random() < 0.15) addP(enemy.x, enemy.y, '#ff2200', 2, 50, 0.2, 2);
+            }
         }
 
         const moveMag = Math.max(0.001, Math.hypot(moveX, moveY));
@@ -4067,7 +4250,11 @@ function updatePickups(dt) {
         }
     });
 
-    pickups = pickups.filter((pickup) => pickup.alive);
+    let pkw = 0;
+    for (let i = 0; i < pickups.length; i++) {
+        if (pickups[i].alive) pickups[pkw++] = pickups[i];
+    }
+    pickups.length = pkw;
 }
 
 function updateOrbiters(dt) {
@@ -4156,6 +4343,24 @@ function updateHazards(dt) {
                 damagePlayer('boss');
             }
         }
+        // ── Singularity: traveling black-hole shot ──
+        if (hazard.type === 'singularity_shot' && !hazard.spawned) {
+            hazard.x += hazard.vx * dt;
+            hazard.y += hazard.vy * dt;
+            // Particle trail
+            addP(hazard.x, hazard.y, '#bc13fe', 2, 28, 0.09, 0.9);
+            // Hit nearest enemy?
+            let hit = false;
+            enemies.forEach((e) => {
+                if (!e.alive || hit) return;
+                if (Math.hypot(e.x - hazard.x, e.y - hazard.y) < e.r + hazard.radius) hit = true;
+            });
+            if (hit || hazard.life <= 0) {
+                hazard.spawned = true;
+                hazard.life = 0;
+                _deployPullField(hazard);
+            }
+        }
         // ── Singularity pull field ──
         if (hazard.type === 'singularity') {
             addP(hazard.x, hazard.y, '#bc13fe', 2, 30, 0.1, 1);
@@ -4213,13 +4418,114 @@ function updateHazards(dt) {
                 screenShake = Math.min(2.5, screenShake + 0.4);
             }
         }
+        // ── Magnetmine: static proximity mine ──
+        if (hazard.type === 'magnetmine') {
+            hazard.armTimer = (hazard.armTimer || 0) - dt;
+            if (!hazard.armed && hazard.armTimer <= 0) hazard.armed = true;
+            if (hazard.armed) {
+                const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
+                if (dist < hazard.triggerR) {
+                    // Explode
+                    addRing(hazard.x, hazard.y, hazard.color, 260, 65, 0.4, 2.0);
+                    addSparks(hazard.x, hazard.y, hazard.color, 12, 180, 0.4, Math.PI * 2);
+                    addP(hazard.x, hazard.y, hazard.color, 16, 160, 0.4, 3);
+                    damagePlayer('enemy');
+                    screenShake = Math.min(2.5, screenShake + 0.2);
+                    hazard.life = 0;
+                }
+            }
+        }
+        // ── Slowzone: persistent area that slows player ──
+        if (hazard.type === 'slowzone') {
+            const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
+            if (dist < hazard.r) {
+                player.slowOverride = Math.max(player.slowOverride || 0, 0.45);
+            }
+            if (Math.random() < 0.08) addP(hazard.x + (Math.random()-0.5)*hazard.r, hazard.y + (Math.random()-0.5)*hazard.r, '#ffaa00', 1, 20, 0.2, 1);
+        }
+        // ── Ricochet bullet: bounces off arena walls once ──
+        if (hazard.type === 'ricochet') {
+            hazard.x += hazard.vx * dt;
+            hazard.y += hazard.vy * dt;
+            // Wall bounce
+            if (hazard.bounces > 0) {
+                if (hazard.x < WALL + hazard.r || hazard.x > arena.width - WALL - hazard.r) {
+                    hazard.vx = -hazard.vx;
+                    hazard.bounces--;
+                    addSparks(hazard.x, hazard.y, '#ff5dad', 4, 80, 0.15, Math.PI * 2);
+                }
+                if (hazard.y < arena.top + hazard.r || hazard.y > arena.height - WALL - hazard.r) {
+                    hazard.vy = -hazard.vy;
+                    hazard.bounces--;
+                    addSparks(hazard.x, hazard.y, '#ff5dad', 4, 80, 0.15, Math.PI * 2);
+                }
+            }
+            const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
+            if (!hazard.hit && dist < player.r + hazard.r) {
+                hazard.hit = true;
+                hazard.life = 0;
+                damagePlayer('enemy');
+            }
+            addP(hazard.x, hazard.y, '#ff5dad', 1, 28, 0.08, 1);
+        }
+        // ── Grenade: arcing projectile that splits into submunitions ──
+        if (hazard.type === 'grenade') {
+            hazard.x += hazard.vx * dt;
+            hazard.y += hazard.vy * dt;
+            hazard.vy += 80 * dt; // gravity arc
+            if (Math.random() < 0.3) addP(hazard.x, hazard.y, '#ff6600', 1, 25, 0.1, 1.5);
+            // Detonate when hitting wall/floor or life expires
+            const hitWall = hazard.x < WALL || hazard.x > arena.width - WALL ||
+                            hazard.y < arena.top || hazard.y > arena.height - WALL;
+            if (hazard.life <= 0.1 || hitWall) {
+                // Split into 3 submunitions
+                for (let s = 0; s < 3; s++) {
+                    const ang = (s / 3) * Math.PI * 2;
+                    hazards.push({ id: nextHazardId++, type: 'enemybullet',
+                        x: hazard.x, y: hazard.y,
+                        vx: Math.cos(ang) * 200, vy: Math.sin(ang) * 200,
+                        r: 5, life: 0.9, color: '#ffaa00', hit: false });
+                }
+                addRing(hazard.x, hazard.y, '#ff6600', 260, 70, 0.3, 2.0);
+                addSparks(hazard.x, hazard.y, '#ff6600', 10, 150, 0.35, Math.PI * 2);
+                addP(hazard.x, hazard.y, '#ff6600', 16, 160, 0.3, 3);
+                hazard.hit = true;
+                hazard.life = 0;
+            }
+        }
+        // ── Clone: wraith decoy that explodes after lifetime ──
+        if (hazard.type === 'clone') {
+            if (Math.random() < 0.2) addP(hazard.x + (Math.random()-0.5)*hazard.r, hazard.y + (Math.random()-0.5)*hazard.r, '#9f57ff', 2, 35, 0.2, 2);
+            if (hazard.life <= 0) {
+                addRing(hazard.x, hazard.y, '#9f57ff', 240, 70, 0.4, 2.0);
+                addSparks(hazard.x, hazard.y, '#9f57ff', 10, 160, 0.4, Math.PI * 2);
+                addP(hazard.x, hazard.y, '#9f57ff', 18, 180, 0.4, 4);
+                const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
+                if (dist < 70) damagePlayer('enemy');
+                screenShake = Math.min(2.5, screenShake + 0.15);
+            }
+        }
     });
-    hazards = hazards.filter((hazard) => hazard.life > 0 && (
-        hazard.type === 'singularity' ||
-        hazard.type === 'enemybullet' ||
-        hazard.type === 'empring' ||
-        hazard.radius < hazard.maxRadius
-    ));
+    let hw = 0;
+    for (let i = 0; i < hazards.length; i++) {
+        const h = hazards[i];
+        const alive = h.life > 0;
+        const keep = alive && (
+            h.type === 'singularity' ||
+            h.type === 'singularity_shot' ||
+            (h.type === 'enemybullet' && !h.hit) ||
+            (h.type === 'ricochet' && !h.hit) ||
+            (h.type === 'empring' && h.radius < h.maxRadius) ||
+            (h.type === 'magnetmine') ||
+            (h.type === 'slowzone') ||
+            (h.type === 'grenade' && !h.hit) ||
+            (h.type === 'clone') ||
+            (h.type === 'ring' && h.radius < h.maxRadius) ||
+            (h.type === 'gravity' && h.radius < h.maxRadius)
+        );
+        if (keep) hazards[hw++] = h;
+    }
+    hazards.length = hw;
 }
 
 // ── Status Effects on Enemies ──
@@ -4322,20 +4628,74 @@ function updateAbilityTimers(dt) {
 }
 
 function updateFxTexts(dt) {
-    fxTexts.forEach((text) => {
+    let fw = 0;
+    for (let i = 0; i < fxTexts.length; i++) {
+        const text = fxTexts[i];
         text.y += text.vy * dt;
         text.life -= dt;
-    });
-    fxTexts = fxTexts.filter((text) => text.life > 0);
+        if (text.life > 0) fxTexts[fw++] = text;
+    }
+    fxTexts.length = fw;
 }
 
 function updateParticles(dt) {
-    particles.forEach((particle) => {
-        particle.x += particle.vx * dt;
-        particle.y += particle.vy * dt;
-        particle.life -= dt;
-    });
-    particles = particles.filter((particle) => particle.life > 0);
+    let ppw = 0;
+    for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life > 0) particles[ppw++] = p;
+    }
+    particles.length = ppw;
+}
+
+// ── VFX helpers ──────────────────────────────────────────────────────────────
+
+function addRing(x, y, color, speed, maxRadius, life, lineWidth) {
+    vfxRings.push({ x, y, color, r: 0, speed, maxRadius, life, maxLife: life, lineWidth: lineWidth || 1.5 });
+}
+
+function addSparks(x, y, color, count, speed, life, spreadAngle, dirAngle) {
+    const base = dirAngle !== undefined ? dirAngle : 0;
+    const half = spreadAngle !== undefined ? spreadAngle / 2 : Math.PI;
+    for (let i = 0; i < count; i++) {
+        const a = base - half + Math.random() * half * 2;
+        const s = speed * (0.5 + Math.random() * 0.8);
+        vfxSparks.push({
+            x, y,
+            vx: Math.cos(a) * s,
+            vy: Math.sin(a) * s,
+            life, maxLife: life,
+            color,
+            len: 6 + Math.random() * 8
+        });
+    }
+}
+
+function updateVfxRings(dt) {
+    let w = 0;
+    for (let i = 0; i < vfxRings.length; i++) {
+        const r = vfxRings[i];
+        r.r += r.speed * dt;
+        r.life -= dt;
+        if (r.life > 0 && r.r < r.maxRadius) vfxRings[w++] = r;
+    }
+    vfxRings.length = w;
+}
+
+function updateVfxSparks(dt) {
+    let w = 0;
+    for (let i = 0; i < vfxSparks.length; i++) {
+        const s = vfxSparks[i];
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.vx *= 0.88;
+        s.vy *= 0.88;
+        s.life -= dt;
+        if (s.life > 0) vfxSparks[w++] = s;
+    }
+    vfxSparks.length = w;
 }
 
 function checkWaveProgress() {
@@ -4354,6 +4714,141 @@ function checkWaveProgress() {
         levelClearHandled = true;
         victory();
     }
+}
+
+// ── Hit VFX — sparks + optional crit ring ────────────────────────────────────
+function triggerHitVfx(x, y, color, isCrit, shootDirX, shootDirY) {
+    const dirAngle = (shootDirX !== undefined && shootDirY !== undefined)
+        ? Math.atan2(shootDirY, shootDirX) + Math.PI
+        : undefined;
+    if (isCrit) {
+        addSparks(x, y, '#ffffff', 6, 220, 0.18, Math.PI, dirAngle);
+        addSparks(x, y, color,    4, 160, 0.22, Math.PI * 0.6, dirAngle);
+        addRing(x, y, '#ffffff', 320, 40, 0.14, 1.2);
+        screenShake = Math.min(2.5, screenShake + 0.08);
+    } else {
+        addSparks(x, y, color, 3, 130, 0.14, Math.PI * 0.8, dirAngle);
+    }
+}
+
+// ── Death VFX — type-specific enemy death bursts ─────────────────────────────
+function triggerDeathVfx(enemy) {
+    const x = enemy.x, y = enemy.y, c = enemy.glow;
+    const isBoss = enemy.isBoss;
+
+    if (isBoss) {
+        addP(x, y, c, 48, 280, 0.9, 8);
+        addP(x, y, '#ffffff', 20, 200, 0.35, 5);
+        addRing(x, y, c,       280, 200, 0.55, 3);
+        addRing(x, y, '#ffffff', 200, 260, 0.4,  1.5);
+        addRing(x, y, c,       120, 320, 0.65, 2);
+        addSparks(x, y, c, 16, 300, 0.55, Math.PI * 2);
+        addSparks(x, y, '#ffffff', 8, 200, 0.3, Math.PI * 2);
+        screenShake = Math.min(3, screenShake + 1.2);
+        return;
+    }
+
+    const ai = enemy.ai;
+
+    if (ai === 'strafe') {
+        // Drone: cyan electric burst
+        addP(x, y, '#7be8ff', 10, 110, 0.3, 2);
+        addSparks(x, y, '#7be8ff', 8, 180, 0.22, Math.PI * 2);
+        addRing(x, y, '#7be8ff', 260, 50, 0.18, 1.2);
+
+    } else if (ai === 'sprint') {
+        // Chaser: purple blink-dissolve
+        addP(x, y, '#bc13fe', 14, 160, 0.4, 3);
+        addP(x, y, '#e080ff', 6, 80, 0.2, 2);
+        addSparks(x, y, '#e080ff', 6, 140, 0.28, Math.PI * 2);
+        addRing(x, y, '#bc13fe', 220, 60, 0.22, 1.5);
+
+    } else if (ai === 'heavy') {
+        // Tank: orange EMP double-ring
+        addP(x, y, '#ff9d00', 16, 140, 0.45, 4);
+        addSparks(x, y, '#ff9d00', 10, 220, 0.3, Math.PI * 2);
+        addRing(x, y, '#ff9d00', 300, 90, 0.28, 2.5);
+        addRing(x, y, '#ffcc44', 180, 140, 0.35, 1.5);
+        screenShake = Math.min(2.5, screenShake + 0.3);
+
+    } else if (ai === 'swarm') {
+        // Swarmling: small splitter burst
+        addP(x, y, '#7be8ff', 5, 70, 0.2, 1);
+        addSparks(x, y, '#7be8ff', 4, 100, 0.15, Math.PI * 2);
+
+    } else if (ai === 'brute') {
+        // Brute: shockwave ground stomp
+        addP(x, y, '#ffaa00', 18, 180, 0.5, 5);
+        addSparks(x, y, '#ffaa00', 10, 200, 0.32, Math.PI * 2);
+        addRing(x, y, '#ffaa00', 350, 120, 0.32, 3);
+        addRing(x, y, '#ffffff', 200, 160, 0.22, 1);
+        screenShake = Math.min(2.5, screenShake + 0.5);
+
+    } else if (ai === 'sniper') {
+        // Sniper: pink tracer sparks in 8 directions
+        addP(x, y, '#ff5dad', 8, 130, 0.3, 2);
+        for (let i = 0; i < 8; i++) {
+            const a = (Math.PI / 4) * i;
+            addSparks(x, y, '#ff5dad', 2, 260, 0.25, 0.15, a);
+        }
+        addRing(x, y, '#ff5dad', 240, 70, 0.2, 1.2);
+
+    } else if (ai === 'bomber') {
+        // Bomber death already creates hazard ring — add extra VFX layer
+        addSparks(x, y, '#ff7035', 12, 260, 0.38, Math.PI * 2);
+        addRing(x, y, '#ff7035', 380, 150, 0.42, 2);
+        addRing(x, y, '#ffcc44', 220, 180, 0.3, 1.2);
+
+    } else if (ai === 'healer') {
+        // Healer: green dispersal cloud
+        addP(x, y, '#34ffae', 14, 120, 0.4, 3);
+        addSparks(x, y, '#34ffae', 8, 140, 0.28, Math.PI * 2);
+        addRing(x, y, '#34ffae', 200, 80, 0.25, 1.5);
+
+    } else if (ai === 'shielder') {
+        // Shielder: shield shatters
+        addP(x, y, '#5cc1ff', 14, 150, 0.4, 3);
+        addSparks(x, y, '#5cc1ff', 12, 230, 0.3, Math.PI * 2);
+        addRing(x, y, '#5cc1ff', 320, 100, 0.3, 2);
+        addRing(x, y, '#ffffff', 180, 130, 0.22, 1);
+
+    } else if (ai === 'wraith') {
+        // Wraith: ghostly wisps drift slowly upward
+        for (let i = 0; i < 10; i++) {
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
+            const s = 40 + Math.random() * 60;
+            particles.push({ x: x + (Math.random() - 0.5) * 30, y,
+                vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+                life: 0.5 + Math.random() * 0.4, maxLife: 0.9,
+                color: '#9f57ff', r: 3 + Math.random() * 3 });
+        }
+        addSparks(x, y, '#9f57ff', 6, 100, 0.35, Math.PI * 2);
+        addRing(x, y, '#9f57ff', 160, 60, 0.3, 1);
+
+    } else if (ai === 'crusher') {
+        // Crusher: massive red shockwave
+        addP(x, y, '#ff5040', 24, 220, 0.6, 6);
+        addP(x, y, '#ffffff', 10, 160, 0.3, 3);
+        addSparks(x, y, '#ff5040', 14, 300, 0.45, Math.PI * 2);
+        addRing(x, y, '#ff5040', 420, 180, 0.45, 3.5);
+        addRing(x, y, '#ffaa44', 260, 240, 0.35, 2);
+        screenShake = Math.min(2.5, screenShake + 0.7);
+
+    } else if (ai === 'berserker') {
+        // Berserker: rage burst
+        addP(x, y, '#ff2030', 16, 190, 0.45, 4);
+        addSparks(x, y, '#ff2030', 10, 250, 0.32, Math.PI * 2);
+        addRing(x, y, '#ff2030', 300, 110, 0.3, 2);
+
+    } else {
+        // Generic fallback
+        addP(x, y, c, 14, 160, 0.4, 3);
+        addSparks(x, y, c, 6, 150, 0.22, Math.PI * 2);
+        addRing(x, y, c, 220, 70, 0.22, 1.2);
+    }
+
+    // Shared small white flash on every kill
+    addP(x, y, '#ffffff', 4, 100, 0.18, 2);
 }
 
 function triggerKill(enemy) {
@@ -4398,8 +4893,7 @@ function triggerKill(enemy) {
     if (player.doubleDropChance > 0 && Math.random() < player.doubleDropChance) {
         killGold *= 2;
     }
-    addP(enemy.x, enemy.y, enemy.glow, enemy.isBoss ? 42 : 18, enemy.isBoss ? 260 : 210, 0.8, enemy.isBoss ? 7 : 4);
-    addP(enemy.x, enemy.y, '#ffffff', enemy.isBoss ? 16 : 6, enemy.isBoss ? 180 : 120, 0.26, enemy.isBoss ? 4 : 2);
+    triggerDeathVfx(enemy);
     if (killGold > 0) {
         pickups.push({ x: enemy.x, y: enemy.y, gold: killGold, alive: true, spin: 0 });
     }
@@ -4584,7 +5078,7 @@ function grantAbilityXp(amount) {
     while (player.abilityXp >= player.nextAbilityXp) {
         player.abilityXp -= player.nextAbilityXp;
         player.abilityLevel += 1;
-        player.nextAbilityXp = Math.floor(player.nextAbilityXp * 1.24);
+        player.nextAbilityXp = Math.floor(player.nextAbilityXp * 1.18);
         openAbilityDraft();
         if (abilityPicking) break;
     }
@@ -7777,7 +8271,7 @@ function createPlayer() {
         bossReviveUsed: false,
         orbiters: [],
         abilityXp: save.bonusAbilityXp || 0,
-        nextAbilityXp: 12,
+        nextAbilityXp: 8,
         abilityLevel: 1,
         abilityRanks: {},
         chainLightning: false,
@@ -8192,6 +8686,8 @@ window.testStartArena = function() {
     hazards = [];
     fxTexts = [];
     lightningBolts = [];
+    vfxRings = [];
+    vfxSparks = [];
     keys = {};
 
     window.canvas = document.getElementById('game-canvas');
@@ -8397,6 +8893,7 @@ function updateTestBuffs() {
     if (p.shardsOnHit) buffs.push(`Shards ×${p.shardCount}`);
     if (p.arcOnHit) buffs.push(`Arc /${p.arcEvery}`);
     if (p.critExplode) buffs.push('Crit Bomb');
+    if (p.frenzyOnKill) buffs.push('Frenzy');
     if (p.frenzyOnKill) buffs.push('Frenzy');
     if (p.frenzyOnKill) buffs.push('Frenzy');
     if (p.killSpeedBoost) buffs.push('Trigger');

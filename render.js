@@ -1321,6 +1321,13 @@ function drawInGameHud(width) {
 // ── Passive ability icons: bottom-right, glow when triggered ──────────────────
 const _passiveIconTriggers = {}; // id → timer (seconds to glow)
 function triggerPassiveIconGlow(id) { _passiveIconTriggers[id] = 0.55; }
+function updatePassiveIconTimers(dt) {
+    for (const id in _passiveIconTriggers) {
+        if (_passiveIconTriggers[id] > 0) {
+            _passiveIconTriggers[id] = Math.max(0, _passiveIconTriggers[id] - dt);
+        }
+    }
+}
 
 function drawPassiveIcons(width, height) {
     if (!player || !player.abilityRanks) return;
@@ -1338,7 +1345,6 @@ function drawPassiveIcons(width, height) {
         const icon = ability ? (ability.icon || id.slice(0,3).toUpperCase()) : id.slice(0,3).toUpperCase();
         const rank = player.abilityRanks[id] || 0;
         const glowT = _passiveIconTriggers[id] || 0;
-        if (glowT > 0) _passiveIconTriggers[id] = Math.max(0, glowT - 0.016);
 
         const x = startX + i * (SIZE + GAP);
         const glowing = glowT > 0;

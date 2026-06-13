@@ -925,6 +925,7 @@ let fxTexts = [];
 let lightningBolts = [];
 let vfxRings = [];
 let vfxSparks = [];
+let droneQueue = []; // pending drone hits: { target, dmg, delay, aoe, color }
 let keys = {};
 let lastTime = 0;
 let currentLevelWaves = [];
@@ -2414,6 +2415,7 @@ function startLevel() {
     lightningBolts = [];
     vfxRings = [];
     vfxSparks = [];
+    droneQueue = [];
     waveSpawnQueue = [];
     keys = {};
     save.bonusAbilityXp = 0;
@@ -2557,7 +2559,7 @@ function triggerActiveAbility() {
         case 'death_bloom': {
             const radii = [100, 140, 180][lv - 1] || 100;
             const mults = [2.5, 3.5, 5.0][lv - 1] || 2.5;
-            const dmg = player.dmg * player.damageMultiplier * mults;
+            const dmg = player.dmg * player.damageMultiplier * mults * (player.activeFreezeBoost || 1);
             const rings = lv >= 3 ? 3 : 1;
             for (let ri = 0; ri < rings; ri++) {
                 addRing(player.x, player.y, def.color, 300, radii + ri * 30, 0.5 - ri * 0.08, 3);
@@ -2570,7 +2572,8 @@ function triggerActiveAbility() {
                     e.hitFlash = 0.2;
                     if (lv >= 2) { // knockback
                         const ed = Math.max(1, d), ex = (e.x - player.x) / ed, ey = (e.y - player.y) / ed;
-                        e.x += ex * 60; e.y += ey * 60;
+                        e.x = Math.max(WALL + e.r, Math.min(arena.width  - WALL - e.r, e.x + ex * 60));
+                        e.y = Math.max(arena.top  + e.r, Math.min(arena.height - WALL - e.r, e.y + ey * 60));
                     }
                     if (e.hp <= 0) triggerKill(e);
                 }
@@ -2613,20 +2616,12 @@ function triggerActiveAbility() {
             const count = [2, 3, 5][lv - 1] || 2;
             const dmgMult = [1.5, 1.6, 1.8][lv - 1] || 1.5;
             const aoe = lv >= 2;
-            // Find the 'count' closest enemies and fire drones at them
+            const ddmg = player.dmg * player.damageMultiplier * dmgMult * (player.activeFreezeBoost || 1);
+            // Find the 'count' closest alive enemies
             const alive = enemies.filter(e => e.alive);
             alive.sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
             alive.slice(0, count).forEach((target, i) => {
-                // Drones travel instantly — apply damage with small stagger
-                setTimeout(() => {
-                    if (!target.alive) return;
-                    const ddmg = player.dmg * player.damageMultiplier * dmgMult;
-                    target.hp -= ddmg;
-                    target.hitFlash = 0.2;
-                    addRing(target.x, target.y, def.color, 240, aoe ? 60 : 30, 0.35, 2.0);
-                    addSparks(target.x, target.y, def.color, aoe ? 8 : 4, 140, 0.3, Math.PI * 2);
-                    if (target.hp <= 0) triggerKill(target);
-                }, i * 120);
+                droneQueue.push({ target, dmg: ddmg, delay: i * 0.12, aoe, color: def.color });
             });
             if (alive.length === 0) {
                 addFxText(player.x, player.y - 30, 'NO TARGETS', def.color, 0.8, 18);
@@ -2662,6 +2657,23 @@ function updateActiveAbility(dt) {
             player.activeFreezeBoost = 1;
         }
     }
+    // Drone queue — staggered hits in game-loop time, no setTimeout
+    for (let i = droneQueue.length - 1; i >= 0; i--) {
+        const d = droneQueue[i];
+        d.delay -= dt;
+        if (d.delay <= 0) {
+            if (d.target.alive) {
+                d.target.hp -= d.dmg;
+                d.target.hitFlash = 0.2;
+                addRing(d.target.x, d.target.y, d.color, 240, d.aoe ? 60 : 30, 0.35, 2.0);
+                addSparks(d.target.x, d.target.y, d.color, d.aoe ? 8 : 4, 140, 0.3, Math.PI * 2);
+                if (d.target.hp <= 0) triggerKill(d.target);
+            }
+            droneQueue.splice(i, 1);
+        }
+    }
+    // Passive icon timer decay (uses real dt instead of hardcoded 0.016)
+    if (typeof updatePassiveIconTimers === 'function') updatePassiveIconTimers(dt);
 }
 
 function createEnemy(type, x, y) {
@@ -2998,7 +3010,7 @@ function updateAutoFire(dt) {
     // ── Platinum Rounds stacking damage ──
     const platDmg = 1 + (player.platinumDmg || 0);
 
-    const baseBulletDmg = player.dmg * player.damageMultiplier * comboDmg * platDmg;
+    const baseBulletDmg = player.dmg * player.damageMultiplier * comboDmg * platDmg * (player.activeFreezeBoost || 1);
 
     const baseAngle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
     // Lower base spread so multishot stays tight/centered. Spread Volley adds explicit spread.
@@ -4605,7 +4617,7 @@ function updateHazards(dt) {
         // ── Slowzone: persistent area that slows player ──
         if (hazard.type === 'slowzone') {
             const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
-            if (dist < hazard.r) {
+            if (dist < hazard.r && !hazard.isDashZone) {
                 player.slowOverride = Math.max(player.slowOverride || 0, 0.45);
             }
             if (Math.random() < 0.08) addP(hazard.x + (Math.random()-0.5)*hazard.r, hazard.y + (Math.random()-0.5)*hazard.r, '#ffaa00', 1, 20, 0.2, 1);
@@ -5626,21 +5638,6 @@ function applyAbility(id) {
             if (rank >= 4) player.poisonJump = true;
             // Add baseline damage so it's tangible even if DoT engine isn't deep
             player.damageMultiplier *= [1.05, 1.10, 1.20, 1.35][rank - 1] || 1.05;
-            break;
-        }
-        case 'bullet_storm': {
-            player.frenzyOnKill = true;
-            player.frenzyCap = [0.30, 0.50, 0.80, 99][rank - 1] || 0.30;
-            if (rank >= 2) player.damageMultiplier *= 1.10;
-            if (rank >= 3) player.slowImmune = true;
-            if (rank >= 4) player.frenzyPermanent = true;
-            break;
-        }
-        case 'lucky_seven': {
-            player.luckyEvery = [7, 7, 5, 4][rank - 1] || 7;
-            player.luckyMult = [5, 8, 10, 15][rank - 1] || 5;
-            if (rank >= 3) player.luckyHeals = 1;
-            if (rank >= 4) player.megaCritChance = 0.15;
             break;
         }
         case 'crit_chance': {

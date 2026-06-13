@@ -966,6 +966,7 @@ const MusicManager = (() => {
     let current = null;
     let currentKey = null;
     let pendingPlay = null; // queued play call while tracks still loading
+    const fadeTimers = new Map(); // el → interval id, so syncVolume can cancel in-flight fades
 
     function loadAudio(src, loop) {
         const el = new Audio(src);
@@ -1032,6 +1033,8 @@ const MusicManager = (() => {
     }
 
     function fadeTo(el, targetVol, cb) {
+        // Cancel any in-flight fade on this element first
+        if (fadeTimers.has(el)) { clearInterval(fadeTimers.get(el)); fadeTimers.delete(el); }
         const steps = 12, interval = 25;
         const startVol = el.volume;
         const delta = (targetVol - startVol) / steps;
@@ -1039,8 +1042,9 @@ const MusicManager = (() => {
         const t = setInterval(() => {
             step++;
             el.volume = Math.max(0, Math.min(1, startVol + delta * step));
-            if (step >= steps) { clearInterval(t); if (cb) cb(); }
+            if (step >= steps) { clearInterval(t); fadeTimers.delete(el); if (cb) cb(); }
         }, interval);
+        fadeTimers.set(el, t);
     }
 
     function stopCurrent(cb) {
@@ -1116,9 +1120,13 @@ const MusicManager = (() => {
 
     function syncVolume() {
         const vol = getVolume();
-        menuTracks.forEach(t => { if (t) t.volume = vol; });
-        fightTracks.forEach(t => { if (t) t.volume = vol; });
-        if (tracks.boss) tracks.boss.volume = vol;
+        const allTracks = [...menuTracks, ...fightTracks, tracks.boss].filter(Boolean);
+        allTracks.forEach(t => {
+            // Cancel any in-flight fade so it doesn't override the new volume
+            if (fadeTimers.has(t)) { clearInterval(fadeTimers.get(t)); fadeTimers.delete(t); }
+            // Only update volume on tracks that are actually playing (not paused/unstarted)
+            if (!t.paused) t.volume = vol;
+        });
     }
 
     function hasTrack(key) {

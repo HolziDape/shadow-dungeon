@@ -1395,16 +1395,17 @@ function drawPassiveIcons(width, height) {
 // Boss bars — one big top-of-screen bar per living boss. Stacked if multiple.
 // ─────────────────────────────────────────────────────────────────────────────
 function drawBossBars(width, safeTop) {
-    const bosses = enemies.filter((e) => e && e.alive && e.isBoss);
-    if (bosses.length === 0) return;
-
     const barW = Math.min(560, width - 80);
     const barH = 18;
     const gapY = 8;
     const startY = safeTop + 110;
     const x = (width - barW) / 2;
+    let bi = 0;
 
-    bosses.forEach((boss, i) => {
+    for (let _ei = 0; _ei < enemies.length; _ei++) {
+        const boss = enemies[_ei];
+        if (!boss || !boss.alive || !boss.isBoss) continue;
+        const i = bi++;
         const y = startY + i * (barH + gapY + 14);
         const pct = Math.max(0, Math.min(1, boss.hp / Math.max(1, boss.maxHp)));
 
@@ -1441,7 +1442,7 @@ function drawBossBars(width, safeTop) {
         ctx.fillText(hpLabel, x + barW - 2, y - 4);
 
         ctx.restore();
-    });
+    }
 }
 
 // ── Frenzy indicator: shows how many stacks of Frenzy are active ──

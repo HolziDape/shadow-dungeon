@@ -36,7 +36,7 @@ stock: {
     desc:'Clean factory frame. Neutral cyan engine signature.',
     style:{ ship:'#ffffff', core:'#00f2ff', trail:'rgba(0,242,255,0.30)', shot:'#f5fbff', pulse:'#00f2ff' },
     drawBody(ctx, r, style, rv, ia, mvx=0, mvy=0) {
-        const sc=r/34, t=performance.now()/1000;
+        const sc=r/34, t=_renderNow * 0.001;
         const spd=Math.hypot(mvx,mvy);
         const fwd=Math.max(0,-mvy);   // 0..1, positive when moving toward nose
         const pts=[[0,-34*sc],[20*sc,30*sc],[0,20*sc],[-20*sc,30*sc]];
@@ -142,7 +142,7 @@ ember_blade: {
     desc:'Hot magma plate with embers trailing the wake.',
     style:{ ship:'#ff8030', core:'#ffe168', trail:'rgba(255,120,30,0.55)', shot:'#ffd27d', pulse:'#ff7020' },
     drawBody(ctx, r, style, rv, ia, mvx=0, mvy=0) {
-        const sc=r/36, t=performance.now()/1000;
+        const sc=r/36, t=_renderNow * 0.001;
         const spd=Math.hypot(mvx,mvy);
         const fwd=Math.max(0,-mvy);
         const pts=[[0,-36*sc],[22*sc,26*sc],[0,18*sc],[-22*sc,26*sc]];
@@ -238,7 +238,7 @@ violet_drift: {
     desc:'Void wave envelope, leaves a glassy purple ribbon.',
     style:{ ship:'#c890ff', core:'#bc13fe', trail:'rgba(188,19,254,0.55)', shot:'#d78fff', pulse:'#bc13fe' },
     drawBody(ctx, r, style, rv, ia, mvx=0, mvy=0) {
-        const sc=r/36, t=performance.now()/1000;
+        const sc=r/36, t=_renderNow * 0.001;
         const spd=Math.hypot(mvx,mvy);
         const fwd=Math.max(0,-mvy);
         const pts=[[0,-36*sc],[26*sc,28*sc],[0,16*sc],[-26*sc,28*sc]];
@@ -348,7 +348,7 @@ solar_flare: {
     desc:'Stellar corona with heavy gold muzzle flash.',
     style:{ ship:'#ffe698', core:'#ffd14d', trail:'rgba(255,209,77,0.60)', shot:'#ffe698', pulse:'#ffd14d' },
     drawBody(ctx, r, style, rv, ia, mvx=0, mvy=0) {
-        const sc=r/38, t=performance.now()/1000;
+        const sc=r/38, t=_renderNow * 0.001;
         const spd=Math.hypot(mvx,mvy);
         const fwd=Math.max(0,-mvy);
         // Debris/spin speed increases with player speed
@@ -449,7 +449,7 @@ crimson_afterburn: {
     style:{ ship:'#ff375f', core:'#ffe1e8', trail:'rgba(255,55,95,0.65)', shot:'#ff8ba2', pulse:'#ff375f' },
     exclusive:true,
     drawBody(ctx, r, style, rv, ia, mvx=0, mvy=0) {
-        const sc=r/40, t=performance.now()/1000;
+        const sc=r/40, t=_renderNow * 0.001;
         const spd=Math.hypot(mvx,mvy);
         const fwd=Math.max(0,-mvy);
         const fl=1.0+Math.sin(t*8)*0.18+fwd*0.55; // flame length factor
@@ -563,7 +563,7 @@ aurora_zero: {
     style:{ ship:'#fffbe8', core:'#ffd14d', trail:'rgba(123,232,255,0.7)', shot:'#fff4b0', pulse:'#7be8ff' },
     exclusive:true,
     drawBody(ctx, r, style, rv, ia, mvx=0, mvy=0) {
-        const sc=r/38, t=performance.now()/1000;
+        const sc=r/38, t=_renderNow * 0.001;
         const spd=Math.hypot(mvx,mvy);
         const ROW=['#7be8ff','#fffbe8','#ffd14d','#ff8ba2','#bc13fe'];
         const pts=[[0,-38*sc],[24*sc,30*sc],[0,18*sc],[-24*sc,30*sc]];

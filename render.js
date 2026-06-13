@@ -938,6 +938,84 @@ function drawPlayer() {
     skin.drawBody(ctx, player.r, style, rarityVfx, invulAlpha, _lmx, _lmy);
     ctx.restore();
     ctx.globalAlpha = 1;
+
+    // ── Active Ability: Cooldown Arc + Ready Glow ──────────────────────────
+    if (player.activeAbility) {
+        const def = typeof ACTIVE_ABILITIES !== 'undefined'
+            ? ACTIVE_ABILITIES.find(a => a.id === player.activeAbility) : null;
+        const col = def ? def.color : '#ffffff';
+        const maxCD = player.activeMaxCooldown || 1;
+        const curCD = player.activeCooldown || 0;
+        const fill = 1 - curCD / maxCD; // 0 = empty, 1 = ready
+        const arcR = player.r + 14;
+        const startAngle = -Math.PI / 2;
+
+        ctx.save();
+        // Background track
+        ctx.globalAlpha = 0.18;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, arcR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Filled arc
+        if (fill > 0) {
+            ctx.globalAlpha = fill > 0.99 ? 0.9 + 0.1 * Math.sin(_renderNow * 0.008) : 0.75;
+            ctx.shadowBlur = fill > 0.99 ? 16 : 8;
+            ctx.shadowColor = col;
+            ctx.strokeStyle = col;
+            ctx.lineWidth = fill > 0.99 ? 3.5 : 3;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, arcR, startAngle, startAngle + Math.PI * 2 * fill);
+            ctx.stroke();
+        }
+
+        // Ready icon above player
+        if (curCD <= 0 && def) {
+            const pulse = 0.7 + 0.3 * Math.sin(_renderNow * 0.007);
+            ctx.globalAlpha = pulse;
+            ctx.fillStyle = col;
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = col;
+            ctx.font = 'bold 13px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(def.icon, player.x, player.y - arcR - 10);
+        }
+
+        // Activate flash ring
+        if (player.activeAbilityFlash > 0) {
+            ctx.globalAlpha = player.activeAbilityFlash * 0.8;
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 24;
+            ctx.shadowColor = col;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, arcR + (1 - player.activeAbilityFlash) * 30, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Shield visual when active
+        if (player.shieldActive) {
+            const sp = player.shieldTimer / player.shieldDuration;
+            ctx.globalAlpha = sp * 0.35;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.r + 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = sp * 0.85;
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 2.5;
+            ctx.shadowBlur = 18;
+            ctx.shadowColor = col;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.r + 8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
 }
 
 function drawParticles() {
@@ -1237,6 +1315,74 @@ function drawInGameHud(width) {
 
     drawBossBars(width, safeTop);
     drawFrenzyIndicator(width, safeTop);
+    drawPassiveIcons(width, height);
+}
+
+// ── Passive ability icons: bottom-right, glow when triggered ──────────────────
+const _passiveIconTriggers = {}; // id → timer (seconds to glow)
+function triggerPassiveIconGlow(id) { _passiveIconTriggers[id] = 0.55; }
+
+function drawPassiveIcons(width, height) {
+    if (!player || !player.abilityRanks) return;
+    const active = Object.keys(player.abilityRanks).filter(id => player.abilityRanks[id] > 0);
+    if (active.length === 0) return;
+
+    const SIZE = 26, GAP = 4, MAX = 8;
+    const shown = active.slice(0, MAX);
+    const totalW = shown.length * (SIZE + GAP) - GAP;
+    const startX = width - 16 - totalW;
+    const Y = height - 20 - SIZE;
+
+    shown.forEach((id, i) => {
+        const ability = typeof ABILITIES !== 'undefined' ? ABILITIES.find(a => a.id === id) : null;
+        const icon = ability ? (ability.icon || id.slice(0,3).toUpperCase()) : id.slice(0,3).toUpperCase();
+        const rank = player.abilityRanks[id] || 0;
+        const glowT = _passiveIconTriggers[id] || 0;
+        if (glowT > 0) _passiveIconTriggers[id] = Math.max(0, glowT - 0.016);
+
+        const x = startX + i * (SIZE + GAP);
+        const glowing = glowT > 0;
+
+        ctx.save();
+        // Box background
+        ctx.globalAlpha = glowing ? 0.85 : 0.5;
+        ctx.fillStyle = glowing ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.45)';
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x, Y, SIZE, SIZE, 5) : ctx.rect(x, Y, SIZE, SIZE);
+        ctx.fill();
+
+        // Glow border when active
+        if (glowing) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.shadowBlur = 12 * glowT;
+            ctx.shadowColor = '#fff';
+            ctx.globalAlpha = glowT;
+            ctx.beginPath();
+            ctx.roundRect ? ctx.roundRect(x, Y, SIZE, SIZE, 5) : ctx.rect(x, Y, SIZE, SIZE);
+            ctx.stroke();
+        }
+
+        // Icon text
+        ctx.globalAlpha = glowing ? 1 : 0.75;
+        ctx.fillStyle = '#fff';
+        ctx.shadowBlur = glowing ? 8 : 0;
+        ctx.shadowColor = '#fff';
+        ctx.font = `bold ${SIZE <= 26 ? 9 : 10}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(icon, x + SIZE / 2, Y + SIZE / 2 - 2);
+
+        // Rank dots
+        for (let r = 0; r < Math.min(rank, 4); r++) {
+            ctx.globalAlpha = 0.9;
+            ctx.fillStyle = rank >= 4 ? '#ffd14d' : '#aaa';
+            ctx.beginPath();
+            ctx.arc(x + 4 + r * 5, Y + SIZE - 5, 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

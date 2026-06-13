@@ -932,7 +932,8 @@ let currentLevelWaves = [];
 // Each entry: { type, remaining, batch, interval, timer }.
 // processWaveSpawnQueue() trickles enemies in instead of dropping them all at once.
 let waveSpawnQueue = [];
-let touchState = { active: false, x: 0, y: 0, lastX: 0, lastY: 0, dragVX: 0, dragVY: 0 };
+let touchState = { active: false, x: 0, y: 0, lastX: 0, lastY: 0, dragVX: 0, dragVY: 0,
+    lastTapTime: 0, movedDuringTouch: false };
 let activeAbilityChoices = [];
 let lastUpgradeId = '';
 let nextEnemyId = 1;
@@ -2473,12 +2474,16 @@ function handlePointerDown(event) {
     touchState.lastY = event.clientY;
     touchState.dragVX = 0;
     touchState.dragVY = 0;
+    touchState.movedDuringTouch = false;
 }
 
 function handlePointerMove(event) {
     if (!touchState.active) return;
     const dx = event.clientX - touchState.lastX;
     const dy = event.clientY - touchState.lastY;
+
+    // Mark as moved if drag is significant (not just finger wobble)
+    if (Math.hypot(dx, dy) > 6) touchState.movedDuringTouch = true;
 
     touchState.x = event.clientX;
     touchState.y = event.clientY;
@@ -2498,8 +2503,165 @@ function handlePointerMove(event) {
 
 function handlePointerUp() {
     touchState.active = false;
+    // ── Double-tap detection: two quick taps without drag ──
+    if (!touchState.movedDuringTouch && gameState === 'playing' && !abilityPicking) {
+        const now = performance.now();
+        if (now - touchState.lastTapTime < 300) {
+            touchState.lastTapTime = 0; // reset so triple-tap doesn't re-trigger
+            triggerActiveAbility();
+        } else {
+            touchState.lastTapTime = now;
+        }
+    }
     touchState.dragVX = 0;
     touchState.dragVY = 0;
+    touchState.movedDuringTouch = false;
+}
+
+// ── Active Ability: Double-Tap trigger ───────────────────────────────────────
+function triggerActiveAbility() {
+    if (!player || !player.activeAbility || player.activeCooldown > 0) return;
+    const def = ACTIVE_ABILITIES.find(a => a.id === player.activeAbility);
+    if (!def) return;
+    const lv = Math.max(1, player.activeAbilityLevel);
+    const cd = def.cooldowns[lv - 1] || def.cooldowns[0];
+    player.activeCooldown = cd;
+    player.activeMaxCooldown = cd;
+    player.activeAbilityFlash = 0.4;
+    playSfx('ability', 1.0);
+    addRing(player.x, player.y, def.color, 260, 80, 0.35, 2.5);
+
+    const nx = Math.sin(player.angle), ny = -Math.cos(player.angle);
+
+    switch (player.activeAbility) {
+        case 'dash': {
+            const dist = [120, 180, 240][lv - 1] || 120;
+            const dashes = lv >= 3 ? 2 : 1;
+            for (let d = 0; d < dashes; d++) {
+                const tx = Math.max(WALL + player.r, Math.min(arena.width  - WALL - player.r, player.x + nx * dist * (d + 1)));
+                const ty = Math.max(arena.top  + player.r, Math.min(arena.height - WALL - player.r, player.y + ny * dist * (d + 1)));
+                if (d === dashes - 1) { player.x = tx; player.y = ty; }
+            }
+            player.invulTimer = (player.invulTimer || 0) + 0.35;
+            if (lv >= 2) {
+                // Leave damage zone at old position
+                hazards.push({ id: nextHazardId++, type: 'slowzone',
+                    x: player.x - nx * dist, y: player.y - ny * dist,
+                    r: 50, life: 1.5, maxLife: 1.5, color: def.color,
+                    isDashZone: true });
+            }
+            addSparks(player.x, player.y, def.color, 10, 200, 0.3, Math.PI * 2);
+            screenShake = Math.min(2.5, screenShake + 0.1);
+            break;
+        }
+        case 'death_bloom': {
+            const radii = [100, 140, 180][lv - 1] || 100;
+            const mults = [2.5, 3.5, 5.0][lv - 1] || 2.5;
+            const dmg = player.dmg * player.damageMultiplier * mults;
+            const rings = lv >= 3 ? 3 : 1;
+            for (let ri = 0; ri < rings; ri++) {
+                addRing(player.x, player.y, def.color, 300, radii + ri * 30, 0.5 - ri * 0.08, 3);
+            }
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                const d = Math.hypot(e.x - player.x, e.y - player.y);
+                if (d < radii) {
+                    e.hp -= dmg;
+                    e.hitFlash = 0.2;
+                    if (lv >= 2) { // knockback
+                        const ed = Math.max(1, d), ex = (e.x - player.x) / ed, ey = (e.y - player.y) / ed;
+                        e.x += ex * 60; e.y += ey * 60;
+                    }
+                    if (e.hp <= 0) triggerKill(e);
+                }
+            });
+            addSparks(player.x, player.y, def.color, 14, 250, 0.4, Math.PI * 2);
+            screenShake = Math.min(2.5, screenShake + 0.35);
+            break;
+        }
+        case 'shield': {
+            const dur = [1.5, 2.5, 3.5][lv - 1] || 1.5;
+            player.invulTimer = (player.invulTimer || 0) + dur;
+            player.shieldActive = true;
+            player.shieldDuration = dur;
+            player.shieldTimer = dur;
+            if (lv >= 2) player.shieldReflect = true;
+            addRing(player.x, player.y, def.color, 180, 60, dur, 2.0);
+            addSparks(player.x, player.y, def.color, 8, 140, 0.3, Math.PI * 2);
+            break;
+        }
+        case 'freeze': {
+            const slows = [0.7, 0.9, 1.0][lv - 1] || 0.7;
+            const dur = [2.5, 2.5, 2.0][lv - 1] || 2.5;
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                e.frostSlow = slows;
+                e.frostTimer = dur;
+                if (lv >= 2) { e.frozen = true; e.frozenTimer = 0.4; }
+                if (lv >= 3) { e.frozen = true; e.frozenTimer = dur; }
+            });
+            if (lv >= 3) {
+                player.activeFreezeBoost = 1.3;
+                player.activeFreezeBoostTimer = 4.0;
+            }
+            addRing(player.x, player.y, def.color, 260, 300, 0.6, 2.5);
+            addSparks(player.x, player.y, def.color, 14, 300, 0.5, Math.PI * 2);
+            screenShake = Math.min(2.5, screenShake + 0.15);
+            break;
+        }
+        case 'drone_strike': {
+            const count = [2, 3, 5][lv - 1] || 2;
+            const dmgMult = [1.5, 1.6, 1.8][lv - 1] || 1.5;
+            const aoe = lv >= 2;
+            // Find the 'count' closest enemies and fire drones at them
+            const alive = enemies.filter(e => e.alive);
+            alive.sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
+            alive.slice(0, count).forEach((target, i) => {
+                // Drones travel instantly — apply damage with small stagger
+                setTimeout(() => {
+                    if (!target.alive) return;
+                    const ddmg = player.dmg * player.damageMultiplier * dmgMult;
+                    target.hp -= ddmg;
+                    target.hitFlash = 0.2;
+                    addRing(target.x, target.y, def.color, 240, aoe ? 60 : 30, 0.35, 2.0);
+                    addSparks(target.x, target.y, def.color, aoe ? 8 : 4, 140, 0.3, Math.PI * 2);
+                    if (target.hp <= 0) triggerKill(target);
+                }, i * 120);
+            });
+            if (alive.length === 0) {
+                addFxText(player.x, player.y - 30, 'NO TARGETS', def.color, 0.8, 18);
+            }
+            break;
+        }
+    }
+}
+
+function updateActiveAbility(dt) {
+    if (!player) return;
+    // Cooldown tick
+    if (player.activeCooldown > 0) player.activeCooldown = Math.max(0, player.activeCooldown - dt);
+    // Flash decay
+    if (player.activeAbilityFlash > 0) player.activeAbilityFlash = Math.max(0, player.activeAbilityFlash - dt * 3);
+    // Shield state cleanup
+    if (player.shieldActive) {
+        player.shieldTimer = (player.shieldTimer || 0) - dt;
+        if (player.shieldTimer <= 0) {
+            player.shieldActive = false;
+            player.shieldReflect = false;
+            if (player.shieldDuration >= 3.5) {
+                // Heal 1 HP on level 3 shield end
+                player.hp = Math.min(player.maxHp, player.hp + 1);
+                addFxText(player.x, player.y - 30, '+1 HP', '#5cc1ff', 1.0, 20);
+            }
+        }
+    }
+    // Freeze boost cleanup
+    if (player.activeFreezeBoostTimer > 0) {
+        player.activeFreezeBoostTimer -= dt;
+        if (player.activeFreezeBoostTimer <= 0) {
+            player.activeFreezeBoost = 1;
+        }
+    }
 }
 
 function createEnemy(type, x, y) {
@@ -2668,6 +2830,7 @@ function update(dt) {
     updateVfxSparks(dt);
     updateStatusEffects(dt);
     updateAbilityTimers(dt);
+    updateActiveAbility(dt);
     player.invulnerable = Math.max(0, player.invulnerable - dt);
     screenShake = Math.max(0, screenShake - dt * 3.2);
     powerPulse = Math.max(0, powerPulse - dt * 1.6);
@@ -2882,6 +3045,7 @@ function updateAutoFire(dt) {
 
     // ── Cluster Bomb ──
     if (player.clusterBomb && player.shotCounter % (player.clusterEvery || 10) === 0) {
+        if (typeof triggerPassiveIconGlow === 'function') triggerPassiveIconGlow('cluster_bomb');
         addP(player.x, player.y - 12, '#ff6b35', 12, 180, 0.25, 3);
         spawnProjectile({
             x: player.x,
@@ -2903,6 +3067,7 @@ function updateAutoFire(dt) {
     }
 
     if (player.echoShot && player.shotCounter % 4 === 0) {
+        if (typeof triggerPassiveIconGlow === 'function') triggerPassiveIconGlow('echo_shot');
         const echoRank = getAbilityRank('echo_shot');
         addP(player.x, player.y - 12, '#7be8ff', 8, 170, 0.2, 2);
         spawnProjectile({
@@ -3360,6 +3525,7 @@ function updateProjectiles(dt) {
 
             // ── Lifesteal (Vampire) ──
             if (player.lifesteal > 0 && !projectile.tornado && !projectile.isShard) {
+                if (typeof triggerPassiveIconGlow === 'function') triggerPassiveIconGlow('vampire');
                 player.healAccum += dmgApplied * player.lifesteal;
                 if (player.healAccum >= enemy.maxHp * 0.5) {
                     player.hp = Math.min(player.maxHp, player.hp + 1);
@@ -3379,6 +3545,7 @@ function updateProjectiles(dt) {
 
             // ── Frost on Hit ──
             if (player.frostOnHit && !projectile.tornado) {
+                if (typeof triggerPassiveIconGlow === 'function') triggerPassiveIconGlow('frost_shot');
                 enemy.frostSlow = player.frostStrength || 0.25;
                 enemy.frostTimer = 1.5;
                 if (player.frostDoT && !enemy.frozen) {
@@ -5095,6 +5262,37 @@ function getAbilityRank(id) {
     return player?.abilityRanks?.[id] || 0;
 }
 
+function showActiveAbilityPicker() {
+    // Replace current ability overlay with active ability sub-picker
+    const cards = document.getElementById('ability-cards');
+    if (!cards) return;
+    cards.innerHTML = '';
+
+    ACTIVE_ABILITIES.forEach((def, idx) => {
+        const card = document.createElement('div');
+        card.className = 'ability-card ability-card--epic';
+        card.innerHTML = `
+            <div class="ability-card__icon" style="color:${def.color}">${def.icon}</div>
+            <div class="ability-card__name">${def.name}</div>
+            <div class="ability-card__desc">${def.levels[0].desc}</div>
+        `;
+        card.addEventListener('click', () => {
+            player.activeAbility = def.id;
+            player.activeAbilityLevel = 1;
+            player.activeCooldown = 0;
+            player.activeMaxCooldown = def.cooldowns[0];
+            addFxText(player.x, player.y - 40, `${def.name} bereit!`, def.color, 1.2, 22);
+            closeAbilityOverlay();
+        });
+        cards.appendChild(card);
+    });
+}
+
+function closeAbilityOverlay() {
+    abilityPicking = false;
+    const overlay = document.getElementById('ability-overlay');
+    if (overlay) overlay.classList.remove('active');
+}
 
 function drawAbilityChoices() {
     const cards = document.getElementById('ability-cards');
@@ -5108,8 +5306,35 @@ function drawAbilityChoices() {
         const r = getAbilityRank(a.id);
         return r < (a.tree?.length || 1);
     });
-    const source = pool.length >= 3 ? pool : ABILITIES;
-    activeAbilityChoices = [...source].sort(() => Math.random() - 0.5).slice(0, 3);
+
+    // ── Active Slot card: inject from level 3, once no active ability chosen yet,
+    //    or again if player wants to level up their active ability ──
+    const showActiveSlot = player && player.abilityLevel >= 3 && (
+        !player.activeAbility ||
+        (player.activeAbilityLevel < 3 && Math.random() < 0.35)
+    );
+    if (showActiveSlot) {
+        // Build a synthetic "active slot" card that lets player pick or upgrade
+        const activeCard = {
+            id: 'active_slot',
+            name: player.activeAbility ? 'Skill Upgrade' : 'Aktiver Skill',
+            icon: 'ACT',
+            rarity: 'epic',
+            isActiveSlot: true,
+            tree: [{ name: player.activeAbility ? 'Skill Upgrade' : 'Aktiver Skill',
+                     tier: 'epic',
+                     desc: player.activeAbility
+                        ? `Level up: ${ACTIVE_ABILITIES.find(a=>a.id===player.activeAbility)?.name || ''}`
+                        : 'Wähle einen aktiven Skill für Double-Tap.' }]
+        };
+        // Replace one of the 3 slots with the active card
+        const source = pool.length >= 2 ? pool : ABILITIES;
+        const picked = [...source].sort(() => Math.random() - 0.5).slice(0, 2);
+        activeAbilityChoices = [activeCard, ...picked];
+    } else {
+        const source = pool.length >= 3 ? pool : ABILITIES;
+        activeAbilityChoices = [...source].sort(() => Math.random() - 0.5).slice(0, 3);
+    }
 
     activeAbilityChoices.forEach((ability, idx) => {
         const rank = getAbilityRank(ability.id);
@@ -5211,6 +5436,22 @@ window.confirmAbilityPick = function() {
 };
 
 function applyAbility(id) {
+    // ── Active Slot: show sub-picker for active ability choice or level up ──
+    if (id === 'active_slot') {
+        if (!player.activeAbility) {
+            showActiveAbilityPicker();
+        } else {
+            player.activeAbilityLevel = Math.min(3, (player.activeAbilityLevel || 1) + 1);
+            const def = ACTIVE_ABILITIES.find(a => a.id === player.activeAbility);
+            const lv = player.activeAbilityLevel;
+            if (def) {
+                player.activeMaxCooldown = def.cooldowns[lv - 1] || def.cooldowns[0];
+                addFxText(player.x, player.y - 40, `${def.name} LV${lv}!`, def.color, 1.2, 22);
+            }
+        }
+        return;
+    }
+
     player.abilityRanks[id] = (player.abilityRanks[id] || 0) + 1;
     const rank = player.abilityRanks[id];
     const ability = ABILITIES.find((entry) => entry.id === id);
@@ -8274,6 +8515,12 @@ function createPlayer() {
         nextAbilityXp: 8,
         abilityLevel: 1,
         abilityRanks: {},
+        // ── Active Ability (double-tap) ──
+        activeAbility: null,
+        activeAbilityLevel: 0,
+        activeCooldown: 0,
+        activeMaxCooldown: 0,
+        activeAbilityFlash: 0,  // visual burst on activate
         chainLightning: false,
         tornadoShot: false,
         echoShot: false,

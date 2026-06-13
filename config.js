@@ -37,6 +37,69 @@ const DAILY_LOGIN_REWARDS = [
 // (common/rare/epic/legendary) so the picker can colour them. Innovative late
 // ranks: not just "more damage" but new behaviours / VFX.
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVE ABILITIES — unlocked via special "Active Slot" card at ability lvl 3+
+// Triggered by double-tap on mobile. One slot, max level 3.
+// ─────────────────────────────────────────────────────────────────────────────
+const ACTIVE_ABILITIES = [
+    {
+        id: 'dash', name: 'Dash', icon: '⚡', color: '#7be8ff',
+        desc: 'Blitz-Dash in Schussrichtung. Kurze Unverwundbarkeit.',
+        cooldowns: [4, 3, 2.5],
+        levels: [
+            { name: 'Dash',         desc: '120px Dash, kurze Unverwundbarkeit.' },
+            { name: 'Blitz-Dash',   desc: '180px Dash, hinterlässt Schadenszone.' },
+            { name: 'Shadow-Dash',  desc: '240px, 2 Dashes hintereinander.' }
+        ]
+    },
+    {
+        id: 'death_bloom', name: 'Death Bloom', icon: '💥', color: '#ff5040',
+        desc: 'Explosion um dich herum. Knockback auf alle Gegner.',
+        cooldowns: [8, 7, 5],
+        levels: [
+            { name: 'Death Bloom',    desc: '250% ATK, 100px Radius.' },
+            { name: 'Plasma Bloom',   desc: '350% ATK, 140px, Knockback.' },
+            { name: 'Nova Bloom',     desc: '500% ATK, 180px, 3 Ring-Wellen.' }
+        ]
+    },
+    {
+        id: 'shield', name: 'Pulse Shield', icon: '🛡', color: '#5cc1ff',
+        desc: 'Kurze Schadensimmunität. Höhere Level reflektieren Kugeln.',
+        cooldowns: [12, 10, 8],
+        levels: [
+            { name: 'Pulse Shield',   desc: '1.5s Schadensimmunität.' },
+            { name: 'Mirror Shield',  desc: '2.5s + reflektiert Kugeln.' },
+            { name: 'Holy Shield',    desc: '3.5s + heilt 1 HP am Ende.' }
+        ]
+    },
+    {
+        id: 'freeze', name: 'Time Freeze', icon: '❄', color: '#aaf0ff',
+        desc: 'Verlangsamt alle Gegner. Höhere Level frieren ein.',
+        cooldowns: [14, 12, 10],
+        levels: [
+            { name: 'Time Freeze',    desc: '70% Slow alle Gegner, 2.5s.' },
+            { name: 'Deep Freeze',    desc: '90% Slow + Stun-Burst beim Aktivieren.' },
+            { name: 'Cryo Nova',      desc: 'Komplett eingefroren 2s + danach +30% ATK.' }
+        ]
+    },
+    {
+        id: 'drone_strike', name: 'Drone Strike', icon: '🎯', color: '#ffe168',
+        desc: 'Schickt Targeting-Drohnen auf Gegner.',
+        cooldowns: [16, 13, 10],
+        levels: [
+            { name: 'Drone Strike',   desc: '2 Drohnen, je 150% ATK.' },
+            { name: 'Strike Force',   desc: '3 Drohnen + AoE beim Einschlag.' },
+            { name: 'Swarm Strike',   desc: '5 Drohnen, verfolgen nächsten Gegner.' }
+        ]
+    }
+];
+
+// Special "Active Slot" card — shows up from ability level 3, lets you pick an active ability
+const ACTIVE_SLOT_CARD = {
+    id: 'active_slot', name: 'Aktiver Skill', icon: 'ACT', rarity: 'epic', unlockLevel: 3,
+    desc: 'Wähle eine aktive Fähigkeit für Double-Tap.'
+};
+
 const ABILITIES = [
     {
         id: 'damage_boost', name: 'Damage Core', icon: 'DMG', rarity: 'common', unlockLevel: 1,
@@ -221,26 +284,8 @@ const ABILITIES = [
             { name: 'Plague Carrier',   tier: 'legendary', desc: 'Gift jumps zwischen Gegnern wie ein Virus.' }
         ]
     },
-    {
-        id: 'bullet_storm', name: 'Frenzy Mode', icon: 'FRN', rarity: 'rare', unlockLevel: 10,
-        desc: 'Feuerrate steigt mit jedem Kill (max +30%).',
-        tree: [
-            { name: 'Frenzy Mode',      tier: 'rare',      desc: 'Feuerrate +3% pro Kill, max +30%, faellt wenn 2s ohne Kill.' },
-            { name: 'Killing Spree',    tier: 'rare',      desc: 'Stack max +50% + auch +10% Damage.' },
-            { name: 'Berserker',        tier: 'epic',      desc: 'Stack max +80% + immun gegen Slow.' },
-            { name: 'Eternal Storm',    tier: 'legendary', desc: 'Stacks faellen nicht mehr ab. Permanenter Frenzy.' }
-        ]
-    },
-    {
-        id: 'lucky_seven', name: 'Glueckszahl', icon: 'L7', rarity: 'common', unlockLevel: 5,
-        desc: 'Jeder 7. Schuss verursacht 5x Schaden.',
-        tree: [
-            { name: 'Glueckszahl',      tier: 'common',    desc: 'Jeder 7. Schuss = x5 Damage.' },
-            { name: 'Sieben Sterne',    tier: 'rare',      desc: 'Jeder 7. Schuss = x8 + Glanzeffekt.' },
-            { name: 'Jackpot',          tier: 'epic',      desc: 'Jeder 5. Schuss = x10 + heilt 1 HP bei Kill.' },
-            { name: 'Royal Flush',      tier: 'legendary', desc: 'Jeder 4. Schuss = x15 + chance auf Mega-Crit x30.' }
-        ]
-    },
+    // bullet_storm merged into rapid_fire (removed as separate card)
+    // lucky_seven removed (overlapped with crit_chance)
     {
         id: 'crit_chance', name: 'Praezisionskern', icon: 'CRT', rarity: 'common', unlockLevel: 4,
         desc: 'Schuesse haben 15% Chance auf Crit (x2).',

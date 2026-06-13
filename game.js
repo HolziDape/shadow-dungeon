@@ -956,13 +956,16 @@ let musicNodesStarted = false;
 // fight.mp3 and boss.mp3 are single tracks.
 // Falls back to procedural music if files are missing.
 const MusicManager = (() => {
-    // menuTracks: array of Audio elements for menu (shuffled each session)
+    // Both menu and fight support multiple tracks: menu.mp3/menu2.mp3/... and fight.mp3/fight2.mp3/...
     const menuTracks = [];
+    const fightTracks = [];
     let menuIndex = 0;
-    const tracks = { fight: null, boss: null };
-    const loaded = { fight: false, boss: false };
+    let fightIndex = 0;
+    const tracks = { boss: null };
+    const loaded = { boss: false };
     let current = null;
     let currentKey = null;
+    let pendingPlay = null; // queued play call while tracks still loading
 
     function loadAudio(src, loop) {
         const el = new Audio(src);
@@ -972,39 +975,56 @@ const MusicManager = (() => {
         return el;
     }
 
+    function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+    }
+
     function init() {
-        // Load menu tracks: menu.mp3, menu2.mp3 ... up to menu9.mp3
         const suffixes = ['', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+        // Menu tracks: menu.mp3, menu2.mp3 ...
         suffixes.forEach(s => {
             const el = loadAudio(`music/menu${s}.mp3`, false);
             let added = false;
-            const add = () => { if (!added) { added = true; menuTracks.push(el); } };
-            // Accept file as soon as ANY data arrives — canplaythrough too slow on file://
+            const add = () => {
+                if (!added) { added = true; menuTracks.push(el); }
+                if (pendingPlay === 'menu') { pendingPlay = null; play('menu'); }
+            };
             el.addEventListener('canplaythrough', add);
-            el.addEventListener('loadedmetadata', add);  // fires earlier
-            el.addEventListener('ended', () => { if (currentKey === 'menu') playNextMenu(); });
+            el.addEventListener('loadedmetadata', add);
+            el.addEventListener('ended', () => { if (currentKey === 'menu') playNext('menu'); });
             el.addEventListener('error', () => {});
             el.load();
         });
 
-        // Load single tracks — mark ready on loadedmetadata not just canplaythrough
-        ['fight', 'boss'].forEach(key => {
-            const el = loadAudio(`music/${key}.mp3`, true);
-            const markReady = () => { loaded[key] = true; };
-            el.addEventListener('canplaythrough', markReady);
-            el.addEventListener('loadedmetadata', markReady);
-            el.addEventListener('error', () => { loaded[key] = false; tracks[key] = null; });
-            tracks[key] = el;
+        // Fight tracks: fight.mp3, fight2.mp3 ...
+        suffixes.forEach(s => {
+            const el = loadAudio(`music/fight${s}.mp3`, false);
+            let added = false;
+            const add = () => {
+                if (!added) { added = true; fightTracks.push(el); }
+                if (pendingPlay === 'fight') { pendingPlay = null; play('fight'); }
+            };
+            el.addEventListener('canplaythrough', add);
+            el.addEventListener('loadedmetadata', add);
+            el.addEventListener('ended', () => { if (currentKey === 'fight') playNext('fight'); });
+            el.addEventListener('error', () => {});
             el.load();
         });
 
-        // Shuffle + finalize after 1s
-        setTimeout(() => {
-            for (let i = menuTracks.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [menuTracks[i], menuTracks[j]] = [menuTracks[j], menuTracks[i]];
-            }
-        }, 1000);
+        // Boss: single looping track
+        const boss = loadAudio('music/boss.mp3', true);
+        boss.addEventListener('canplaythrough', () => { loaded.boss = true; });
+        boss.addEventListener('loadedmetadata', () => { loaded.boss = true; });
+        boss.addEventListener('error', () => { loaded.boss = false; tracks.boss = null; });
+        tracks.boss = boss;
+        boss.load();
+
+        // Shuffle after 1s so all loadedmetadata events have fired
+        setTimeout(() => { shuffle(menuTracks); shuffle(fightTracks); }, 1000);
     }
 
     function getVolume() {
@@ -1012,7 +1032,7 @@ const MusicManager = (() => {
     }
 
     function fadeTo(el, targetVol, cb) {
-        const steps = 12; const interval = 25;
+        const steps = 12, interval = 25;
         const startVol = el.volume;
         const delta = (targetVol - startVol) / steps;
         let step = 0;
@@ -1028,10 +1048,18 @@ const MusicManager = (() => {
         else if (cb) cb();
     }
 
-    function playNextMenu() {
-        if (menuTracks.length === 0) return;
-        menuIndex = (menuIndex + 1) % menuTracks.length;
-        const track = menuTracks[menuIndex];
+    function getPool(key) {
+        if (key === 'menu')  return { arr: menuTracks,  idx: () => menuIndex,  set: i => { menuIndex = i; } };
+        if (key === 'fight') return { arr: fightTracks, idx: () => fightIndex, set: i => { fightIndex = i; } };
+        return null;
+    }
+
+    function playNext(key) {
+        const pool = getPool(key);
+        if (!pool || pool.arr.length === 0) return;
+        const next = (pool.idx() + 1) % pool.arr.length;
+        pool.set(next);
+        const track = pool.arr[next];
         current = track;
         track.currentTime = 0;
         track.play().catch(() => {});
@@ -1039,18 +1067,19 @@ const MusicManager = (() => {
     }
 
     function play(key) {
-        if (currentKey === key && key !== 'menu') return;
+        if (currentKey === key && key !== 'menu' && key !== 'fight') return;
 
-        if (key === 'menu') {
-            if (menuTracks.length === 0) {
-                // Retry after a short delay in case files are still loading
-                setTimeout(() => { if (menuTracks.length > 0 && currentKey !== 'menu') play('menu'); }, 800);
+        const pool = getPool(key);
+        if (pool) {
+            if (pool.arr.length === 0) {
+                // Tracks still loading — queue and wait for first loadedmetadata
+                pendingPlay = key;
                 return;
             }
-            currentKey = 'menu';
-            currentMusicMood = 'menu';
+            currentKey = key;
+            currentMusicMood = key;
             stopCurrent(() => {
-                const track = menuTracks[menuIndex % menuTracks.length];
+                const track = pool.arr[pool.idx() % pool.arr.length];
                 current = track;
                 track.currentTime = 0;
                 track.volume = 0;
@@ -1058,11 +1087,11 @@ const MusicManager = (() => {
                 fadeTo(track, getVolume(), null);
             });
         } else {
+            // Single track (boss)
             const track = tracks[key];
-            if (!track) return; // file doesn't exist
+            if (!track) return;
             currentKey = key;
             currentMusicMood = key;
-            // Pause old track immediately, then start new one
             if (current && current !== track) {
                 const old = current;
                 fadeTo(old, 0, () => { old.pause(); old.currentTime = 0; });
@@ -1074,7 +1103,6 @@ const MusicManager = (() => {
             track.play().then(() => {
                 fadeTo(track, vol, null);
             }).catch(() => {
-                // Retry after a short delay
                 setTimeout(() => {
                     track.play().then(() => fadeTo(track, vol, null)).catch(() => {});
                 }, 400);
@@ -1083,23 +1111,24 @@ const MusicManager = (() => {
     }
 
     function stop() {
-        stopCurrent(); currentKey = null; current = null;
+        stopCurrent(); currentKey = null; current = null; pendingPlay = null;
     }
 
     function syncVolume() {
         const vol = getVolume();
         menuTracks.forEach(t => { if (t) t.volume = vol; });
-        Object.values(tracks).forEach(t => { if (t) t.volume = vol; });
+        fightTracks.forEach(t => { if (t) t.volume = vol; });
+        if (tracks.boss) tracks.boss.volume = vol;
     }
 
     function hasTrack(key) {
-        if (key === 'menu') return menuTracks.length > 0;
+        if (key === 'menu')  return menuTracks.length > 0;
+        if (key === 'fight') return fightTracks.length > 0;
         return !!(tracks[key] && loaded[key]);
     }
 
-    // Returns true if we intend to play an MP3 (mutes procedural)
     function isActive() {
-        return currentKey !== null && (menuTracks.length > 0 || tracks['fight'] !== null || tracks['boss'] !== null);
+        return currentKey !== null && (menuTracks.length > 0 || fightTracks.length > 0 || tracks.boss !== null);
     }
 
     return { init, play, stop, syncVolume, hasTrack, isActive };
@@ -9187,7 +9216,7 @@ window.addEventListener('load', () => {
     MusicManager.init();
     setInterval(syncMusicVolume, 500);
     document.addEventListener('pointerdown', () => {
-        ensureMusicEn
+        ensureMusicEngine();
         MusicManager.play('menu');
     }, { once: true });
     window.addEventListener('resize', resizeCanvas);

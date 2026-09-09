@@ -1,25 +1,50 @@
 const WALL = 10;
 
 const PLAYER_STATS = {
-    hearts: { base: 3 },
+    // hearts/armor now carry a progression like the offensive stats so the
+    // defensive upgrade paths above have something to feed.
+    // hearts: ~+5 over the full tree (3 -> 8). armor: ~19 points -> capped 35%
+    // deflect chance (see getArmorDeflectChance in game.js).
+    // Flat 1.0 per level: the hearts path is 6 levels long and each one is
+    // worth exactly one whole heart, so there is no partial progress to hide.
+    hearts:  { name: 'Hearts',   base: 3, progression: { minorBase: 1.0, minorGrowth: 1.0, majorBase: 1.0, majorGrowth: 1.0 } },
+    armor:   { name: 'Deflector', base: 0, progression: { minorBase: 0.34,  minorGrowth: 1.03, majorBase: 1.15, majorGrowth: 1.06 } },
     // Bigger early-level payoff (minorBase up), then tighter growth so late upgrades feel small.
     // Major spikes still pop but their growth is curbed past mid-game.
     // Higher base damage + stronger per-level scaling so player keeps pace.
     dmg:     { name: 'Damage',    base: 5,   progression: { minorBase: 0.32, minorGrowth: 1.06, majorBase: 1.40, majorGrowth: 1.12 } },
     atkSpd:  { name: 'Fire Rate', base: 1,   progression: { minorBase: 0.075, minorGrowth: 1.030, majorBase: 0.24, majorGrowth: 1.07 } },
-    economy: { name: 'Income',    base: 1,   progression: { minorBase: 0.12, minorGrowth: 1.035, majorBase: 0.42, majorGrowth: 1.08 } },
-    range:   { name: 'Range',     base: 420, inc: 24 },
+    // Economy reached x8.88 at max, which paid 53k per level-50 run against a
+    // 6k base — so maxing income first was strictly optimal and every other
+    // build order was just worse. Halved to x4.83: still the strongest
+    // long-term investment, no longer the only sane opening.
+    economy: { name: 'Income',    base: 1,   progression: { minorBase: 0.06, minorGrowth: 1.03, majorBase: 0.21, majorGrowth: 1.06 } },
+    // `inc` on these was never read anywhere — kept as plain bases.
+    range:   { name: 'Range',     base: 420 },
     speed:   { name: 'Speed',     base: 230 },
-    armor:   { name: 'Armor',     base: 0,   inc: 1 },
-    magnet:  { name: 'Magnet',    base: 130, inc: 16 }
+    magnet:  { name: 'Magnet',    base: 130 }
 };
 
 // Seed costs are CHEAPER for the first 5 levels (fast progress) and the tail
 // growth is SHARPER (slow progress later), so the curve feels Clash-Royale-y.
+// tailGrowth was 1.22–1.25, i.e. +22–25% per level, while gold income only grows
+// ~11.5% per level. Two exponentials with different bases diverge, so the top of
+// each tree was unreachable by design (level 42 cost 1.1M gold vs ~6k income per
+// run = 187 runs for a single level). Lowered to ~1.14 so the curves stay
+// roughly parallel: the last level now costs ~16 runs instead of ~187.
 const UPGRADES = [
-    { id: 'dmg',     name: 'Schaden',   icon: 'DMG', color: '#ffb100', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [14, 20, 30, 44, 66, 104, 156], tailGrowth: 1.24, tailFlat: 50, majorCostMultiplier: 1.65, max: 42, desc: 'Mehr Basisschaden pro Run.' },
-    { id: 'atkSpd',  name: 'Feuerrate', icon: 'RPM', color: '#1ec8ff', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [16, 24, 34, 48, 72, 114, 168], tailGrowth: 1.25, tailFlat: 52, majorCostMultiplier: 1.62, max: 42, desc: 'Schnellere Volleys und fluessigeres Combat.' },
-    { id: 'economy', name: 'Einkommen', icon: 'GLD', color: '#00ff9d', cycleRange: [5, 7], cycleOffset: 2, seedCosts: [12, 18, 26, 40, 60, 96, 144], tailGrowth: 1.22, tailFlat: 46, majorCostMultiplier: 1.68, max: 42, desc: 'Mehr Gold aus Kills und Missionen.' }
+    { id: 'dmg',     name: 'Schaden',   icon: 'stat-damage-48.png', color: '#d3a355', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [14, 20, 30, 44, 66, 104, 156], tailGrowth: 1.145, tailFlat: 50, majorCostMultiplier: 1.65, max: 42, desc: 'Mehr Basisschaden pro Run.' },
+    { id: 'atkSpd',  name: 'Feuerrate', icon: 'bolt-48.png', color: '#68afc4', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [16, 24, 34, 48, 72, 114, 168], tailGrowth: 1.145, tailFlat: 52, majorCostMultiplier: 1.62, max: 42, desc: 'Schnellere Volleys und fluessigeres Combat.' },
+    { id: 'economy', name: 'Einkommen', icon: 'coin-48.png', color: '#67c092', cycleRange: [5, 7], cycleOffset: 2, seedCosts: [12, 18, 26, 40, 60, 96, 144], tailGrowth: 1.135, tailFlat: 46, majorCostMultiplier: 1.68, max: 42, desc: 'Mehr Gold aus Kills und Missionen.' },
+    // Defensive paths. Previously the meta had no answer to "I die too fast" —
+    // you started every run with 3 hearts and 0 armor whether you were on
+    // level 1 or level 80, while enemy HP scaled 100x.
+    // Hearts are a SHORT path on purpose. A 42-level tree where the value only
+    // ticks up every ~9 levels means 36 of 42 purchases visibly do nothing —
+    // a badly shaped path for a discrete stat. Six levels, each worth exactly
+    // one heart (3 -> 9), with steeply rising costs instead.
+    { id: 'hearts',  name: 'Panzerung',  icon: 'heart-48.png',  color: '#c8626a', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [350, 1100, 3000, 7500, 18000, 42000], tailGrowth: 1.15, tailFlat: 58, majorCostMultiplier: 1.70, max: 6, desc: 'Ein zusaetzliches Herz pro Stufe.' },
+    { id: 'armor',   name: 'Deflektor',  icon: 'stat-armor-48.png', color: '#8db4d2', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [18, 27, 40, 60, 90, 138, 206], tailGrowth: 1.15,  tailFlat: 54, majorCostMultiplier: 1.66, max: 42, desc: 'Chance, einen Treffer komplett abzuwehren.' }
 ];
 
 const DAILY_LOGIN_REWARDS = [
@@ -43,7 +68,7 @@ const DAILY_LOGIN_REWARDS = [
 // ─────────────────────────────────────────────────────────────────────────────
 const ACTIVE_ABILITIES = [
     {
-        id: 'dash', name: 'Dash', icon: '⚡', color: '#7be8ff',
+        id: 'dash', name: 'Dash', icon: '⚡', color: '#97c7d6',
         desc: 'Blitz-Dash in Schussrichtung. Kurze Unverwundbarkeit.',
         cooldowns: [4, 3, 2.5],
         levels: [
@@ -53,7 +78,7 @@ const ACTIVE_ABILITIES = [
         ]
     },
     {
-        id: 'death_bloom', name: 'Death Bloom', icon: '💥', color: '#ff5040',
+        id: 'death_bloom', name: 'Death Bloom', icon: '💥', color: '#c96555',
         desc: 'Explosion um dich herum. Knockback auf alle Gegner.',
         cooldowns: [8, 7, 5],
         levels: [
@@ -63,7 +88,7 @@ const ACTIVE_ABILITIES = [
         ]
     },
     {
-        id: 'shield', name: 'Pulse Shield', icon: '🛡', color: '#5cc1ff',
+        id: 'shield', name: 'Pulse Shield', icon: '🛡', color: '#8db4d2',
         desc: 'Kurze Schadensimmunität. Höhere Level reflektieren Kugeln.',
         cooldowns: [12, 10, 8],
         levels: [
@@ -83,7 +108,7 @@ const ACTIVE_ABILITIES = [
         ]
     },
     {
-        id: 'drone_strike', name: 'Drone Strike', icon: '🎯', color: '#ffe168',
+        id: 'drone_strike', name: 'Drone Strike', icon: '🎯', color: '#e0c584',
         desc: 'Schickt Targeting-Drohnen auf Gegner.',
         cooldowns: [16, 13, 10],
         levels: [
@@ -505,21 +530,21 @@ function getAbilityRankDef(ability, rank) {
 // ─────────────────────────────────────────────────────────────────────────────
 const ENEMY_TYPES = {
     // ── Original ──
-    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#00f2ff', glow: '#00f2ff', exp: 2, ai: 'strafe',  unlockLevel: 1 },
-    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#bc13fe', glow: '#bc13fe', exp: 3, ai: 'sprint',  unlockLevel: 4 },
-    tank:      { hp: 38, spd: 0.95, r: 20, color: '#ff9d00', glow: '#ff9d00', exp: 5, ai: 'heavy',   unlockLevel: 12 },
-    boss:      { hp: 26, spd: 1.08, r: 50, color: '#ff375f', glow: '#ff375f', exp: 14, ai: 'boss',   isBoss: true, unlockLevel: 1 },
+    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#6fb7c5', glow: '#6fb7c5', exp: 2, ai: 'strafe',  unlockLevel: 1 },
+    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#a184c9', glow: '#a184c9', exp: 3, ai: 'sprint',  unlockLevel: 4 },
+    tank:      { hp: 38, spd: 0.95, r: 20, color: '#cf9440', glow: '#cf9440', exp: 5, ai: 'heavy',   unlockLevel: 12 },
+    boss:      { hp: 26, spd: 1.08, r: 50, color: '#d0716f', glow: '#d0716f', exp: 14, ai: 'boss',   isBoss: true, unlockLevel: 1 },
 
     // ── New enemy types (8-9), gated to later levels ──
-    swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#7be8ff', glow: '#7be8ff', exp: 1, ai: 'swarm',     unlockLevel: 1 },
-    brute:     { hp: 22, spd: 0.85, r: 17, color: '#ffaa00', glow: '#ffaa00', exp: 5, ai: 'brute',     unlockLevel: 8 },
-    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#ff5dad', glow: '#ff5dad', exp: 4, ai: 'sniper',    unlockLevel: 12 },
-    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#ff7035', glow: '#ff7035', exp: 5, ai: 'bomber',    unlockLevel: 15 },
-    healer:    { hp: 14, spd: 1.05, r: 14, color: '#34ffae', glow: '#34ffae', exp: 6, ai: 'healer',    unlockLevel: 18 },
-    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#5cc1ff', glow: '#5cc1ff', exp: 6, ai: 'shielder',  unlockLevel: 22, shieldHp: 30 },
-    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9f57ff', glow: '#9f57ff', exp: 6, ai: 'wraith',    unlockLevel: 26 },
-    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#ff5040', glow: '#ff5040', exp: 10, ai: 'crusher',   unlockLevel: 30 },
-    berserker: { hp: 16, spd: 1.20, r: 13, color: '#ff2030', glow: '#ff2030', exp: 7, ai: 'berserker', unlockLevel: 35 }
+    swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#97c7d6', glow: '#97c7d6', exp: 1, ai: 'swarm',     unlockLevel: 1 },
+    brute:     { hp: 22, spd: 0.85, r: 17, color: '#d09c46', glow: '#d09c46', exp: 5, ai: 'brute',     unlockLevel: 8 },
+    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#c9709e', glow: '#c9709e', exp: 4, ai: 'sniper',    unlockLevel: 12 },
+    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#cd7a4e', glow: '#cd7a4e', exp: 5, ai: 'bomber',    unlockLevel: 15 },
+    healer:    { hp: 14, spd: 1.05, r: 14, color: '#74c8a0', glow: '#74c8a0', exp: 6, ai: 'healer',    unlockLevel: 18 },
+    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#8db4d2', glow: '#8db4d2', exp: 6, ai: 'shielder',  unlockLevel: 22, shieldHp: 30 },
+    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9678cc', glow: '#9678cc', exp: 6, ai: 'wraith',    unlockLevel: 26 },
+    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#c96555', glow: '#c96555', exp: 10, ai: 'crusher',   unlockLevel: 30 },
+    berserker: { hp: 16, spd: 1.20, r: 13, color: '#bf4a4c', glow: '#bf4a4c', exp: 7, ai: 'berserker', unlockLevel: 35 }
 };
 
 function getEnemyLevelStats(typeKey, level) {
@@ -719,24 +744,23 @@ const SHOP_SECTIONS = {
         { id: 'skin_pack_gems', name: 'Prism Skin Pack', currency: 'gems', cost: 90, icon: 'SK2', bonus: 'Better skin pack with rarer trails, shots and glow styles.', reward: { packKey: 'prism_skin_pack' } }
     ],
     gemItems: [
-        { id: 'reroll_pack', name: 'Reroll Pack', currency: 'gems', cost: 18, icon: 'RLL', bonus: 'Adds 3 ability rerolls.', reward: { rerollTokens: 3 } },
-        { id: 'storm_license', name: 'Storm License', currency: 'gems', cost: 28, icon: 'ARC', bonus: 'Start the next run with +18 ability XP.', reward: { bonusAbilityXp: 18 } },
-        { id: 'boss_pass', name: 'Boss Pass', currency: 'gems', cost: 32, icon: 'BOS', bonus: 'One revive against the next boss.', reward: { bossRevive: 1 } },
-        { id: 'neon_skin', name: 'Neon Trail', currency: 'gems', cost: 24, icon: 'SKN', bonus: 'Permanent brighter trail effect.', reward: { neonTrail: true } }
+        { id: 'reroll_pack', name: 'Reroll Pack', currency: 'gems', cost: 18, icon: 'RLL', bonus: '+3 rerolls', reward: { rerollTokens: 3 } },
+        { id: 'boss_pass', name: 'Boss Pass', currency: 'gems', cost: 32, icon: 'BOS', bonus: '1 boss revive', reward: { bossRevive: 1 } },
+        { id: 'neon_skin', name: 'Neon Trail', currency: 'gems', cost: 24, icon: 'SKN', bonus: 'Brighter trail', reward: { neonTrail: true } }
     ],
     realMoney: [
-        { id: 'gold_stash_s', name: 'Gold Stash', price: '$0.99', icon: 'GLD', bonus: 'Get 2500 gold instantly.', reward: { gold: 2500 } },
-        { id: 'gold_stash_l', name: 'Gold Crate', price: '$2.99', icon: 'G2', bonus: 'Get 9000 gold instantly.', reward: { gold: 9000 } },
-        { id: 'gems_pouch_s', name: 'Gem Pouch', price: '$0.99', icon: 'GEM', bonus: 'Get 120 gems instantly.', reward: { gems: 120 } },
-        { id: 'gems_pouch_l', name: 'Gem Vault', price: '$3.99', icon: 'G4', bonus: 'Get 650 gems instantly.', reward: { gems: 650 } },
-        { id: 'no_ads', name: 'No Ads', price: '$2.99', icon: 'VIP', bonus: 'Permanent premium unlock.' },
-        { id: 'starter_bundle', name: 'Starter Bundle', price: '$4.99', icon: 'BOX', bonus: '500 gems, 3 premium packs and cosmetics.' },
-        { id: 'supporter_pack', name: 'Supporter Pack', price: '$9.99', icon: 'SUP', bonus: 'Exclusive skin, gems and upgrade boost.' },
+        { id: 'gold_stash_s', name: 'Gold Stash', price: '$0.99', icon: 'GLD', bonus: '2500 gold', reward: { gold: 2500 } },
+        { id: 'gold_stash_l', name: 'Gold Crate', price: '$2.99', icon: 'G2', bonus: '9000 gold', reward: { gold: 9000 } },
+        { id: 'gems_pouch_s', name: 'Gem Pouch', price: '$0.99', icon: 'GEM', bonus: '120 gems', reward: { gems: 120 } },
+        { id: 'gems_pouch_l', name: 'Gem Vault', price: '$3.99', icon: 'G4', bonus: '650 gems', reward: { gems: 650 } },
+        { id: 'no_ads', name: 'No Ads', price: '$2.99', icon: 'VIP', bonus: 'No ads, ever' },
+        { id: 'starter_bundle', name: 'Starter Bundle', price: '$4.99', icon: 'BOX', bonus: '500 gems + 3 packs' },
+        { id: 'supporter_pack', name: 'Supporter Pack', price: '$9.99', icon: 'SUP', bonus: 'Skin + gems + boost' },
         { id: 'premium_alpha', name: 'Premium Alpha Crate', price: '$2.49', icon: 'PAK', bonus: 'High-value premium crate with elevated purple/red odds.', reward: { packKey: 'premium_alpha_crate' } },
         { id: 'royal_omega', name: 'Royal Omega Crate', price: '$4.99', icon: 'OMG', bonus: 'Best premium crate with gold exclusives and stronger odds.', reward: { packKey: 'royal_omega_crate' } },
         { id: 'legend_skin_pack', name: 'Legend Skin Pack', price: '$3.49', icon: 'SK3', bonus: 'Top skin pack with the strongest VFX skins and exclusive looks.', reward: { packKey: 'legend_skin_pack' } },
-        { id: 'extra_normal_slot', name: 'Extra Deck Slot', price: '$3.99', icon: 'SLT', bonus: 'Adds one extra normal loadout slot.', reward: { extraNormalSlots: 1 } },
-        { id: 'extra_legend_slot', name: 'Legend Slot', price: '$6.99', icon: 'LGT', bonus: 'Adds one extra legendary loadout slot.', reward: { extraLegendarySlots: 1 } }
+        { id: 'extra_normal_slot', name: 'Extra Deck Slot', price: '$3.99', icon: 'SLT', bonus: '+1 normal slot', reward: { extraNormalSlots: 1 } },
+        { id: 'extra_legend_slot', name: 'Legend Slot', price: '$6.99', icon: 'LGT', bonus: '+1 legendary slot', reward: { extraLegendarySlots: 1 } }
     ]
 };
 
@@ -809,5 +833,22 @@ const INVENTORY_CARDS = {
     minigun_protocol: { tier: 4, rarity: 'red', weight: 10, icon: 'MIN', sigil: 'MINI', name: 'Minigun Protocol', desc: '+300% fire rate, -70% damage', effect: { attackSpeedMultiplier: 3.0, damageMultiplier: -0.70 } },
     vortex_array: { tier: 5, rarity: 'gold', weight: 6, icon: 'VTX', sigil: 'VAC', name: 'Vortex Array', desc: '+140% fire rate and +60 magnet range', effect: { attackSpeedMultiplier: 1.40, magnetFlat: 60 } },
     solar_crown: { tier: 5, rarity: 'gold', weight: 4, icon: 'SOL', sigil: 'SUN', name: 'Solar Crown', desc: '+160% damage and +55% fire rate', effect: { damageMultiplier: 1.60, attackSpeedMultiplier: 0.55 }, exclusive: true },
-    crimson_zero: { tier: 4, rarity: 'red', weight: 5, icon: 'CRM', sigil: 'ZERO', name: 'Crimson Zero', desc: '+220% fire rate, -35% damage', effect: { attackSpeedMultiplier: 2.20, damageMultiplier: -0.35 }, exclusive: true }
+    crimson_zero: { tier: 4, rarity: 'red', weight: 5, icon: 'CRM', sigil: 'ZERO', name: 'Crimson Zero', desc: '+220% fire rate, -35% damage', effect: { attackSpeedMultiplier: 2.20, damageMultiplier: -0.35 }, exclusive: true },
+
+    // ── Mobility line ────────────────────────────────────────────────────────
+    // getInventoryBonuses() has always supported `speedMultiplier`, but not a
+    // single card used it — so movement speed was a dead build axis and every
+    // card boiled down to the same damage-vs-fire-rate trade. These give the
+    // pool a third dimension and roughly double its size (12 -> 23).
+    thruster_chip:   { tier: 1, rarity: 'blue',   weight: 32, icon: 'THR', sigil: 'SPD+',  name: 'Thruster Chip',   desc: '+12% movement speed',                    effect: { speedMultiplier: 0.12 } },
+    scout_lens:      { tier: 1, rarity: 'blue',   weight: 28, icon: 'SCT', sigil: 'SCAN',  name: 'Scout Lens',      desc: '+6% speed and +14 magnet range',         effect: { speedMultiplier: 0.06, magnetFlat: 14 } },
+    kinetic_frame:   { tier: 2, rarity: 'dark',   weight: 26, icon: 'KIN', sigil: 'KINE',  name: 'Kinetic Frame',   desc: '+20% speed and +6% fire rate',           effect: { speedMultiplier: 0.20, attackSpeedMultiplier: 0.06 } },
+    ballast_plate:   { tier: 2, rarity: 'dark',   weight: 22, icon: 'BAL', sigil: 'BALL',  name: 'Ballast Plate',   desc: '+16% damage, -9% speed',                 effect: { damageMultiplier: 0.16, speedMultiplier: -0.09 } },
+    phase_rotor:     { tier: 3, rarity: 'purple', weight: 19, icon: 'PHS', sigil: 'PHASE', name: 'Phase Rotor',     desc: '+30% speed and +15% fire rate',          effect: { speedMultiplier: 0.30, attackSpeedMultiplier: 0.15 } },
+    heavy_rig:       { tier: 3, rarity: 'purple', weight: 17, icon: 'HVY', sigil: 'RIG',   name: 'Heavy Rig',       desc: '+58% damage, -24% speed',                effect: { damageMultiplier: 0.58, speedMultiplier: -0.24 } },
+    flux_capacitor:  { tier: 3, rarity: 'purple', weight: 15, icon: 'FLX', sigil: 'FLUX',  name: 'Flux Capacitor',  desc: '+24% fire rate and +26 magnet range',    effect: { attackSpeedMultiplier: 0.24, magnetFlat: 26 } },
+    warp_drive:      { tier: 4, rarity: 'red',    weight: 9,  icon: 'WRP', sigil: 'WARP',  name: 'Warp Drive',      desc: '+75% speed, +40% fire rate, -25% dmg',   effect: { speedMultiplier: 0.75, attackSpeedMultiplier: 0.40, damageMultiplier: -0.25 } },
+    siege_anchor:    { tier: 4, rarity: 'red',    weight: 8,  icon: 'ANC', sigil: 'ANCH',  name: 'Siege Anchor',    desc: '+165% damage, -45% speed, -18% RPM',     effect: { damageMultiplier: 1.65, speedMultiplier: -0.45, attackSpeedMultiplier: -0.18 } },
+    singularity_lens:{ tier: 5, rarity: 'gold',   weight: 5,  icon: 'SNG', sigil: 'HOLE',  name: 'Singularity Lens',desc: '+120 magnet, +80% fire rate, +45% dmg',  effect: { magnetFlat: 120, attackSpeedMultiplier: 0.80, damageMultiplier: 0.45 } },
+    omega_core:      { tier: 5, rarity: 'gold',   weight: 3,  icon: 'OMG', sigil: 'OMEGA', name: 'Omega Core',      desc: '+90% dmg, +70% fire rate, +30% speed',   effect: { damageMultiplier: 0.90, attackSpeedMultiplier: 0.70, speedMultiplier: 0.30 }, exclusive: true }
 };

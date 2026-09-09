@@ -19,3 +19,20 @@ BOSS TRACK (Boss-Kämpfe)
 Alle menu*.mp3 und fight*.mp3 werden beim Start zufällig
 gemischt und automatisch nacheinander abgespielt.
 Fehlende Dateien werden einfach übersprungen.
+
+──────────────────────────────────────────────────────
+Pixel-Arcade-Redesign: menu/menu2/fight/boss.mp3 sind
+prozedural synthetisierte Chiptune-Loops (Pulse-/Triangle-
+Wellen + Noise-Drums, per Python/numpy gebaut), passend
+zum neuen Pixel-Look statt der alten atmosphärischen Tracks.
+
+  menu.mp3   100 BPM, C-Dur,  8 Takte  (I-V-vi-IV, ruhig)
+  menu2.mp3   92 BPM, G-Dur,  8 Takte  (Variante, leichter)
+  fight.mp3  140 BPM, a-Moll, 8 Takte  (treibender Bass, Backbeat)
+  boss.mp3   152 BPM, d-Moll, 8 Takte  (16tel-Arpeggio-Bass,
+             sample-genau auf Taktlänge getrimmt + 15ms
+             Fade an beiden Enden, damit die native Loop
+             ohne Klick durchläuft — läuft über .loop=true)
+
+Originale (atmosphärische) Tracks liegen unverändert unter
+../../redesign/music/, falls die alte Stimmung zurück soll.

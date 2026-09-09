@@ -3,12 +3,22 @@ window.canvas = null;
 window.GW = window.innerWidth;
 window.GH = window.innerHeight;
 
+// iOS Safari only matches CSS :active at all once at least one touch
+// listener exists on the page — without this, every button's press-down
+// shadow effect silently never fires on iPhone/iPad, no matter how the
+// button's own CSS is written. Cheap, global, fixes it everywhere at once.
+document.addEventListener('touchstart', function () {}, { passive: true });
+
+// Inventory "Cards" grid rarity filter — 'all' or one of the card-rarity
+// color keys (blue/dark/purple/red/gold). Purely a view-state, not saved.
+let inventoryFilter = 'all';
+
 let save = {
     gold: 0,
     gems: 0,
     unlocked: 1,
     selectedLevel: 1,
-    stats: { dmg: 0, atkSpd: 0, economy: 0 },
+    stats: { dmg: 0, atkSpd: 0, economy: 0, hearts: 0, armor: 0 },
     reviveCharges: 0,
     rerollTokens: 0,
     bonusAbilityXp: 0,
@@ -70,8 +80,8 @@ const I18N = {
         'equipment.empty': 'Empty',
         'equipment.maxNote': 'Max slots: 5 Normal + 2 paid · 2 Legendary + 1 paid. The shop will not sell more than this.',
         'abilities.title': 'ABILITY ARCHIVE',
-        'hub.title': 'STRIKER-X',
-        'hub.sub': 'Upgrade rings animate around the ship like the reference layout.',
+        'hub.title': 'UPGRADES',
+        'hub.sub': "Spend gold to boost your ship's stats.",
         'settings.title': 'SETTINGS',
         'settings.language': 'Language',
         'settings.languageCopy': 'Switch the interface between English and German.',
@@ -79,6 +89,19 @@ const I18N = {
         'settings.sfxCopy': 'Shots, hits and pack sounds.',
         'settings.music': 'Music Volume',
         'settings.musicCopy': 'Background music in the lobby and during a run.',
+        // Upgrade names/descriptions used to live hardcoded in German inside
+        // config.js, so the hub mixed languages ("Panzerung — Build-up active").
+        'upgrade.dmg': 'Damage',
+        'upgrade.dmgCopy': 'More base damage every run.',
+        'upgrade.atkSpd': 'Fire Rate',
+        'upgrade.atkSpdCopy': 'Faster volleys and smoother combat.',
+        'upgrade.economy': 'Income',
+        'upgrade.economyCopy': 'More gold from kills and missions.',
+        'upgrade.hearts': 'Hull Plating',
+        'upgrade.heartsCopy': 'One extra heart per level.',
+        'upgrade.armor': 'Deflector',
+        'upgrade.armorCopy': 'Chance to shrug off a hit entirely.',
+        'toast.saveFailed': 'Progress can not be saved — storage is full or blocked.',
         'settings.haptics': 'Haptics',
         'settings.hapticsCopy': 'Vibration on hits and rewards (Android & in-app browsers).',
         'daily.title': 'DAILY LOGIN',
@@ -196,13 +219,24 @@ const I18N = {
         'equipment.empty': 'Leer',
         'equipment.maxNote': 'Maximale Slots: 5 Normal + 2 gekauft · 2 Legendär + 1 gekauft. Der Shop verkauft nicht mehr.',
         'abilities.title': 'FÄHIGKEITS-ARCHIV',
-        'hub.title': 'STRIKER-X',
-        'hub.sub': 'Upgrade-Ringe drehen sich wie im Referenz-Layout um das Schiff.',
+        'hub.title': 'UPGRADES',
+        'hub.sub': 'Gib Gold aus, um die Werte deines Schiffs zu verbessern.',
         'settings.title': 'EINSTELLUNGEN',
         'settings.language': 'Sprache',
         'settings.languageCopy': 'Wechsle die Oberfläche zwischen Englisch und Deutsch.',
         'settings.sfx': 'SFX-Lautstärke',
         'settings.sfxCopy': 'Schüsse, Treffer und Pack-Sounds.',
+        'upgrade.dmg': 'Schaden',
+        'upgrade.dmgCopy': 'Mehr Basisschaden pro Run.',
+        'upgrade.atkSpd': 'Feuerrate',
+        'upgrade.atkSpdCopy': 'Schnellere Volleys und flüssigeres Combat.',
+        'upgrade.economy': 'Einkommen',
+        'upgrade.economyCopy': 'Mehr Gold aus Kills und Missionen.',
+        'upgrade.hearts': 'Panzerung',
+        'upgrade.heartsCopy': 'Ein zusätzliches Herz pro Stufe.',
+        'upgrade.armor': 'Deflektor',
+        'upgrade.armorCopy': 'Chance, einen Treffer komplett abzuwehren.',
+        'toast.saveFailed': 'Fortschritt kann nicht gespeichert werden — Speicher voll oder blockiert.',
         'settings.music': 'Musik-Lautstärke',
         'settings.musicCopy': 'Hintergrundmusik in Lobby und Spiel.',
         'settings.haptics': 'Haptik',
@@ -968,6 +1002,106 @@ const MusicManager = (() => {
     let pendingPlay = null; // queued play call while tracks still loading
     const fadeTimers = new Map(); // el → interval id, so syncVolume can cancel in-flight fades
 
+    // ── Web Audio graph (analyser + tone shaping) ───────────────────────────
+    // Routing:  <audio> → moodFilter → compressor → analyser → destination
+    // The graph is OPTIONAL: an element is only routed through it once the
+    // AudioContext exists AND is running. Connecting to a suspended context
+    // would mute the element, so until then music plays straight to the
+    // speakers and the visualiser falls back to its idle pulse.
+    const graphNodes = new WeakSet(); // elements already wired (can only source once)
+    let moodFilter = null, musicComp = null, analyser = null, freqData = null;
+    let levelSmoothed = 0;
+
+    function ensureGraph() {
+        const ctx = audioContext; // module-scope `let`, not on window
+        if (!ctx || ctx.state !== 'running') return null;
+        if (analyser) return ctx;
+
+        // Gentle low-pass: menus sit back, combat opens up. Also evens out
+        // tracks that were mastered brighter than the rest.
+        moodFilter = ctx.createBiquadFilter();
+        moodFilter.type = 'lowpass';
+        moodFilter.frequency.value = 20000;
+        moodFilter.Q.value = 0.4;
+
+        // Tames loudness differences between the individual mp3s.
+        musicComp = ctx.createDynamicsCompressor();
+        musicComp.threshold.value = -22;
+        musicComp.knee.value = 26;
+        musicComp.ratio.value = 3.2;
+        musicComp.attack.value = 0.02;
+        musicComp.release.value = 0.32;
+
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.72;
+        freqData = new Uint8Array(analyser.frequencyBinCount);
+
+        moodFilter.connect(musicComp);
+        musicComp.connect(analyser);
+        analyser.connect(ctx.destination);
+        return ctx;
+    }
+
+    function connectTrack(el) {
+        if (graphNodes.has(el)) return;
+        const ctx = ensureGraph();
+        if (!ctx) return;
+        try {
+            ctx.createMediaElementSource(el).connect(moodFilter);
+        } catch (e) {
+            // Element already bound to a source — leave it routed directly.
+        }
+        graphNodes.add(el);
+    }
+
+    // Target cutoff per mood: menu softened, combat wide open.
+    function setMoodTone(key) {
+        if (!moodFilter || !audioContext) return;
+        const target = key === 'menu' ? 2600 : (key === 'boss' ? 20000 : 14000);
+        const now = audioContext.currentTime;
+        moodFilter.frequency.cancelScheduledValues(now);
+        moodFilter.frequency.setTargetAtTime(target, now, 0.5);
+    }
+
+    // Smoothed 0..1 energy, weighted toward bass so it tracks the beat.
+    //
+    // Raw analyser energy for typical music only swings through a narrow band
+    // (roughly 0.4–0.6), so feeding it straight into a transform produced a
+    // pulse of a couple of percent — technically alive, visually invisible.
+    // A rolling floor/ceiling stretches whatever range the current track
+    // actually uses across the full 0..1, so quiet tracks still pulse and loud
+    // ones don't sit pinned at the top.
+    let lvlFloor = 0.30, lvlCeil = 0.50;
+    function getLevel() {
+        if (!analyser || !current || current.paused) {
+            levelSmoothed *= 0.9;
+            return levelSmoothed;
+        }
+        analyser.getByteFrequencyData(freqData);
+        const bassBins = Math.max(4, Math.floor(freqData.length * 0.18));
+        let bass = 0, full = 0;
+        for (let i = 0; i < freqData.length; i++) {
+            const v = freqData[i] / 255;
+            full += v;
+            if (i < bassBins) bass += v;
+        }
+        bass /= bassBins;
+        full /= freqData.length;
+        const raw = Math.min(1, bass * 0.75 + full * 0.55);
+
+        // Floor drops quickly to a new quiet passage, creeps back up slowly.
+        // Ceiling jumps to a new peak, then decays. Together they auto-range.
+        lvlFloor += raw < lvlFloor ? (raw - lvlFloor) * 0.25 : 0.0007;
+        lvlCeil  += raw > lvlCeil  ? (raw - lvlCeil)  * 0.35 : -0.0011;
+        if (lvlCeil < lvlFloor + 0.05) lvlCeil = lvlFloor + 0.05; // never divide by ~0
+        const norm = Math.max(0, Math.min(1, (raw - lvlFloor) / (lvlCeil - lvlFloor)));
+
+        // Fast attack, slow release — reads as a beat rather than a wobble.
+        levelSmoothed += (norm - levelSmoothed) * (norm > levelSmoothed ? 0.6 : 0.14);
+        return levelSmoothed;
+    }
+
     function loadAudio(src, loop) {
         const el = new Audio(src);
         el.loop = loop;
@@ -1029,27 +1163,54 @@ const MusicManager = (() => {
     }
 
     function getVolume() {
-        return Math.max(0, Math.min(1, (window.save?.settings?.music ?? 0.35)));
+        // `save` is a module-scope `let`, so it is NOT on window — reading
+        // window.save here always yielded undefined and pinned music at 0.35,
+        // which is why the volume slider had no effect on music.
+        return Math.max(0, Math.min(1, (save?.settings?.music ?? 0.35)));
     }
 
-    function fadeTo(el, targetVol, cb) {
+    // Longer, eased fades — 300ms hard cuts were the main reason mood changes
+    // felt abrupt. Default ~1.1s, and callers can override per transition.
+    function fadeTo(el, targetVol, cb, durationMs = 1100) {
         // Cancel any in-flight fade on this element first
         if (fadeTimers.has(el)) { clearInterval(fadeTimers.get(el)); fadeTimers.delete(el); }
-        const steps = 12, interval = 25;
+        const interval = 25;
+        const steps = Math.max(1, Math.round(durationMs / interval));
         const startVol = el.volume;
-        const delta = (targetVol - startVol) / steps;
         let step = 0;
         const t = setInterval(() => {
             step++;
-            el.volume = Math.max(0, Math.min(1, startVol + delta * step));
+            const p = step / steps;
+            // equal-power curve keeps perceived loudness steady through a crossfade
+            const eased = Math.sin(p * Math.PI * 0.5);
+            el.volume = Math.max(0, Math.min(1, startVol + (targetVol - startVol) * eased));
             if (step >= steps) { clearInterval(t); fadeTimers.delete(el); if (cb) cb(); }
         }, interval);
         fadeTimers.set(el, t);
     }
 
+    // Fade the outgoing track out WITHOUT blocking the incoming one, so the two
+    // overlap instead of leaving a silent gap between them.
+    function crossfadeOut(el, durationMs = 1100) {
+        if (!el) return;
+        fadeTo(el, 0, () => { el.pause(); el.currentTime = 0; }, durationMs);
+    }
+
     function stopCurrent(cb) {
         if (current) fadeTo(current, 0, () => { current.pause(); current.currentTime = 0; if (cb) cb(); });
         else if (cb) cb();
+    }
+
+    function startTrack(track, durationMs) {
+        connectTrack(track);
+        current = track;
+        track.currentTime = 0;
+        track.volume = 0;
+        track.play().catch(() => {});
+        fadeTo(track, getVolume(), null, durationMs);
+        // Once the crossfade has had time to finish, make sure nothing else
+        // is still audible underneath.
+        setTimeout(() => { if (current === track) silenceOthers(track); }, durationMs + 250);
     }
 
     function getPool(key) {
@@ -1063,11 +1224,8 @@ const MusicManager = (() => {
         if (!pool || pool.arr.length === 0) return;
         const next = (pool.idx() + 1) % pool.arr.length;
         pool.set(next);
-        const track = pool.arr[next];
-        current = track;
-        track.currentTime = 0;
-        track.play().catch(() => {});
-        fadeTo(track, getVolume(), null);
+        // Track-to-track inside the same mood: short, seamless hand-off.
+        startTrack(pool.arr[next], 900);
     }
 
     function play(key) {
@@ -1082,35 +1240,32 @@ const MusicManager = (() => {
             }
             currentKey = key;
             currentMusicMood = key;
-            stopCurrent(() => {
-                const track = pool.arr[pool.idx() % pool.arr.length];
-                current = track;
-                track.currentTime = 0;
-                track.volume = 0;
-                track.play().catch(() => {});
-                fadeTo(track, getVolume(), null);
-            });
+            setMoodTone(key);
+            // Overlap old and new instead of waiting for silence.
+            const outgoing = current;
+            if (outgoing) crossfadeOut(outgoing, 1100);
+            startTrack(pool.arr[pool.idx() % pool.arr.length], 1100);
         } else {
-            // Single track (boss)
+            // Single track (boss) — snappier entry, it's a dramatic beat.
             const track = tracks[key];
             if (!track) return;
             currentKey = key;
             currentMusicMood = key;
-            if (current && current !== track) {
-                const old = current;
-                fadeTo(old, 0, () => { old.pause(); old.currentTime = 0; });
-            }
+            setMoodTone(key);
+            if (current && current !== track) crossfadeOut(current, 700);
+            connectTrack(track);
             current = track;
             track.currentTime = 0;
             track.volume = 0;
             const vol = getVolume();
             track.play().then(() => {
-                fadeTo(track, vol, null);
+                fadeTo(track, vol, null, 700);
             }).catch(() => {
                 setTimeout(() => {
-                    track.play().then(() => fadeTo(track, vol, null)).catch(() => {});
+                    track.play().then(() => fadeTo(track, vol, null, 700)).catch(() => {});
                 }, 400);
             });
+            setTimeout(() => { if (current === track) silenceOthers(track); }, 950);
         }
     }
 
@@ -1120,12 +1275,29 @@ const MusicManager = (() => {
 
     function syncVolume() {
         const vol = getVolume();
-        const allTracks = [...menuTracks, ...fightTracks, tracks.boss].filter(Boolean);
-        allTracks.forEach(t => {
-            // Cancel any in-flight fade so it doesn't override the new volume
-            if (fadeTimers.has(t)) { clearInterval(fadeTimers.get(t)); fadeTimers.delete(t); }
-            // Only update volume on tracks that are actually playing (not paused/unstarted)
-            if (!t.paused) t.volume = vol;
+        // ONLY the active track follows the slider.
+        //
+        // This used to loop over every track, cancel its fade timer and set it
+        // to full volume. Because this runs on a 500ms interval it landed in
+        // the middle of a crossfade: the outgoing track's fade-out timer was
+        // destroyed before the callback that pauses it ever ran, so it was
+        // yanked back to full volume and kept playing forever — menu music
+        // playing on top of fight music.
+        if (!current || current.paused) return;
+        // A fade in progress already targets the right level and will land on
+        // its own; the next tick (<=500ms later) corrects it if the slider
+        // moved mid-fade.
+        if (fadeTimers.has(current)) return;
+        current.volume = vol;
+    }
+
+    // Hard safety net: silence every track that isn't the active one. Called
+    // when a mood switch happens so a stuck track can never linger underneath.
+    function silenceOthers(keep) {
+        [...menuTracks, ...fightTracks, tracks.boss].filter(Boolean).forEach(t => {
+            if (t === keep) return;
+            if (fadeTimers.has(t)) return; // mid-crossfade, let it finish cleanly
+            if (!t.paused) { t.pause(); t.currentTime = 0; t.volume = 0; }
         });
     }
 
@@ -1139,10 +1311,57 @@ const MusicManager = (() => {
         return currentKey !== null && (menuTracks.length > 0 || fightTracks.length > 0 || tracks.boss !== null);
     }
 
-    return { init, play, stop, syncVolume, hasTrack, isActive };
+    return { init, play, stop, syncVolume, hasTrack, isActive, getLevel, connectCurrent: () => { if (current) connectTrack(current); } };
 })();
 let musicNodes = null;
 let currentMusicMood = 'menu'; // tracked for state comparisons
+
+// ── Music visualiser ────────────────────────────────────────────────────────
+// Drives the --beat custom property (0..1) on :root, so every surface that opts
+// in reacts to the same beat: the hub rings around the ship, the skin heroes in
+// the shop, and the top-tier pack cards. If the Web Audio graph isn't available
+// (context still suspended, or the browser refused the media source) it falls
+// back to a slow breathing pulse so nothing ever looks dead.
+let musicVizFrame = null;
+function startMusicVisualiser() {
+    if (musicVizFrame !== null) return;
+    const idleAt = t => 0.16 + Math.sin(t / 1400) * 0.10; // gentle breathing
+    const root = document.documentElement;
+    const CONSUMERS = '.ring-outer,.ring-mid,.ring-inner,.skin-visual,' +
+        '.pack-card-v2.tier-royal_omega_crate,.pack-card-v2.tier-legend_skin_pack,' +
+        '.pack-card-reel.rarity-gold,.pack-card-reel.rarity-red,.peek-tile.r-gold';
+    let lastWritten = -1;
+    let anyVisible = false;
+    let visibleCheckedAt = 0;
+
+    const tick = (ts) => {
+        musicVizFrame = requestAnimationFrame(tick);
+        if (document.hidden) return;
+
+        // Nothing on screen consumes --beat during a run (hub/shop are
+        // display:none), so writing it every frame would invalidate style for
+        // nothing. Re-check a few times a second rather than per frame — the
+        // query itself isn't free either.
+        if (ts - visibleCheckedAt > 250) {
+            visibleCheckedAt = ts;
+            anyVisible = [...document.querySelectorAll(CONSUMERS)]
+                .some(el => el.offsetParent !== null);
+        }
+        if (!anyVisible) return;
+
+        // Lazily wire the playing track into the analyser once the context is up.
+        ensureMusicEngine();
+        MusicManager.connectCurrent();
+
+        const lvl = MusicManager.getLevel();
+        const beat = lvl > 0.02 ? lvl : idleAt(ts);
+        // Skip no-op writes; each one invalidates style for the whole subtree.
+        if (Math.abs(beat - lastWritten) < 0.004) return;
+        lastWritten = beat;
+        root.style.setProperty('--beat', beat.toFixed(3));
+    };
+    musicVizFrame = requestAnimationFrame(tick);
+}
 let packOpeningState = null;
 let packTickTimer = null;
 let packAnimationFrame = null;
@@ -1348,6 +1567,21 @@ function updateUpgradeNotifier() {
 
 function getEconomyMultiplier() {
     return 1 + getUpgradeBonus(PLAYER_STATS.economy, save.stats.economy, 'economy');
+}
+
+// The cycle maths that produces `nextIsMajor` doesn't know about `max`, so on a
+// short tree it promised a "Big spike" one level past the end — the Panzerung
+// card said "Next: Big spike" on its final purchase. Gate it on the next level
+// actually existing, and call out the last step explicitly.
+// Upgrade names/copy come from the i18n dictionary now; config.js only holds
+// the id. Falls back to the config string if a key is ever missing.
+function upgradeName(u) { const k = t('upgrade.' + u.id); return k === 'upgrade.' + u.id ? u.name : k; }
+function upgradeCopy(u) { const k = t('upgrade.' + u.id + 'Copy'); return k === 'upgrade.' + u.id + 'Copy' ? u.desc : k; }
+
+function getUpgradeStatusLabel(upgrade, level, meta) {
+    if (level >= upgrade.max) return 'Maxed';
+    if (level + 1 >= upgrade.max) return 'Final level';
+    return meta.tier.nextIsMajor ? 'Next: Big spike' : 'Build-up active';
 }
 
 function getUpgradeCardMeta(upgrade, level) {
@@ -1805,11 +2039,11 @@ function clearHpDangerFlair() {
 }
 
 // Confetti DOM rays burst from center of #pack-confetti
-function spawnPackConfetti(color = '#ffd14d', count = 30) {
+function spawnPackConfetti(color = '#d6b36a', count = 30) {
     const host = document.getElementById('pack-confetti');
     if (!host) return;
     host.innerHTML = '';
-    const palette = [color, '#ffffff', '#ffe698', color];
+    const palette = [color, '#ffffff', '#e3cf9a', color];
     for (let i = 0; i < count; i++) {
         const a = (Math.random() * 360).toFixed(1);
         const c = palette[i % palette.length];
@@ -1821,7 +2055,7 @@ function spawnPackConfetti(color = '#ffd14d', count = 30) {
     }
 }
 
-function addLightningBolt(x1, y1, x2, y2, color = '#00f2ff', life = 0.18, width = 3) {
+function addLightningBolt(x1, y1, x2, y2, color = '#6fb7c5', life = 0.18, width = 3) {
     const points = [{ x: x1, y: y1 }];
     const segments = 6;
     const dx = x2 - x1;
@@ -1856,8 +2090,8 @@ window.startCurrentLevel = function() {
 
 window.startEndlessMode = function() {
     currentMode = 'endless';
-    // Endless ALWAYS starts at level 1 difficulty regardless of player progression.
-    // Difficulty scales solely by elapsed waves inside spawnEndlessWave.
+    // Starting difficulty is derived from progress in spawnEndlessWave(); this
+    // is just the initial display value before the first wave is built.
     currentLevel = 1;
     currentLevelWaves = [];
     playHaptic('medium');
@@ -1946,31 +2180,31 @@ window.showDamagePopup = function(x, y, dmg, opts) {
     // (cyan / gold / magenta / lime / hot pink / etc). Used for normal hits so
     // every popup can come up in any colour, lively but on-brand.
     const NEON_RAINBOW = [
-        '#ff375f', '#ff5e7a', '#ff2f8d',          // hot pinks
-        '#ff7035', '#ff9d00', '#ffb02e',          // oranges
-        '#ffd14d', '#ffe698',                      // golds
-        '#a3ff5c', '#00ff9d', '#34ffae',          // limes / mint
-        '#00f2ff', '#7be8ff', '#5cc1ff',          // cyans
-        '#bc13fe', '#d78fff', '#9f57ff',          // magentas
+        '#d0716f', '#cc7484', '#ff2f8d',          // hot pinks
+        '#cd7a4e', '#cf9440', '#d3a355',          // oranges
+        '#d6b36a', '#e3cf9a',                      // golds
+        '#9ec878', '#67c092', '#74c8a0',          // limes / mint
+        '#6fb7c5', '#97c7d6', '#8db4d2',          // cyans
+        '#a184c9', '#bb9bd8', '#9678cc',          // magentas
         '#ffffff'                                  // white highlight
     ];
     // Crit / DoT / Splash keep semantic palettes so they still READ as special.
     let palette, sizeMin, sizeMax, life;
     if (opts.crit) {
         // Crits get bright golds + hot pinks for that "headshot" pop.
-        palette = ['#ffd14d', '#ffe698', '#ffb02e', '#ff375f', '#ff8ba2', '#ffffff'];
+        palette = ['#d6b36a', '#e3cf9a', '#d3a355', '#d0716f', '#d49aa4', '#ffffff'];
         sizeMin = 28; sizeMax = 40;
         life = 0.7;
         label = label + '!';
     } else if (opts.dot) {
         // DoT ticks stay green so the player learns "green = poison/burn".
-        palette = ['#00ff9d', '#34ffae', '#7be8a3', '#a3ff5c'];
+        palette = ['#67c092', '#74c8a0', '#7be8a3', '#9ec878'];
         sizeMin = 14; sizeMax = 20;
         life = 0.5;
     } else if (opts.splash) {
         // Ability/AOE hits: full warm rainbow + significantly bigger so they
         // visually dominate normal projectile hits, plus a heavy neon glow.
-        palette = ['#ff7035', '#ff9d00', '#ffb02e', '#ff5c30', '#ff375f', '#ff8ba2', '#bc13fe', '#d78fff'];
+        palette = ['#cd7a4e', '#cf9440', '#d3a355', '#cf6a42', '#d0716f', '#d49aa4', '#a184c9', '#bb9bd8'];
         sizeMin = 32; sizeMax = 44;
         life = 0.8;
     } else if (ratio >= 6) {
@@ -1980,17 +2214,17 @@ window.showDamagePopup = function(x, y, dmg, opts) {
         life = 0.8;
     } else if (ratio >= 3) {
         // Strong hits — rainbow but skip the cool/white tones so it reads "hot".
-        palette = ['#ff375f', '#ff5e7a', '#ff7035', '#ff9d00', '#ffd14d', '#bc13fe', '#d78fff'];
+        palette = ['#d0716f', '#cc7484', '#cd7a4e', '#cf9440', '#d6b36a', '#a184c9', '#bb9bd8'];
         sizeMin = 28; sizeMax = 36;
         life = 0.7;
     } else if (ratio >= 1.5) {
         // Boosted — warmer rainbow without the deep magentas yet.
-        palette = ['#ffd14d', '#ffe698', '#ff9d00', '#a3ff5c', '#00ff9d', '#7be8ff'];
+        palette = ['#d6b36a', '#e3cf9a', '#cf9440', '#9ec878', '#67c092', '#97c7d6'];
         sizeMin = 22; sizeMax = 28;
         life = 0.65;
     } else if (ratio < 0.5) {
         // Tiny hits — cooler/dimmer rainbow so they don't dominate.
-        palette = ['#7be8ff', '#5cc1ff', '#cfd9ee', '#dfe7ff', '#a3ff5c', '#ffe698'];
+        palette = ['#97c7d6', '#8db4d2', '#cfd9ee', '#dfe7ff', '#9ec878', '#e3cf9a'];
         sizeMin = 14; sizeMax = 18;
         life = 0.5;
     } else {
@@ -2038,7 +2272,17 @@ function loadSave() {
     save.unlocked = Math.max(1, save.unlocked || 1);
     save.selectedLevel = Math.max(1, save.unlocked || 1);
     const migratedEconomy = save.stats?.economy ?? save.stats?.speed ?? 0;
-    save.stats = Object.assign({ dmg: 0, atkSpd: 0, economy: migratedEconomy }, save.stats || {});
+    // hearts/armor default to 0 so existing saves pick up the new paths cleanly.
+    save.stats = Object.assign({ dmg: 0, atkSpd: 0, economy: migratedEconomy, hearts: 0, armor: 0 }, save.stats || {});
+    if (typeof save.stats.hearts !== 'number') save.stats.hearts = 0;
+    if (typeof save.stats.armor !== 'number') save.stats.armor = 0;
+    // Clamp every stored level to its tree's current ceiling, so a save written
+    // against an older (longer) tree can't carry an out-of-range level around.
+    UPGRADES.forEach((u) => {
+        const lv = save.stats[u.id];
+        if (typeof lv !== 'number' || !isFinite(lv) || lv < 0) save.stats[u.id] = 0;
+        else if (lv > u.max) save.stats[u.id] = u.max;
+    });
     save.premium = Object.assign({ noAds: false, neonTrail: false, neonTrailEnabled: true }, save.premium || {});
     save.inventory = Array.isArray(save.inventory) ? save.inventory : [];
     save.packs = Array.isArray(save.packs) ? save.packs : [];
@@ -2083,8 +2327,29 @@ function grantDailyLoginBonus() {
     renderDailyLoginPanel();
 }
 
+let _saveFailedWarned = false;
 function saveSave() {
-    localStorage.setItem('sd_save_v7', JSON.stringify(save));
+    // localStorage.setItem throws on quota-exceeded and in some private-browsing
+    // modes. loadSave() was guarded but this was not, and it is called from ~29
+    // places — including mid-run paths like revive, gameOver and buyUpgrade —
+    // where an uncaught throw would kill the run.
+    try {
+        localStorage.setItem('sd_save_v7', JSON.stringify(save));
+    } catch (error) {
+        console.warn('Save write failed', error);
+        // Tell the player once: silently losing progress is worse than a toast.
+        if (!_saveFailedWarned) {
+            _saveFailedWarned = true;
+            try { showToast(t('toast.saveFailed')); } catch (e) {}
+        }
+    }
+}
+
+// Flat hard-stop fill (no native gradient look) so the slider track shows
+// its actual value, matching the vorlage's filled pixel-style bar.
+function fillSlider(slider, pct, color) {
+    if (!slider) return;
+    slider.style.background = `linear-gradient(to right, ${color} 0%, ${color} ${pct}%, #100c24 ${pct}%, #100c24 100%)`;
 }
 
 function syncSettingsUi() {
@@ -2094,10 +2359,12 @@ function syncSettingsUi() {
     const musicValue = document.getElementById('settings-music-value');
     const hapticsToggle = document.getElementById('settings-haptics');
 
-    if (sfxSlider) sfxSlider.value = Math.round((save.settings?.sfx ?? 0.7) * 100);
-    if (sfxValue) sfxValue.textContent = `${Math.round((save.settings?.sfx ?? 0.7) * 100)}%`;
-    if (musicSlider) musicSlider.value = Math.round((save.settings?.music ?? 0.35) * 100);
-    if (musicValue) musicValue.textContent = `${Math.round((save.settings?.music ?? 0.35) * 100)}%`;
+    const sfxPct = Math.round((save.settings?.sfx ?? 0.7) * 100);
+    const musicPct = Math.round((save.settings?.music ?? 0.35) * 100);
+    if (sfxSlider) { sfxSlider.value = sfxPct; fillSlider(sfxSlider, sfxPct, '#29d1ff'); }
+    if (sfxValue) sfxValue.textContent = `${sfxPct}%`;
+    if (musicSlider) { musicSlider.value = musicPct; fillSlider(musicSlider, musicPct, '#ff5fd1'); }
+    if (musicValue) musicValue.textContent = `${musicPct}%`;
     if (hapticsToggle) hapticsToggle.checked = !!save.settings?.haptics;
     const dmgToggle = document.getElementById('settings-dmg-popups');
     if (dmgToggle) dmgToggle.checked = save.settings?.damagePopups !== false;
@@ -2192,6 +2459,11 @@ function getUpgradeBonus(statConfig, level, upgradeId) {
 
     const upgrade = getUpgradeDefinition(upgradeId);
     if (!upgrade) return 0;
+
+    // Clamp to the tree's ceiling. Without this a save that stores a level
+    // above `max` (e.g. written before a path's max was lowered) keeps
+    // accumulating: a stale hearts:42 produced 45 max HP instead of 9.
+    level = Math.min(level, upgrade.max);
 
     let total = 0;
     for (let i = 0; i < level; i++) {
@@ -2683,7 +2955,7 @@ function updateActiveAbility(dt) {
             if (player.shieldDuration >= 3.5) {
                 // Heal 1 HP on level 3 shield end
                 player.hp = Math.min(player.maxHp, player.hp + 1);
-                addFxText(player.x, player.y - 30, '+1 HP', '#5cc1ff', 1.0, 20);
+                addFxText(player.x, player.y - 30, '+1 HP', '#8db4d2', 1.0, 20);
             }
         }
     }
@@ -2829,9 +3101,12 @@ function spawnWave(index) {
 
 function spawnEndlessWave(index) {
     currentWave = index;
-    // Endless difficulty depends ONLY on the elapsed waves, not on save.unlocked.
-    // wave 0 = lvl 1, then climbs ~1 level every 2 waves with a soft cap floor early on
-    const scaledLevel = Math.max(1, 1 + Math.floor(index / 2));
+    // Endless used to always start at level-1 difficulty regardless of progress,
+    // so a level-60 player had to grind ~20 trivial waves before it got
+    // interesting. It now opens at half the highest level reached (capped at 25
+    // so it never starts brutal) and climbs ~1 level every 2 waves from there.
+    const floorLevel = Math.max(1, Math.min(25, Math.floor((save.unlocked || 1) / 2)));
+    const scaledLevel = Math.max(1, floorLevel + Math.floor(index / 2));
     currentLevel = scaledLevel;
     const waveSet = getLevelWaves(scaledLevel);
     const templateWave = waveSet[index % waveSet.length] || waveSet[0] || [{ t: 'drone', n: 8 }];
@@ -2905,13 +3180,13 @@ function updatePhoenixAura(dt) {
         if (d > radius) return;
         e.hp -= tickDmg;
         e.hitFlash = Math.max(e.hitFlash || 0, 0.06);
-        if (Math.random() < 0.5) addP(e.x, e.y, '#ff6b35', 1, 60, 0.12, 1);
+        if (Math.random() < 0.5) addP(e.x, e.y, '#cd764e', 1, 60, 0.12, 1);
         if (e.hp <= 0) triggerKill(e);
     });
     // Subtle aura ring particles
     if (Math.random() < 0.6) {
         const a = Math.random() * Math.PI * 2;
-        addP(player.x + Math.cos(a) * radius, player.y + Math.sin(a) * radius, '#ff8030', 1, 40, 0.25, 1);
+        addP(player.x + Math.cos(a) * radius, player.y + Math.sin(a) * radius, '#cd7a4e', 1, 40, 0.25, 1);
     }
 }
 
@@ -3020,7 +3295,7 @@ function updateAutoFire(dt) {
     if (player.empStunTimer > 0) {
         player.empStunTimer -= dt;
         // Sparks around player gun while stunned
-        if (Math.random() < 0.35) addP(player.x, player.y, '#ff9d00', 2, 55, 0.22, 2);
+        if (Math.random() < 0.35) addP(player.x, player.y, '#cf9440', 2, 55, 0.22, 2);
         return;
     }
     player.shootTimer = Math.max(0, player.shootTimer - dt);
@@ -3060,9 +3335,9 @@ function updateAutoFire(dt) {
         const isLucky = !opts.skipLucky && player.luckyEvery > 0 && player.shotCounter % player.luckyEvery === 0;
         if (isLucky) {
             shotDmg *= (player.luckyMult || 5);
-            addFxText(player.x, player.y - 28, 'LUCKY!', '#ffd14d', 0.5, 20);
+            addFxText(player.x, player.y - 28, 'LUCKY!', '#d6b36a', 0.5, 20);
         }
-        addP(player.x, player.y - 12, isLucky ? '#ffd14d' : '#00f2ff', isLucky ? 8 : 5, 140, 0.18, 2);
+        addP(player.x, player.y - 12, isLucky ? '#d6b36a' : '#6fb7c5', isLucky ? 8 : 5, 140, 0.18, 2);
         spawnProjectile({
             x: player.x,
             y: player.y,
@@ -3073,7 +3348,7 @@ function updateAutoFire(dt) {
             damage: shotDmg,
             pierce: player.pierce,
             canChain: player.chainLightning,
-            color: isLucky ? '#ffd14d' : '#f5fbff',
+            color: isLucky ? '#d6b36a' : '#f5fbff',
             bouncesLeft: player.ricochetCount || 0,
             homingStrength: player.bulletsHome || 0,
             forkTimer: player.bulletFork ? 0.18 : 0, // Lich-Auge: split sooner
@@ -3095,7 +3370,7 @@ function updateAutoFire(dt) {
     // ── Cluster Bomb ──
     if (player.clusterBomb && player.shotCounter % (player.clusterEvery || 10) === 0) {
         if (typeof triggerPassiveIconGlow === 'function') triggerPassiveIconGlow('cluster_bomb');
-        addP(player.x, player.y - 12, '#ff6b35', 12, 180, 0.25, 3);
+        addP(player.x, player.y - 12, '#cd764e', 12, 180, 0.25, 3);
         spawnProjectile({
             x: player.x,
             y: player.y,
@@ -3106,19 +3381,19 @@ function updateAutoFire(dt) {
             damage: baseBulletDmg * (player.clusterDmgMult || 3),
             pierce: 0,
             canChain: false,
-            color: '#ff6b35',
+            color: '#cd764e',
             isBomb: true,
             bombSplitCount: player.clusterSplit ? 5 : 0,
             bombChain: player.clusterChain
         });
         playSfx('ability', 1.1);
-        addFxText(player.x, player.y - 32, 'BOMB!', '#ff6b35', 0.4, 18);
+        addFxText(player.x, player.y - 32, 'BOMB!', '#cd764e', 0.4, 18);
     }
 
     if (player.echoShot && player.shotCounter % 4 === 0) {
         if (typeof triggerPassiveIconGlow === 'function') triggerPassiveIconGlow('echo_shot');
         const echoRank = getAbilityRank('echo_shot');
-        addP(player.x, player.y - 12, '#7be8ff', 8, 170, 0.2, 2);
+        addP(player.x, player.y - 12, '#97c7d6', 8, 170, 0.2, 2);
         spawnProjectile({
             x: player.x,
             y: player.y,
@@ -3129,14 +3404,14 @@ function updateAutoFire(dt) {
             damage: baseBulletDmg * (0.52 + (echoRank * 0.08)),
             pierce: player.pierce + 1,
             canChain: false,
-            color: '#7be8ff'
+            color: '#97c7d6'
         });
         playSfx('ability', 0.8);
     }
 
     if (player.ionRound && player.shotCounter % 5 === 0) {
         const ionRank = getAbilityRank('ion_round');
-        addP(player.x, player.y - 12, '#ffcf4d', 10, 210, 0.2, 3);
+        addP(player.x, player.y - 12, '#d6b36a', 10, 210, 0.2, 3);
         spawnProjectile({
             x: player.x,
             y: player.y,
@@ -3147,7 +3422,7 @@ function updateAutoFire(dt) {
             damage: baseBulletDmg * (player.ionSplashMult || 1.8),
             pierce: player.ionPiercing ? 99 : 0,    // pierce only for rank ≥ 3
             canChain: false,                         // no chain — distinct from Kettenblitz
-            color: '#ffcf4d',
+            color: '#d6b36a',
             isIon: true,
             ionSplashRadius: player.ionSplashRadius || 70,
             ionVaporize: player.ionVaporize
@@ -3194,7 +3469,7 @@ function updateSawLauncher(dt) {
             damage: player.dmg * player.damageMultiplier * (player.sawShootDmgMult || 0.6),
             pierce: 999,
             canChain: false,
-            color: '#7be8ff',
+            color: '#97c7d6',
             isSawShot: true,
             sawHitMap: {},
             sawHitInterval: 0.18
@@ -3228,7 +3503,7 @@ function updateBoomerangLauncher(dt) {
             damage: player.dmg * player.damageMultiplier * (player.boomerangLaunchDmgMult || 1.4),
             pierce: 999,
             canChain: false,
-            color: '#ffd14d',
+            color: '#d6b36a',
             isBoomShot: true,
             boomCurveDir: curveDir,
             boomHitMap: {},
@@ -3256,7 +3531,7 @@ function spawnSingularity(tx, ty) {
         implode: player.singularityImplode,
         spawned: false
     });
-    addP(player.x, player.y, '#bc13fe', 10, 70, 0.22, 2.5);
+    addP(player.x, player.y, '#a184c9', 10, 70, 0.22, 2.5);
     playSfx('singularityShoot', 1.0);
 }
 
@@ -3273,11 +3548,11 @@ function _deployPullField(hazard) {
         pullStrength: 190 + rank * 45,
         damage: player.dmg * player.damageMultiplier * 0.1,
         implode: hazard.implode,
-        color: '#bc13fe',
+        color: '#a184c9',
         hit: false
     });
-    addP(hazard.x, hazard.y, '#bc13fe', 22, 140, 0.35, 5);
-    addFxText(hazard.x, hazard.y - 24, '⬛ PULL', '#bc13fe', 0.4, 17);
+    addP(hazard.x, hazard.y, '#a184c9', 22, 140, 0.35, 5);
+    addFxText(hazard.x, hazard.y - 24, '⬛ PULL', '#a184c9', 0.4, 17);
     playSfx('singularityPull', 1.05);
 }
 
@@ -3341,7 +3616,7 @@ function spawnTornadoVolley(baseAngle, rank = 1) {
             pierce: 99,
             canChain: false,
             tornado: true,
-            color: '#bc13fe'
+            color: '#a184c9'
         });
     }
 }
@@ -3396,7 +3671,7 @@ function updateProjectiles(dt) {
             projectile.vx = Math.cos(newAngle) * spd;
             projectile.vy = Math.sin(newAngle) * spd;
             // small spinning trail
-            if (Math.random() < 0.5) addP(projectile.x, projectile.y, '#ffd14d', 1, 30, 0.18, 1);
+            if (Math.random() < 0.5) addP(projectile.x, projectile.y, '#d6b36a', 1, 30, 0.18, 1);
             // tick down per-target hit cooldowns
             if (projectile.boomHitMap) {
                 for (const k in projectile.boomHitMap) {
@@ -3409,7 +3684,7 @@ function updateProjectiles(dt) {
         // ── Saw projectile: slow flying saw, infinite pierce, can re-hit same enemy ──
         if (projectile.isSawShot) {
             projectile.spin += dt * 14;
-            if (Math.random() < 0.4) addP(projectile.x, projectile.y, '#7be8ff', 1, 30, 0.16, 1);
+            if (Math.random() < 0.4) addP(projectile.x, projectile.y, '#97c7d6', 1, 30, 0.16, 1);
             if (projectile.sawHitMap) {
                 for (const k in projectile.sawHitMap) {
                     projectile.sawHitMap[k] -= dt;
@@ -3448,7 +3723,7 @@ function updateProjectiles(dt) {
                         life: 0.8, r: 4,
                         pierce: player.pierce,
                         canChain: false, tornado: false,
-                        spin: 0, color: '#c890ff',
+                        spin: 0, color: '#b195d6',
                         isBoomerang: false, boomerangPhase: 0, boomerangTime: 0,
                         bouncesLeft: 0, homingStrength: 0,
                         forkTimer: 0, forkCount: 0, forked: true,
@@ -3456,7 +3731,7 @@ function updateProjectiles(dt) {
                         isShard: false, speed: 640
                     });
                 }
-                addP(projectile.x, projectile.y, '#c890ff', 10, 100, 0.2, 3);
+                addP(projectile.x, projectile.y, '#b195d6', 10, 100, 0.2, 3);
             }
         }
 
@@ -3482,7 +3757,7 @@ function updateProjectiles(dt) {
                 projectile.bouncesLeft -= 1;
                 projectile.life = Math.max(projectile.life, 0.5);
                 projectile.dmg *= (1 + (player.ricochetDmgPerBounce || 0));
-                addP(projectile.x, projectile.y, '#7be8ff', 6, 60, 0.15, 2);
+                addP(projectile.x, projectile.y, '#97c7d6', 6, 60, 0.15, 2);
             }
         }
 
@@ -3491,14 +3766,14 @@ function updateProjectiles(dt) {
             if (projectile.x <= WALL + projectile.r || projectile.x >= arena.width - WALL - projectile.r ||
                 projectile.y <= arena.top + projectile.r || projectile.y >= arena.height - WALL - projectile.r) {
                 projectile.life = 0;
-                addP(projectile.x, projectile.y, '#ffd14d', 12, 100, 0.25, 3);
+                addP(projectile.x, projectile.y, '#d6b36a', 12, 100, 0.25, 3);
             }
         }
 
         if (projectile.tornado) {
-            addP(projectile.x, projectile.y, '#bc13fe', 2, 40, 0.12, 2);
+            addP(projectile.x, projectile.y, '#a184c9', 2, 40, 0.12, 2);
         } else if (projectile.isBomb) {
-            addP(projectile.x, projectile.y, '#ff6b35', 3, 30, 0.12, 2);
+            addP(projectile.x, projectile.y, '#cd764e', 3, 30, 0.12, 2);
         } else if (Math.random() < 0.45) {
             addP(projectile.x, projectile.y, projectile.color, 1, 20, 0.1, 1);
         }
@@ -3524,7 +3799,7 @@ function updateProjectiles(dt) {
                     // Mega crit
                     if (player.megaCritChance > 0 && Math.random() < player.megaCritChance) {
                         critMult *= 3;
-                        addFxText(projectile.x, projectile.y - 24, 'MEGA!', '#ff375f', 0.55, 22);
+                        addFxText(projectile.x, projectile.y - 24, 'MEGA!', '#d0716f', 0.55, 22);
                     }
                     finalDmg *= critMult;
                     isCrit = true;
@@ -3579,7 +3854,7 @@ function updateProjectiles(dt) {
                 if (player.healAccum >= enemy.maxHp * 0.5) {
                     player.hp = Math.min(player.maxHp, player.hp + 1);
                     player.healAccum = 0;
-                    addFxText(player.x, player.y - 20, '+1 HP', '#00ff9d', 0.4, 16);
+                    addFxText(player.x, player.y - 20, '+1 HP', '#67c092', 0.4, 16);
                     syncHpDangerFlair();
                 }
             }
@@ -3601,26 +3876,26 @@ function updateProjectiles(dt) {
                     enemy.hp -= player.dmg * 0.05;
                 }
                 // Crisper frost VFX: sparkles + impact ring
-                addP(enemy.x, enemy.y, '#a8eaff', 6, 70, 0.28, 2);
-                addP(projectile.x, projectile.y, '#7be8ff', 4, 90, 0.16, 2);
+                addP(enemy.x, enemy.y, '#bcd6de', 6, 70, 0.28, 2);
+                addP(projectile.x, projectile.y, '#97c7d6', 4, 90, 0.16, 2);
                 hazards.push({
                     id: nextHazardId++,
                     type: 'ring',
                     x: enemy.x, y: enemy.y,
                     radius: 4, maxRadius: 22, speed: 90,
-                    life: 0.22, color: 'rgba(123,232,255,0.0)', hit: true // visual only (hit=true ⇒ skip damage)
+                    life: 0.22, color: 'rgba(151,199,214,0.0)', hit: true // visual only (hit=true ⇒ skip damage)
                 });
                 if (player.freezeChance > 0 && Math.random() < player.freezeChance) {
                     enemy.frozen = true;
                     enemy.frozenTimer = 1.0;
-                    addFxText(enemy.x, enemy.y - 14, 'FROZEN', '#7be8ff', 0.45, 14);
-                    addP(enemy.x, enemy.y, '#7be8ff', 18, 110, 0.4, 3);
+                    addFxText(enemy.x, enemy.y - 14, 'FROZEN', '#97c7d6', 0.45, 14);
+                    addP(enemy.x, enemy.y, '#97c7d6', 18, 110, 0.4, 3);
                     hazards.push({
                         id: nextHazardId++,
                         type: 'ring',
                         x: enemy.x, y: enemy.y,
                         radius: 8, maxRadius: 50, speed: 140,
-                        life: 0.45, color: 'rgba(123,232,255,0.0)', hit: true
+                        life: 0.45, color: 'rgba(151,199,214,0.0)', hit: true
                     });
                 }
             }
@@ -3631,7 +3906,7 @@ function updateProjectiles(dt) {
                 enemy.poisonTimer = player.poisonDuration || 3;
                 if (!enemy._poisoned) {
                     enemy._poisoned = true;
-                    addFxText(enemy.x, enemy.y - 14, 'POISON', '#00ff9d', 0.35, 14);
+                    addFxText(enemy.x, enemy.y - 14, 'POISON', '#67c092', 0.35, 14);
                 }
             }
 
@@ -3710,8 +3985,8 @@ function updateProjectiles(dt) {
             // ── Execute threshold (Scarier Face rank 4) ──
             if (player.executeThreshold > 0 && enemy.hp > 0 && enemy.hp <= enemy.maxHp * player.executeThreshold && !enemy.isBoss) {
                 enemy.hp = 0;
-                addFxText(enemy.x, enemy.y - 16, 'EXECUTE!', '#ff375f', 0.45, 18);
-                addP(enemy.x, enemy.y, '#ff375f', 14, 160, 0.3, 4);
+                addFxText(enemy.x, enemy.y - 16, 'EXECUTE!', '#d0716f', 0.45, 18);
+                addP(enemy.x, enemy.y, '#d0716f', 14, 160, 0.3, 4);
             }
 
             if (enemy.hp <= 0) triggerKill(enemy);
@@ -3746,14 +4021,14 @@ function triggerEchoShock(cx, cy) {
     const radius = player.echoRadius || 80;
     const dmgMult = player.echoDmgMult || 0.6;
     const dmg = player.dmg * player.damageMultiplier * dmgMult;
-    addP(cx, cy, '#7be8ff', 18, 160, 0.32, 4);
+    addP(cx, cy, '#97c7d6', 18, 160, 0.32, 4);
     addP(cx, cy, '#ffffff', 8, 100, 0.18, 2);
     hazards.push({
         id: nextHazardId++,
         type: 'ring',
         x: cx, y: cy,
         radius: 12, maxRadius: radius, speed: 380,
-        life: 0.35, color: 'rgba(123,232,255,0.0)', hit: true // visual only — damage applied immediately
+        life: 0.35, color: 'rgba(151,199,214,0.0)', hit: true // visual only — damage applied immediately
     });
     enemies.forEach((e) => {
         if (!e.alive) return;
@@ -3764,7 +4039,7 @@ function triggerEchoShock(cx, cy) {
         showDamagePopup(e.x, e.y - e.r, dmg, { splash: true });
         if (e.hp <= 0) triggerKill(e);
     });
-    addFxText(cx, cy - 18, 'ECHO', '#7be8ff', 0.3, 14);
+    addFxText(cx, cy - 18, 'ECHO', '#97c7d6', 0.3, 14);
     playSfx('chain', 0.7);
 }
 
@@ -3772,15 +4047,15 @@ function triggerEchoShock(cx, cy) {
 function triggerIonSplash(projectile) {
     const radius = projectile.ionSplashRadius || 70;
     const dmg = projectile.dmg * 0.55;
-    addP(projectile.x, projectile.y, '#ffd14d', 22, 200, 0.4, 5);
-    addP(projectile.x, projectile.y, '#ffe698', 10, 140, 0.25, 3);
+    addP(projectile.x, projectile.y, '#d6b36a', 22, 200, 0.4, 5);
+    addP(projectile.x, projectile.y, '#e3cf9a', 10, 140, 0.25, 3);
     screenShake = Math.min(2.5, screenShake + 0.25);
     hazards.push({
         id: nextHazardId++,
         type: 'ring',
         x: projectile.x, y: projectile.y,
         radius: 10, maxRadius: radius, speed: 540,
-        life: 0.35, color: 'rgba(255,209,77,0.0)', hit: true // visual only
+        life: 0.35, color: 'rgba(214,179,106,0.0)', hit: true // visual only
     });
     enemies.forEach((e) => {
         if (!e.alive) return;
@@ -3800,7 +4075,7 @@ function triggerIonSplash(projectile) {
 function triggerCritExplosion(cx, cy, baseDmg) {
     const radius = player.critExplodeRadius || 40;
     const mult = player.critExplodeMult || 0.6;
-    addP(cx, cy, '#ffd14d', 20, 200, 0.3, 5);
+    addP(cx, cy, '#d6b36a', 20, 200, 0.3, 5);
     screenShake = Math.min(2.5, screenShake + 0.35);
     enemies.forEach((e) => {
         if (!e.alive) return;
@@ -3809,7 +4084,7 @@ function triggerCritExplosion(cx, cy, baseDmg) {
         const splashDmg = player.critOneShot ? e.maxHp * 10 : baseDmg * mult;
         e.hp -= splashDmg;
         e.hitFlash = 0.14;
-        addP(e.x, e.y, '#ffd14d', 6, 80, 0.15, 2);
+        addP(e.x, e.y, '#d6b36a', 6, 80, 0.15, 2);
         showDamagePopup(e.x, e.y - e.r, splashDmg, { splash: true });
         if (e.hp <= 0) triggerKill(e);
     });
@@ -3828,8 +4103,8 @@ function triggerArcPulse(origin) {
     targets.forEach(({ enemy }) => {
         enemy.hp -= pulseDmg;
         enemy.hitFlash = 0.1;
-        addLightningBolt(origin.x, origin.y, enemy.x, enemy.y, '#bc13fe', 0.14, 2.5);
-        addP(enemy.x, enemy.y, '#bc13fe', 8, 80, 0.18, 2);
+        addLightningBolt(origin.x, origin.y, enemy.x, enemy.y, '#a184c9', 0.14, 2.5);
+        addP(enemy.x, enemy.y, '#a184c9', 8, 80, 0.18, 2);
         if (player.arcParalyze) {
             enemy.frozen = true;
             enemy.frozenTimer = 0.3;
@@ -3837,7 +4112,7 @@ function triggerArcPulse(origin) {
         if (enemy.hp <= 0) triggerKill(enemy);
     });
     if (targets.length) {
-        addFxText(origin.x, origin.y - 18, 'ARC', '#bc13fe', 0.3, 14);
+        addFxText(origin.x, origin.y - 18, 'ARC', '#a184c9', 0.3, 14);
         playSfx('chain', 0.85);
     }
 }
@@ -3845,8 +4120,8 @@ function triggerArcPulse(origin) {
 // ── Cluster Bomb Explosion ──
 function triggerBombExplosion(projectile) {
     const radius = 70;
-    addP(projectile.x, projectile.y, '#ff6b35', 28, 250, 0.4, 6);
-    addP(projectile.x, projectile.y, '#ffd14d', 14, 180, 0.25, 4);
+    addP(projectile.x, projectile.y, '#cd764e', 28, 250, 0.4, 6);
+    addP(projectile.x, projectile.y, '#d6b36a', 14, 180, 0.25, 4);
     screenShake = Math.min(3, screenShake + 0.55);
     powerPulse = Math.min(2, powerPulse + 0.4);
     playSfx('hit', 1.2);
@@ -3873,7 +4148,7 @@ function triggerBombExplosion(projectile) {
                 damage: projectile.dmg * 0.4,
                 pierce: 0,
                 canChain: false,
-                color: '#ff9d00',
+                color: '#cf9440',
                 isBomb: projectile.bombChain,
                 bombSplitCount: projectile.bombChain ? Math.floor(projectile.bombSplitCount / 2) : 0,
                 bombChain: false
@@ -3908,10 +4183,10 @@ function triggerChainLightning(origin, damage) {
     targets.forEach(({ enemy }) => {
         enemy.hp -= chainDamage;
         enemy.hitFlash = 0.12;
-        addLightningBolt(origin.x, origin.y, enemy.x, enemy.y, '#7be8ff', 0.16, 3.6 + rank * 0.35);
-        addP(enemy.x, enemy.y, '#00f2ff', 14, 150, 0.28, 2);
+        addLightningBolt(origin.x, origin.y, enemy.x, enemy.y, '#97c7d6', 0.16, 3.6 + rank * 0.35);
+        addP(enemy.x, enemy.y, '#6fb7c5', 14, 150, 0.28, 2);
         showDamagePopup(enemy.x, enemy.y - enemy.r, chainDamage, { splash: true });
-        addFxText(enemy.x, enemy.y - 18, 'ARC', '#00f2ff', 0.32, 16);
+        addFxText(enemy.x, enemy.y - 18, 'ARC', '#6fb7c5', 0.32, 16);
         if (enemy.hp <= 0) triggerKill(enemy);
     });
     if (targets.length) playSfx('chain', 0.95);
@@ -3939,8 +4214,8 @@ function updateEnemies(dt) {
                 // Shield just broke → trigger rage
                 if (wasAlive && enemy.shieldHp <= 0 && enemy.ai === 'shielder') {
                     enemy.shieldRageTimer = 2.2;
-                    addP(enemy.x, enemy.y, '#ff4444', 18, 150, 0.4, 3);
-                    addP(enemy.x, enemy.y, '#5cc1ff', 12, 120, 0.3, 2);
+                    addP(enemy.x, enemy.y, '#c25f57', 18, 150, 0.4, 3);
+                    addP(enemy.x, enemy.y, '#8db4d2', 12, 120, 0.3, 2);
                     screenShake = Math.min(2.5, screenShake + 0.2);
                 }
             }
@@ -3978,9 +4253,9 @@ function updateEnemies(dt) {
                 enemy.shootCooldown = 2.3 + Math.random() * 0.6;
                 hazards.push({ id: nextHazardId++, type: 'enemybullet',
                     x: enemy.x, y: enemy.y, vx: nx * 310, vy: ny * 310,
-                    r: 5, life: 1.6, color: '#00f2ff', hit: false });
+                    r: 5, life: 1.6, color: '#6fb7c5', hit: false });
                 playSfx('enemyShoot', 0.6);
-                addP(enemy.x, enemy.y, '#00f2ff', 4, 50, 0.15, 1);
+                addP(enemy.x, enemy.y, '#6fb7c5', 4, 50, 0.15, 1);
             }
             // ── Magnetmine: drops a proximity mine every 8s ──
             enemy.mineCooldown = (enemy.mineCooldown || 8) - dt;
@@ -3989,8 +4264,8 @@ function updateEnemies(dt) {
                 hazards.push({ id: nextHazardId++, type: 'magnetmine',
                     x: enemy.x, y: enemy.y, r: 14, triggerR: 70,
                     life: 12, armed: false, armTimer: 0.8,
-                    color: '#00f2ff', damage: player.maxHp > 1 ? 1 : 0.5 });
-                addSparks(enemy.x, enemy.y, '#00f2ff', 4, 80, 0.2, Math.PI * 2);
+                    color: '#6fb7c5', damage: player.maxHp > 1 ? 1 : 0.5 });
+                addSparks(enemy.x, enemy.y, '#6fb7c5', 4, 80, 0.2, Math.PI * 2);
             }
             moveX = nx * 0.72 + px * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
             moveY = ny * 0.72 + py * (distance < 140 ? 0.82 : 0.45) * enemy.strafeDir;
@@ -4000,11 +4275,11 @@ function updateEnemies(dt) {
                 enemy.blinkTimer -= dt;
                 enemy.blinkAlpha = Math.max(0, enemy.blinkTimer / 0.2);
                 // Sparkle trail while fading out
-                if (Math.random() < 0.5) addP(enemy.x, enemy.y, '#e080ff', 3, 60, 0.18, 2);
+                if (Math.random() < 0.5) addP(enemy.x, enemy.y, '#bd93d6', 3, 60, 0.18, 2);
                 speed = 0; // frozen while vanishing
                 if (enemy.blinkTimer <= 0) {
                     // Departure burst
-                    addP(enemy.x, enemy.y, '#bc13fe', 20, 160, 0.5, 4);
+                    addP(enemy.x, enemy.y, '#a184c9', 20, 160, 0.5, 4);
                     addP(enemy.x, enemy.y, '#ffffff', 8, 100, 0.2, 2);
                     // Teleport behind player
                     const behindAngle = Math.atan2(-ny, -nx);
@@ -4018,7 +4293,7 @@ function updateEnemies(dt) {
                     enemy.blinkTimer = 0.25;
                     playSfx('teleportIn', 0.9);
                     // Arrival burst
-                    addP(enemy.x, enemy.y, '#e080ff', 24, 180, 0.5, 4);
+                    addP(enemy.x, enemy.y, '#bd93d6', 24, 180, 0.5, 4);
                     addP(enemy.x, enemy.y, '#ffffff', 10, 120, 0.25, 3);
                     screenShake = Math.min(2.5, screenShake + 0.18);
                 }
@@ -4041,7 +4316,7 @@ function updateEnemies(dt) {
                     enemy.blinkPhase = 'vanishing';
                     enemy.blinkTimer = 0.2;
                     playSfx('teleportOut', 0.8);
-                    addP(enemy.x, enemy.y, '#bc13fe', 10, 90, 0.25, 2);
+                    addP(enemy.x, enemy.y, '#a184c9', 10, 90, 0.25, 2);
                 }
             } else if (enemy.sprintCooldown <= 0 && distance > 110) {
                 // ── Rage-Blink: under 30% HP the blink cooldown halves ──
@@ -4051,8 +4326,8 @@ function updateEnemies(dt) {
                 enemy.sprintDirX = nx;
                 enemy.sprintDirY = ny;
                 enemy.blinkPending = true;
-                addP(enemy.x, enemy.y, raging ? '#ff00ff' : enemy.glow, raging ? 14 : 8, 110, 0.35, 2);
-                if (raging) addRing(enemy.x, enemy.y, '#ff00ff', 220, 80, 0.3, 1.5);
+                addP(enemy.x, enemy.y, raging ? '#b06cb0' : enemy.glow, raging ? 14 : 8, 110, 0.35, 2);
+                if (raging) addRing(enemy.x, enemy.y, '#b06cb0', 220, 80, 0.3, 1.5);
             } else {
                 // Rage-Blink afterimage trail
                 if (enemy.hp / enemy.maxHp < 0.3 && Math.random() < 0.35) {
@@ -4068,9 +4343,9 @@ function updateEnemies(dt) {
                 enemy.empCooldown = 5.0 + Math.random();
                 hazards.push({ id: nextHazardId++, type: 'empring',
                     x: enemy.x, y: enemy.y, radius: enemy.r,
-                    maxRadius: 220, speed: 200, life: 1.4, color: '#ff9d00', hit: false });
+                    maxRadius: 220, speed: 200, life: 1.4, color: '#cf9440', hit: false });
                 playSfx('empBlast', 0.9);
-                addP(enemy.x, enemy.y, '#ff9d00', 14, 140, 0.35, 3);
+                addP(enemy.x, enemy.y, '#cf9440', 14, 140, 0.35, 3);
                 // ── Ketten-EMP: nearby tanks get +30% speed +20% dmg for 3s ──
                 for (let k = 0; k < enemies.length; k++) {
                     const ally = enemies[k];
@@ -4086,7 +4361,7 @@ function updateEnemies(dt) {
             if (enemy.empBuffTimer > 0) {
                 enemy.empBuffTimer -= dt;
                 speed *= 1.3;
-                if (Math.random() < 0.2) addP(enemy.x, enemy.y, '#ff9d00', 1, 40, 0.15, 2);
+                if (Math.random() < 0.2) addP(enemy.x, enemy.y, '#cf9440', 1, 40, 0.15, 2);
             }
             moveX = nx + px * 0.18 * Math.cos(enemy.aiClock * 1.7);
             moveY = ny + py * 0.18 * Math.cos(enemy.aiClock * 1.7);
@@ -4102,8 +4377,8 @@ function updateEnemies(dt) {
             moveY = ny * 0.92 + py * 0.34 * Math.sin(enemy.aiClock * 6.0);
             // ── Kontakt-Explosion: mini swarmlings (hasSplit) explode on touch ──
             if (enemy.hasSplit && distance < enemy.r + player.r + 4) {
-                addRing(enemy.x, enemy.y, '#ffe000', 280, 60, 0.35, 2.0);
-                addSparks(enemy.x, enemy.y, '#ffe000', 8, 150, 0.3, Math.PI * 2);
+                addRing(enemy.x, enemy.y, '#d9c25a', 280, 60, 0.35, 2.0);
+                addSparks(enemy.x, enemy.y, '#d9c25a', 8, 150, 0.3, Math.PI * 2);
                 damagePlayer(0.5);
                 enemy.hp = 0;
             }
@@ -4114,14 +4389,14 @@ function updateEnemies(dt) {
                 enemy.slamCooldown = 3.5 + Math.random() * 0.5;
                 hazards.push({ id: nextHazardId++, type: 'ring',
                     x: enemy.x, y: enemy.y, radius: enemy.r,
-                    maxRadius: 180, speed: 260, life: 0.9, color: '#ffaa00', hit: false });
+                    maxRadius: 180, speed: 260, life: 0.9, color: '#d09c46', hit: false });
                 playSfx('groundSlam', 1.0);
-                addP(enemy.x, enemy.y, '#ffaa00', 18, 130, 0.35, 4);
+                addP(enemy.x, enemy.y, '#d09c46', 18, 130, 0.35, 4);
                 screenShake = Math.min(2.5, screenShake + 0.22);
                 // ── Riss-Welle: slam leaves a persistent slow zone for 3s ──
                 hazards.push({ id: nextHazardId++, type: 'slowzone',
                     x: enemy.x, y: enemy.y, r: 80, life: 3.0, maxLife: 3.0,
-                    color: '#ffaa00' });
+                    color: '#d09c46' });
             }
             // Slow, relentless straight-line chaser.
             moveX = nx;
@@ -4155,13 +4430,13 @@ function updateEnemies(dt) {
                     x: enemy.x, y: enemy.y,
                     vx: nx * shotSpd, vy: ny * shotSpd,
                     r: 6, life: 1.6, bounces: 1, hit: false,
-                    color: '#ff5dad',
+                    color: '#c9709e',
                     // ── Player Mark: next hit after mark deals +40% dmg ──
                     onHitMark: !useRicochet && Math.random() < 0.5
                 });
-                addP(enemy.x, enemy.y, '#ff5dad', 6, 60, 0.18, 2);
+                addP(enemy.x, enemy.y, '#c9709e', 6, 60, 0.18, 2);
                 // Visual mark indicator on player
-                if (!useRicochet) addRing(player.x, player.y, '#ff5dad', 180, 50, 0.4, 1.5);
+                if (!useRicochet) addRing(player.x, player.y, '#c9709e', 180, 50, 0.4, 1.5);
             }
         } else if (enemy.ai === 'bomber') {
             // Charges at the player; explosion is in triggerKill().
@@ -4175,8 +4450,8 @@ function updateEnemies(dt) {
                     x: enemy.x, y: enemy.y,
                     vx: nx * 200 + (Math.random() - 0.5) * 60,
                     vy: ny * 200 + (Math.random() - 0.5) * 60,
-                    r: 8, life: 1.2, color: '#ff6600', hit: false });
-                addSparks(enemy.x, enemy.y, '#ff6600', 5, 100, 0.2, Math.PI * 2);
+                    r: 8, life: 1.2, color: '#c97a35', hit: false });
+                addSparks(enemy.x, enemy.y, '#c97a35', 5, 100, 0.2, Math.PI * 2);
             }
         } else if (enemy.ai === 'healer') {
             // Stays back and pulses healing.
@@ -4199,7 +4474,7 @@ function updateEnemies(dt) {
                         ally.hp = Math.min(ally.maxHp, ally.hp + healAmt);
                     }
                 }
-                addP(enemy.x, enemy.y, '#34ffae', 10, 130, 0.45, 3);
+                addP(enemy.x, enemy.y, '#74c8a0', 10, 130, 0.45, 3);
             }
             // ── Resurrection: once per wave, revives one nearby dead enemy at 30% HP ──
             if (!enemy.hasResurrected) {
@@ -4212,9 +4487,9 @@ function updateEnemies(dt) {
                             corpse.alive = true;
                             corpse.hp = Math.round(corpse.maxHp * 0.3);
                             enemy.hasResurrected = true;
-                            addRing(corpse.x, corpse.y, '#34ffae', 200, 70, 0.6, 2.0);
-                            addSparks(corpse.x, corpse.y, '#34ffae', 10, 120, 0.5, Math.PI * 2);
-                            addP(corpse.x, corpse.y, '#34ffae', 14, 150, 0.5, 3);
+                            addRing(corpse.x, corpse.y, '#74c8a0', 200, 70, 0.6, 2.0);
+                            addSparks(corpse.x, corpse.y, '#74c8a0', 10, 120, 0.5, Math.PI * 2);
+                            addP(corpse.x, corpse.y, '#74c8a0', 14, 150, 0.5, 3);
                             break;
                         }
                     }
@@ -4232,9 +4507,9 @@ function updateEnemies(dt) {
                 enemy.chargeTimer = 0.55;
                 hazards.push({ id: nextHazardId++, type: 'ring',
                     x: enemy.x, y: enemy.y, radius: enemy.r,
-                    maxRadius: 170, speed: 310, life: 0.75, color: '#5cc1ff', hit: false });
+                    maxRadius: 170, speed: 310, life: 0.75, color: '#8db4d2', hit: false });
                 playSfx('shieldBash', 0.9);
-                addP(enemy.x, enemy.y, '#5cc1ff', 16, 130, 0.35, 3);
+                addP(enemy.x, enemy.y, '#8db4d2', 16, 130, 0.35, 3);
                 screenShake = Math.min(2.5, screenShake + 0.15);
             }
             // ── Ramm-Charge: when shield is broken, charge at 3x speed ──
@@ -4245,8 +4520,8 @@ function updateEnemies(dt) {
                 enemy.chargeDirY = ny;
                 enemy.chargeTimer = 0.4;
                 enemy.isRammCharge = true;
-                addRing(enemy.x, enemy.y, '#ff4444', 260, 80, 0.35, 2.0);
-                addSparks(enemy.x, enemy.y, '#ff4444', 10, 160, 0.3, Math.PI * 2);
+                addRing(enemy.x, enemy.y, '#c25f57', 260, 80, 0.35, 2.0);
+                addSparks(enemy.x, enemy.y, '#c25f57', 10, 160, 0.3, Math.PI * 2);
                 screenShake = Math.min(2.5, screenShake + 0.12);
             }
             enemy.rammCooldown = (enemy.rammCooldown || 0) - dt;
@@ -4264,7 +4539,7 @@ function updateEnemies(dt) {
                 if (enemy.shieldRageTimer > 0) {
                     enemy.shieldRageTimer -= dt;
                     speed *= 1.7;
-                    if (Math.random() < 0.3) addP(enemy.x, enemy.y, '#ff4444', 3, 60, 0.2, 2);
+                    if (Math.random() < 0.3) addP(enemy.x, enemy.y, '#c25f57', 3, 60, 0.2, 2);
                 } else {
                     speed *= 0.85;
                 }
@@ -4282,11 +4557,11 @@ function updateEnemies(dt) {
                 enemy.phasing = !enemy.phasing;
                 enemy.phaseTimer = enemy.phasing ? 0.5 : 1.6;
                 if (enemy.phasing) {
-                    addP(enemy.x, enemy.y, '#9f57ff', 6, 80, 0.25, 2);
+                    addP(enemy.x, enemy.y, '#9678cc', 6, 80, 0.25, 2);
                     // ── Phase-Klon: leave a decoy that explodes after 2s ──
                     hazards.push({ id: nextHazardId++, type: 'clone',
                         x: enemy.x, y: enemy.y, r: enemy.r,
-                        life: 2.0, maxLife: 2.0, color: '#9f57ff' });
+                        life: 2.0, maxLife: 2.0, color: '#9678cc' });
                 }
             }
             moveX = nx * 1.05 + px * 0.45 * Math.sin(enemy.aiClock * 3.5);
@@ -4309,7 +4584,7 @@ function updateEnemies(dt) {
                     enemy.chargeDirX = nx;
                     enemy.chargeDirY = ny;
                     enemy.chargeTimer = 0.7;
-                    addP(enemy.x, enemy.y, '#ff5040', 12, 150, 0.4, 3);
+                    addP(enemy.x, enemy.y, '#c96555', 12, 150, 0.4, 3);
                 } else if (enemy.chargeTimer <= 0) {
                     enemy.chargeTimer = 1.8;
                 }
@@ -4324,11 +4599,11 @@ function updateEnemies(dt) {
                         x: enemy.x, y: enemy.y,
                         radius: enemy.r + w * 28, maxRadius: 200 + w * 20,
                         speed: 240, life: 0.9 - w * 0.05,
-                        color: '#ff5040', hit: false });
+                        color: '#c96555', hit: false });
                 }
                 playSfx('groundSlam', 0.85);
                 screenShake = Math.min(2.5, screenShake + 0.3);
-                addP(enemy.x, enemy.y, '#ff5040', 20, 160, 0.4, 4);
+                addP(enemy.x, enemy.y, '#c96555', 20, 160, 0.4, 4);
             }
         } else if (enemy.ai === 'berserker') {
             // Speeds up as HP drops (up to ~1.9x).
@@ -4341,7 +4616,7 @@ function updateEnemies(dt) {
             if (enemy.bloodRageStacks > 0) {
                 const stackMult = Math.min(2.0, 1 + enemy.bloodRageStacks * 0.06);
                 speed *= stackMult;
-                if (Math.random() < 0.15) addP(enemy.x, enemy.y, '#ff2200', 2, 50, 0.2, 2);
+                if (Math.random() < 0.15) addP(enemy.x, enemy.y, '#c44a30', 2, 50, 0.2, 2);
             }
         }
 
@@ -4382,7 +4657,7 @@ function updateBossBehavior(enemy, dt, nx, ny, px, py) {
         enemy.sprintTime = 0.5;
         enemy.sprintDirX = nx;
         enemy.sprintDirY = ny;
-        addP(enemy.x, enemy.y, '#ff375f', 16, 180, 0.45, 4);
+        addP(enemy.x, enemy.y, '#d0716f', 16, 180, 0.45, 4);
     } else if (choice === 'nova') {
         hazards.push({
             id: nextHazardId++,
@@ -4393,7 +4668,7 @@ function updateBossBehavior(enemy, dt, nx, ny, px, py) {
             maxRadius: 210,
             speed: 220,
             life: 1.2,
-            color: '#ff375f',
+            color: '#d0716f',
             hit: false
         });
     } else {
@@ -4403,7 +4678,7 @@ function updateBossBehavior(enemy, dt, nx, ny, px, py) {
             const sy = enemy.y + Math.sin(enemy.aiClock + offset) * 80;
             enemies.push(createEnemy(getEnemyLevelStats('chaser', currentLevel), sx, sy));
         });
-        addP(enemy.x, enemy.y, '#bc13fe', 14, 140, 0.45, 3);
+        addP(enemy.x, enemy.y, '#a184c9', 14, 140, 0.45, 3);
     }
 }
 
@@ -4447,7 +4722,7 @@ function updatePickups(dt) {
         const distance = Math.max(0.001, Math.hypot(dx, dy));
         pickup.spin += dt * 5;
         if (Math.random() < 0.08) {
-            addP(pickup.x, pickup.y, '#00ff9d', 1, 18, 0.1, 1);
+            addP(pickup.x, pickup.y, '#67c092', 1, 18, 0.1, 1);
         }
 
         if (distance < player.magnet) {
@@ -4459,7 +4734,7 @@ function updatePickups(dt) {
         if (distance < player.r + 10) {
             save.gold += pickup.gold;
             pickup.alive = false;
-            addFxText(pickup.x, pickup.y, `+${pickup.gold}`, '#00ff9d', 0.5, 17);
+            addFxText(pickup.x, pickup.y, `+${pickup.gold}`, '#67c092', 0.5, 17);
             powerPulse = Math.min(1.5, powerPulse + 0.08);
             playSfx('pickup', 0.8);
             updateMetaHud();
@@ -4483,8 +4758,8 @@ function updateOrbiters(dt) {
                 if (orbiter.respawnTimer <= 0) {
                     orbiter.alive = true;
                     orbiter.shootTimer = orbiter.shootInterval || 1.4;
-                    addP(player.x, player.y, '#7be8ff', 14, 120, 0.3, 3);
-                    addFxText(player.x, player.y - 26, 'DRONE READY', '#7be8ff', 0.4, 14);
+                    addP(player.x, player.y, '#97c7d6', 14, 120, 0.3, 3);
+                    addFxText(player.x, player.y - 26, 'DRONE READY', '#97c7d6', 0.4, 14);
                 }
                 return;
             }
@@ -4510,9 +4785,9 @@ function updateOrbiters(dt) {
                         damage: player.dmg * player.damageMultiplier * (orbiter.dmgMult || 0.3),
                         pierce: 0,
                         canChain: false,
-                        color: '#7be8ff'
+                        color: '#97c7d6'
                     });
-                    addP(orbiter.x, orbiter.y, '#7be8ff', 2, 60, 0.12, 1);
+                    addP(orbiter.x, orbiter.y, '#97c7d6', 2, 60, 0.12, 1);
                 }
             }
 
@@ -4523,8 +4798,8 @@ function updateOrbiters(dt) {
                 if (d < enemy.r + orbiter.r + 1) {
                     orbiter.alive = false;
                     orbiter.respawnTimer = orbiter.respawnDuration || 15;
-                    addP(orbiter.x, orbiter.y, '#ff6b35', 14, 130, 0.3, 3);
-                    addFxText(orbiter.x, orbiter.y - 14, 'DRONE DOWN', '#ff6b35', 0.4, 14);
+                    addP(orbiter.x, orbiter.y, '#cd764e', 14, 130, 0.3, 3);
+                    addFxText(orbiter.x, orbiter.y - 14, 'DRONE DOWN', '#cd764e', 0.4, 14);
                     break;
                 }
             }
@@ -4564,7 +4839,7 @@ function updateHazards(dt) {
             hazard.x += hazard.vx * dt;
             hazard.y += hazard.vy * dt;
             // Particle trail
-            addP(hazard.x, hazard.y, '#bc13fe', 2, 28, 0.09, 0.9);
+            addP(hazard.x, hazard.y, '#a184c9', 2, 28, 0.09, 0.9);
             // Hit nearest enemy?
             let hit = false;
             enemies.forEach((e) => {
@@ -4579,7 +4854,7 @@ function updateHazards(dt) {
         }
         // ── Singularity pull field ──
         if (hazard.type === 'singularity') {
-            addP(hazard.x, hazard.y, '#bc13fe', 2, 30, 0.1, 1);
+            addP(hazard.x, hazard.y, '#a184c9', 2, 30, 0.1, 1);
             enemies.forEach((e) => {
                 if (!e.alive) return;
                 const d = Math.hypot(e.x - hazard.x, e.y - hazard.y);
@@ -4595,7 +4870,7 @@ function updateHazards(dt) {
             });
             // Implode at end
             if (hazard.implode && hazard.life <= 0 && hazard.life > -dt * 2) {
-                addP(hazard.x, hazard.y, '#bc13fe', 24, 200, 0.35, 5);
+                addP(hazard.x, hazard.y, '#a184c9', 24, 200, 0.35, 5);
                 addP(hazard.x, hazard.y, '#ffffff', 12, 140, 0.2, 3);
                 screenShake = Math.min(2.5, screenShake + 0.5);
                 enemies.forEach((e) => {
@@ -4628,8 +4903,8 @@ function updateHazards(dt) {
                 hazard.hit = true;
                 player.empStunTimer = (player.empStunTimer || 0) + 1.5;
                 // Big screen flash + prominent text
-                addFxText(player.x, player.y - 40, '⚡ EMP! ⚡', '#ff9d00', 1.4, 28);
-                addP(player.x, player.y, '#ff9d00', 24, 200, 0.5, 4);
+                addFxText(player.x, player.y - 40, '⚡ EMP! ⚡', '#cf9440', 1.4, 28);
+                addP(player.x, player.y, '#cf9440', 24, 200, 0.5, 4);
                 powerPulse = Math.min(2.5, powerPulse + 1.2);
                 screenShake = Math.min(2.5, screenShake + 0.4);
             }
@@ -4657,7 +4932,7 @@ function updateHazards(dt) {
             if (dist < hazard.r && !hazard.isDashZone) {
                 player.slowOverride = Math.max(player.slowOverride || 0, 0.45);
             }
-            if (Math.random() < 0.08) addP(hazard.x + (Math.random()-0.5)*hazard.r, hazard.y + (Math.random()-0.5)*hazard.r, '#ffaa00', 1, 20, 0.2, 1);
+            if (Math.random() < 0.08) addP(hazard.x + (Math.random()-0.5)*hazard.r, hazard.y + (Math.random()-0.5)*hazard.r, '#d09c46', 1, 20, 0.2, 1);
         }
         // ── Ricochet bullet: bounces off arena walls once ──
         if (hazard.type === 'ricochet') {
@@ -4668,12 +4943,12 @@ function updateHazards(dt) {
                 if (hazard.x < WALL + hazard.r || hazard.x > arena.width - WALL - hazard.r) {
                     hazard.vx = -hazard.vx;
                     hazard.bounces--;
-                    addSparks(hazard.x, hazard.y, '#ff5dad', 4, 80, 0.15, Math.PI * 2);
+                    addSparks(hazard.x, hazard.y, '#c9709e', 4, 80, 0.15, Math.PI * 2);
                 }
                 if (hazard.y < arena.top + hazard.r || hazard.y > arena.height - WALL - hazard.r) {
                     hazard.vy = -hazard.vy;
                     hazard.bounces--;
-                    addSparks(hazard.x, hazard.y, '#ff5dad', 4, 80, 0.15, Math.PI * 2);
+                    addSparks(hazard.x, hazard.y, '#c9709e', 4, 80, 0.15, Math.PI * 2);
                 }
             }
             const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
@@ -4682,14 +4957,14 @@ function updateHazards(dt) {
                 hazard.life = 0;
                 damagePlayer('enemy');
             }
-            addP(hazard.x, hazard.y, '#ff5dad', 1, 28, 0.08, 1);
+            addP(hazard.x, hazard.y, '#c9709e', 1, 28, 0.08, 1);
         }
         // ── Grenade: arcing projectile that splits into submunitions ──
         if (hazard.type === 'grenade') {
             hazard.x += hazard.vx * dt;
             hazard.y += hazard.vy * dt;
             hazard.vy += 80 * dt; // gravity arc
-            if (Math.random() < 0.3) addP(hazard.x, hazard.y, '#ff6600', 1, 25, 0.1, 1.5);
+            if (Math.random() < 0.3) addP(hazard.x, hazard.y, '#c97a35', 1, 25, 0.1, 1.5);
             // Detonate when hitting wall/floor or life expires
             const hitWall = hazard.x < WALL || hazard.x > arena.width - WALL ||
                             hazard.y < arena.top || hazard.y > arena.height - WALL;
@@ -4700,22 +4975,22 @@ function updateHazards(dt) {
                     hazards.push({ id: nextHazardId++, type: 'enemybullet',
                         x: hazard.x, y: hazard.y,
                         vx: Math.cos(ang) * 200, vy: Math.sin(ang) * 200,
-                        r: 5, life: 0.9, color: '#ffaa00', hit: false });
+                        r: 5, life: 0.9, color: '#d09c46', hit: false });
                 }
-                addRing(hazard.x, hazard.y, '#ff6600', 260, 70, 0.3, 2.0);
-                addSparks(hazard.x, hazard.y, '#ff6600', 10, 150, 0.35, Math.PI * 2);
-                addP(hazard.x, hazard.y, '#ff6600', 16, 160, 0.3, 3);
+                addRing(hazard.x, hazard.y, '#c97a35', 260, 70, 0.3, 2.0);
+                addSparks(hazard.x, hazard.y, '#c97a35', 10, 150, 0.35, Math.PI * 2);
+                addP(hazard.x, hazard.y, '#c97a35', 16, 160, 0.3, 3);
                 hazard.hit = true;
                 hazard.life = 0;
             }
         }
         // ── Clone: wraith decoy that explodes after lifetime ──
         if (hazard.type === 'clone') {
-            if (Math.random() < 0.2) addP(hazard.x + (Math.random()-0.5)*hazard.r, hazard.y + (Math.random()-0.5)*hazard.r, '#9f57ff', 2, 35, 0.2, 2);
+            if (Math.random() < 0.2) addP(hazard.x + (Math.random()-0.5)*hazard.r, hazard.y + (Math.random()-0.5)*hazard.r, '#9678cc', 2, 35, 0.2, 2);
             if (hazard.life <= 0) {
-                addRing(hazard.x, hazard.y, '#9f57ff', 240, 70, 0.4, 2.0);
-                addSparks(hazard.x, hazard.y, '#9f57ff', 10, 160, 0.4, Math.PI * 2);
-                addP(hazard.x, hazard.y, '#9f57ff', 18, 180, 0.4, 4);
+                addRing(hazard.x, hazard.y, '#9678cc', 240, 70, 0.4, 2.0);
+                addSparks(hazard.x, hazard.y, '#9678cc', 10, 160, 0.4, Math.PI * 2);
+                addP(hazard.x, hazard.y, '#9678cc', 18, 180, 0.4, 4);
                 const dist = Math.hypot(player.x - hazard.x, player.y - hazard.y);
                 if (dist < 70) damagePlayer('enemy');
                 screenShake = Math.min(2.5, screenShake + 0.15);
@@ -4766,7 +5041,7 @@ function updateStatusEffects(dt) {
             enemy.poisonTimer -= dt;
             enemy.hp -= enemy.poisonDmg * dt;
             // Visual tick
-            if (Math.random() < 0.15) addP(enemy.x, enemy.y, '#00ff9d', 2, 30, 0.12, 1);
+            if (Math.random() < 0.15) addP(enemy.x, enemy.y, '#67c092', 2, 30, 0.12, 1);
             // Poison spread
             if (player.poisonSpread && Math.random() < 0.02 * dt) {
                 enemies.forEach((other) => {
@@ -4809,7 +5084,7 @@ function updateAbilityTimers(dt) {
             player.shieldTimer = 0;
             player.shieldCharges = Math.max(player.shieldCharges, 1);
             player.shieldActive = true;
-            addP(player.x, player.y, '#7be8ff', 10, 80, 0.2, 2);
+            addP(player.x, player.y, '#97c7d6', 10, 80, 0.2, 2);
         }
     }
 
@@ -4968,64 +5243,64 @@ function triggerDeathVfx(enemy) {
 
     if (ai === 'strafe') {
         // Drone: cyan electric burst
-        addP(x, y, '#7be8ff', 10, 110, 0.3, 2);
-        addSparks(x, y, '#7be8ff', 8, 180, 0.22, Math.PI * 2);
-        addRing(x, y, '#7be8ff', 260, 50, 0.18, 1.2);
+        addP(x, y, '#97c7d6', 10, 110, 0.3, 2);
+        addSparks(x, y, '#97c7d6', 8, 180, 0.22, Math.PI * 2);
+        addRing(x, y, '#97c7d6', 260, 50, 0.18, 1.2);
 
     } else if (ai === 'sprint') {
         // Chaser: purple blink-dissolve
-        addP(x, y, '#bc13fe', 14, 160, 0.4, 3);
-        addP(x, y, '#e080ff', 6, 80, 0.2, 2);
-        addSparks(x, y, '#e080ff', 6, 140, 0.28, Math.PI * 2);
-        addRing(x, y, '#bc13fe', 220, 60, 0.22, 1.5);
+        addP(x, y, '#a184c9', 14, 160, 0.4, 3);
+        addP(x, y, '#bd93d6', 6, 80, 0.2, 2);
+        addSparks(x, y, '#bd93d6', 6, 140, 0.28, Math.PI * 2);
+        addRing(x, y, '#a184c9', 220, 60, 0.22, 1.5);
 
     } else if (ai === 'heavy') {
         // Tank: orange EMP double-ring
-        addP(x, y, '#ff9d00', 16, 140, 0.45, 4);
-        addSparks(x, y, '#ff9d00', 10, 220, 0.3, Math.PI * 2);
-        addRing(x, y, '#ff9d00', 300, 90, 0.28, 2.5);
-        addRing(x, y, '#ffcc44', 180, 140, 0.35, 1.5);
+        addP(x, y, '#cf9440', 16, 140, 0.45, 4);
+        addSparks(x, y, '#cf9440', 10, 220, 0.3, Math.PI * 2);
+        addRing(x, y, '#cf9440', 300, 90, 0.28, 2.5);
+        addRing(x, y, '#d6b36a', 180, 140, 0.35, 1.5);
         screenShake = Math.min(2.5, screenShake + 0.3);
 
     } else if (ai === 'swarm') {
         // Swarmling: small splitter burst
-        addP(x, y, '#7be8ff', 5, 70, 0.2, 1);
-        addSparks(x, y, '#7be8ff', 4, 100, 0.15, Math.PI * 2);
+        addP(x, y, '#97c7d6', 5, 70, 0.2, 1);
+        addSparks(x, y, '#97c7d6', 4, 100, 0.15, Math.PI * 2);
 
     } else if (ai === 'brute') {
         // Brute: shockwave ground stomp
-        addP(x, y, '#ffaa00', 18, 180, 0.5, 5);
-        addSparks(x, y, '#ffaa00', 10, 200, 0.32, Math.PI * 2);
-        addRing(x, y, '#ffaa00', 350, 120, 0.32, 3);
+        addP(x, y, '#d09c46', 18, 180, 0.5, 5);
+        addSparks(x, y, '#d09c46', 10, 200, 0.32, Math.PI * 2);
+        addRing(x, y, '#d09c46', 350, 120, 0.32, 3);
         addRing(x, y, '#ffffff', 200, 160, 0.22, 1);
         screenShake = Math.min(2.5, screenShake + 0.5);
 
     } else if (ai === 'sniper') {
         // Sniper: pink tracer sparks in 8 directions
-        addP(x, y, '#ff5dad', 8, 130, 0.3, 2);
+        addP(x, y, '#c9709e', 8, 130, 0.3, 2);
         for (let i = 0; i < 8; i++) {
             const a = (Math.PI / 4) * i;
-            addSparks(x, y, '#ff5dad', 2, 260, 0.25, 0.15, a);
+            addSparks(x, y, '#c9709e', 2, 260, 0.25, 0.15, a);
         }
-        addRing(x, y, '#ff5dad', 240, 70, 0.2, 1.2);
+        addRing(x, y, '#c9709e', 240, 70, 0.2, 1.2);
 
     } else if (ai === 'bomber') {
         // Bomber death already creates hazard ring — add extra VFX layer
-        addSparks(x, y, '#ff7035', 12, 260, 0.38, Math.PI * 2);
-        addRing(x, y, '#ff7035', 380, 150, 0.42, 2);
-        addRing(x, y, '#ffcc44', 220, 180, 0.3, 1.2);
+        addSparks(x, y, '#cd7a4e', 12, 260, 0.38, Math.PI * 2);
+        addRing(x, y, '#cd7a4e', 380, 150, 0.42, 2);
+        addRing(x, y, '#d6b36a', 220, 180, 0.3, 1.2);
 
     } else if (ai === 'healer') {
         // Healer: green dispersal cloud
-        addP(x, y, '#34ffae', 14, 120, 0.4, 3);
-        addSparks(x, y, '#34ffae', 8, 140, 0.28, Math.PI * 2);
-        addRing(x, y, '#34ffae', 200, 80, 0.25, 1.5);
+        addP(x, y, '#74c8a0', 14, 120, 0.4, 3);
+        addSparks(x, y, '#74c8a0', 8, 140, 0.28, Math.PI * 2);
+        addRing(x, y, '#74c8a0', 200, 80, 0.25, 1.5);
 
     } else if (ai === 'shielder') {
         // Shielder: shield shatters
-        addP(x, y, '#5cc1ff', 14, 150, 0.4, 3);
-        addSparks(x, y, '#5cc1ff', 12, 230, 0.3, Math.PI * 2);
-        addRing(x, y, '#5cc1ff', 320, 100, 0.3, 2);
+        addP(x, y, '#8db4d2', 14, 150, 0.4, 3);
+        addSparks(x, y, '#8db4d2', 12, 230, 0.3, Math.PI * 2);
+        addRing(x, y, '#8db4d2', 320, 100, 0.3, 2);
         addRing(x, y, '#ffffff', 180, 130, 0.22, 1);
 
     } else if (ai === 'wraith') {
@@ -5036,25 +5311,25 @@ function triggerDeathVfx(enemy) {
             particles.push({ x: x + (Math.random() - 0.5) * 30, y,
                 vx: Math.cos(a) * s, vy: Math.sin(a) * s,
                 life: 0.5 + Math.random() * 0.4, maxLife: 0.9,
-                color: '#9f57ff', r: 3 + Math.random() * 3 });
+                color: '#9678cc', r: 3 + Math.random() * 3 });
         }
-        addSparks(x, y, '#9f57ff', 6, 100, 0.35, Math.PI * 2);
-        addRing(x, y, '#9f57ff', 160, 60, 0.3, 1);
+        addSparks(x, y, '#9678cc', 6, 100, 0.35, Math.PI * 2);
+        addRing(x, y, '#9678cc', 160, 60, 0.3, 1);
 
     } else if (ai === 'crusher') {
         // Crusher: massive red shockwave
-        addP(x, y, '#ff5040', 24, 220, 0.6, 6);
+        addP(x, y, '#c96555', 24, 220, 0.6, 6);
         addP(x, y, '#ffffff', 10, 160, 0.3, 3);
-        addSparks(x, y, '#ff5040', 14, 300, 0.45, Math.PI * 2);
-        addRing(x, y, '#ff5040', 420, 180, 0.45, 3.5);
-        addRing(x, y, '#ffaa44', 260, 240, 0.35, 2);
+        addSparks(x, y, '#c96555', 14, 300, 0.45, Math.PI * 2);
+        addRing(x, y, '#c96555', 420, 180, 0.45, 3.5);
+        addRing(x, y, '#d89f56', 260, 240, 0.35, 2);
         screenShake = Math.min(2.5, screenShake + 0.7);
 
     } else if (ai === 'berserker') {
         // Berserker: rage burst
-        addP(x, y, '#ff2030', 16, 190, 0.45, 4);
-        addSparks(x, y, '#ff2030', 10, 250, 0.32, Math.PI * 2);
-        addRing(x, y, '#ff2030', 300, 110, 0.3, 2);
+        addP(x, y, '#bf4a4c', 16, 190, 0.45, 4);
+        addSparks(x, y, '#bf4a4c', 10, 250, 0.32, Math.PI * 2);
+        addRing(x, y, '#bf4a4c', 300, 110, 0.3, 2);
 
     } else {
         // Generic fallback
@@ -5080,7 +5355,7 @@ function triggerKill(enemy) {
             const mini = createEnemy({ ...ENEMY_TYPES.swarmling, r: 6, hp: 1, spd: 2.5, exp: 0, hasSplit: true }, sx, sy);
             enemies.push(mini);
         }
-        addP(enemy.x, enemy.y, '#7be8ff', 8, 80, 0.25, 2);
+        addP(enemy.x, enemy.y, '#97c7d6', 8, 80, 0.25, 2);
     }
 
     // ── Bomber: explosion on death (damages player + nearby enemies) ──
@@ -5094,10 +5369,10 @@ function triggerKill(enemy) {
             maxRadius: 130,
             speed: 420,
             life: 0.7,
-            color: '#ff7035',
+            color: '#cd7a4e',
             hit: false
         });
-        addP(enemy.x, enemy.y, '#ff7035', 22, 170, 0.4, 4);
+        addP(enemy.x, enemy.y, '#cd7a4e', 22, 170, 0.4, 4);
         screenShake = Math.min(2.5, screenShake + 0.35);
     }
 
@@ -5119,7 +5394,7 @@ function triggerKill(enemy) {
     // ── Bloodlust — heal on kill ──
     if (player.healOnKillChance > 0 && Math.random() < player.healOnKillChance && player.hp < player.maxHp) {
         player.hp = Math.min(player.maxHp, player.hp + 1);
-        addFxText(enemy.x, enemy.y - 20, '+1 HP', '#ff375f', 0.35, 14);
+        addFxText(enemy.x, enemy.y - 20, '+1 HP', '#d0716f', 0.35, 14);
         syncHpDangerFlair();
     }
     // ── Every-kill heal (bloodlust rank 4) ──
@@ -5137,7 +5412,7 @@ function triggerKill(enemy) {
         if (player.healPerKillCounter >= player.healPerKills && player.hp < player.maxHp) {
             player.healPerKillCounter = 0;
             player.hp = Math.min(player.maxHp, player.hp + 1);
-            addFxText(player.x, player.y - 20, '+1 HP', '#00ff9d', 0.4, 16);
+            addFxText(player.x, player.y - 20, '+1 HP', '#67c092', 0.4, 16);
             syncHpDangerFlair();
         }
     }
@@ -5147,14 +5422,14 @@ function triggerKill(enemy) {
         if (player.extraHeartKillCounter >= player.extraHeartHealPerKills) {
             player.extraHeartKillCounter = 0;
             player.extraHearts = (player.extraHearts || 0) + 1;
-            addFxText(player.x, player.y - 32, '+1 EXTRA', '#ffd14d', 0.5, 18);
+            addFxText(player.x, player.y - 32, '+1 EXTRA', '#d6b36a', 0.5, 18);
             syncHpDangerFlair();
         }
     }
     // ── Boss full heal (Vampire rank 4) ──
     if (player.bossFullHeal && enemy.isBoss) {
         player.hp = player.maxHp;
-        addFxText(player.x, player.y - 24, 'FULL HEAL!', '#ff375f', 0.6, 20);
+        addFxText(player.x, player.y - 24, 'FULL HEAL!', '#d0716f', 0.6, 20);
         syncHpDangerFlair();
     }
     // ── Kill damage buff (Bloodlust / Trigger Fingers) ──
@@ -5194,7 +5469,7 @@ function triggerKill(enemy) {
 
     // ── Poison explode on death ──
     if (player.poisonExplodeOnDeath && enemy._poisoned) {
-        addP(enemy.x, enemy.y, '#00ff9d', 16, 140, 0.3, 4);
+        addP(enemy.x, enemy.y, '#67c092', 16, 140, 0.3, 4);
         enemies.forEach((e) => {
             if (!e.alive || e.id === enemy.id) return;
             const d = Math.hypot(e.x - enemy.x, e.y - enemy.y);
@@ -5211,7 +5486,7 @@ function triggerKill(enemy) {
 
     // ── Frozen shatter ──
     if (player.frozenShatter && enemy.frozen) {
-        addP(enemy.x, enemy.y, '#7be8ff', 22, 180, 0.35, 5);
+        addP(enemy.x, enemy.y, '#97c7d6', 22, 180, 0.35, 5);
         screenShake = Math.min(2.5, screenShake + 0.3);
         enemies.forEach((e) => {
             if (!e.alive || e.id === enemy.id) return;
@@ -5238,7 +5513,7 @@ function triggerKill(enemy) {
     screenShake = Math.min(2.9, screenShake + (enemy.isBoss ? 1.05 : 0.28));
     powerPulse = Math.min(2.3, powerPulse + (enemy.isBoss ? 0.88 : 0.2));
     if (enemy.isBoss) playHaptic('hard'); else playHaptic('tap');
-    addFxText(enemy.x, enemy.y - enemy.r - 12, enemy.isBoss ? 'BOSS DOWN' : `+${enemy.exp} XP`, enemy.isBoss ? '#ff9d00' : '#ffffff', enemy.isBoss ? 0.85 : 0.45, enemy.isBoss ? 24 : 16);
+    addFxText(enemy.x, enemy.y - enemy.r - 12, enemy.isBoss ? 'BOSS DOWN' : `+${enemy.exp} XP`, enemy.isBoss ? '#cf9440' : '#ffffff', enemy.isBoss ? 0.85 : 0.45, enemy.isBoss ? 24 : 16);
     updateMetaHud();
 }
 
@@ -5249,9 +5524,9 @@ function releaseShockNova() {
     // ── Atom-bomb VFX: bright flash core, three concentric expanding rings,
     //    huge particle burst, white-out screen pulse, heavy shake. ──
     addP(player.x, player.y, '#ffffff', 80, 480, 0.55, 9);   // bright core flash
-    addP(player.x, player.y, '#ffe698', 56, 340, 0.50, 7);   // golden mid-burst
-    addP(player.x, player.y, '#ff7035', 42, 290, 0.55, 6);   // fire ring
-    addP(player.x, player.y, '#bc13fe', 28, 220, 0.42, 5);   // shock outer
+    addP(player.x, player.y, '#e3cf9a', 56, 340, 0.50, 7);   // golden mid-burst
+    addP(player.x, player.y, '#cd7a4e', 42, 290, 0.55, 6);   // fire ring
+    addP(player.x, player.y, '#a184c9', 28, 220, 0.42, 5);   // shock outer
     // Three expanding "shock rings" for the atom-bomb feel.
     [0, 0.06, 0.12].forEach((delay, i) => {
         setTimeout(() => {
@@ -5264,12 +5539,12 @@ function releaseShockNova() {
                 maxRadius: radius * (0.7 + i * 0.25),
                 speed: 540 + i * 80,
                 life: 0.55,
-                color: 'rgba(255,209,77,0.0)',
+                color: 'rgba(214,179,106,0.0)',
                 hit: true // visual only
             });
         }, delay * 1000);
     });
-    addFxText(player.x, player.y - 30, 'NOVA', '#ffe698', 0.55, 28);
+    addFxText(player.x, player.y - 30, 'NOVA', '#e3cf9a', 0.55, 28);
     playSfx('chain', 1.4);
     playSfx('hit', 1.3);
     powerPulse = Math.min(3.0, powerPulse + 1.1);
@@ -5283,7 +5558,7 @@ function releaseShockNova() {
         const novaDmg = player.dmg * player.damageMultiplier * (0.36 + rank * 0.12);
         enemy.hp -= novaDmg;
         enemy.hitFlash = 0.18;
-        addLightningBolt(player.x, player.y, enemy.x, enemy.y, '#ffe698', 0.20, 4);
+        addLightningBolt(player.x, player.y, enemy.x, enemy.y, '#e3cf9a', 0.20, 4);
         showDamagePopup(enemy.x, enemy.y - enemy.r, novaDmg, { splash: true });
         if (enemy.hp <= 0) triggerKill(enemy);
     });
@@ -5401,7 +5676,7 @@ function drawAbilityChoices() {
         // Pull the inner SVG out of the wrapped icon markup so we can place it inside the diamond
         const wrap = document.createElement('div');
         wrap.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
-        const innerSvgHtml = (wrap.querySelector('svg') && wrap.querySelector('svg').outerHTML) || `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>`;
+        const innerSvgHtml = (wrap.querySelector('svg, img') && wrap.querySelector('svg, img').outerHTML) || `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>`;
 
         const card = document.createElement('div');
         card.className = `pick-diamond tier-${tier} ${isEvolve ? 'evolve' : ''} ${idx === _abilityPickFocusIdx ? 'selected' : ''}`.trim();
@@ -5413,6 +5688,7 @@ function drawAbilityChoices() {
                 <div class="diamond-icon">${innerSvgHtml}</div>
             </div>
             <div class="pd-label">${nextDef.name}</div>
+            <div class="pd-desc">${nextDef.desc || ''}</div>
             <div class="pd-rank" title="Rank ${rank + 1}"></div>
         `;
         card.onclick = () => {
@@ -5462,7 +5738,7 @@ function updateAbilityPickFeature() {
     // Build the vertical tree of diamonds
     const wrap = document.createElement('div');
     wrap.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
-    const innerSvgHtml = (wrap.querySelector('svg') && wrap.querySelector('svg').outerHTML) || '';
+    const innerSvgHtml = (wrap.querySelector('svg, img') && wrap.querySelector('svg, img').outerHTML) || '';
 
     let html = '';
     tree.forEach((node, i) => {
@@ -5863,6 +6139,13 @@ function findNearestEnemy(range) {
     return nearest;
 }
 
+// Deflect chance from armor points, with diminishing returns and a hard cap.
+// ~19 points at a maxed Deflektor tree lands just under the 35% ceiling.
+function getArmorDeflectChance(points) {
+    if (!points || points <= 0) return 0;
+    return Math.min(0.35, 1 - (1 / (1 + points * 0.032)));
+}
+
 function damagePlayer(source) {
     if (player.invulnerable > 0) return;
 
@@ -5870,14 +6153,14 @@ function damagePlayer(source) {
     if (player.shieldActive && player.shieldCharges > 0) {
         player.shieldCharges -= 1;
         player.invulnerable = 0.5;
-        addP(player.x, player.y, '#7be8ff', 20, 160, 0.3, 4);
-        addFxText(player.x, player.y - 22, 'BLOCKED!', '#7be8ff', 0.5, 20);
+        addP(player.x, player.y, '#97c7d6', 20, 160, 0.3, 4);
+        addFxText(player.x, player.y - 22, 'BLOCKED!', '#97c7d6', 0.5, 20);
         playSfx('ability', 1.0);
         screenShake = Math.min(2, screenShake + 0.4);
         // Shield heals
         if (player.shieldHeals && player.hp < player.maxHp) {
             player.hp = Math.min(player.maxHp, player.hp + 1);
-            addFxText(player.x, player.y - 36, '+1 HP', '#00ff9d', 0.35, 14);
+            addFxText(player.x, player.y - 36, '+1 HP', '#67c092', 0.35, 14);
             syncHpDangerFlair();
         }
         // Shield reflect
@@ -5890,12 +6173,25 @@ function damagePlayer(source) {
                     angle: angle, speed: 900, life: 0.8, radius: 6,
                     damage: player.dmg * player.damageMultiplier * 2,
                     pierce: 2, canChain: true,
-                    color: '#7be8ff'
+                    color: '#97c7d6'
                 });
-                addFxText(player.x, player.y - 44, 'REFLECT!', '#ffd14d', 0.4, 16);
+                addFxText(player.x, player.y - 44, 'REFLECT!', '#d6b36a', 0.4, 16);
             }
         }
         if (player.shieldCharges <= 0) player.shieldActive = false;
+        return;
+    }
+
+    // ── Deflector (meta armor upgrade) — chance to shrug the hit off ──
+    // Damage in this game is binary (always exactly one heart), so flat damage
+    // reduction has nothing to reduce. Armor is therefore a deflect chance with
+    // diminishing returns, hard-capped at 35% so it can never trivialise a run.
+    if (player.armorPoints > 0 && Math.random() < getArmorDeflectChance(player.armorPoints)) {
+        player.invulnerable = 0.6;
+        addP(player.x, player.y, '#8db4d2', 18, 150, 0.3, 4);
+        addFxText(player.x, player.y - 20, 'DEFLECT', '#8db4d2', 0.45, 18);
+        playSfx('hit', 0.5);
+        screenShake = Math.min(1.6, screenShake + 0.3);
         return;
     }
 
@@ -5911,9 +6207,9 @@ function damagePlayer(source) {
     if (player.extraHearts && player.extraHearts > 0) {
         player.extraHearts -= 1;
         player.invulnerable = 0.9;
-        addP(player.x, player.y, '#ffd14d', 22, 200, 0.45, 4);
-        addP(player.x, player.y, '#ff8030', 10, 160, 0.32, 3);
-        addFxText(player.x, player.y - 22, '-1 EXTRA', '#ffd14d', 0.5, 22);
+        addP(player.x, player.y, '#d6b36a', 22, 200, 0.45, 4);
+        addP(player.x, player.y, '#cd7a4e', 10, 160, 0.32, 3);
+        addFxText(player.x, player.y - 22, '-1 EXTRA', '#d6b36a', 0.5, 22);
         screenShake = Math.min(2.4, screenShake + 0.55);
         playSfx('hit', source === 'boss' ? 1.0 : 0.9);
         playHaptic('medium');
@@ -5927,9 +6223,9 @@ function damagePlayer(source) {
 
     // STRONGER heart-loss feedback: red full-screen flash, harder shake, particle burst,
     // HUD-heart shake animation flag, big -1 text, body class for CSS pulse.
-    addP(player.x, player.y, source === 'boss' ? '#ff375f' : '#ffffff', 28, 220, 0.45, 4);
-    addP(player.x, player.y, '#ff375f', 12, 320, 0.35, 5); // extra red splash
-    addFxText(player.x, player.y - 20, '-1', '#ff375f', 0.7, 30);
+    addP(player.x, player.y, source === 'boss' ? '#d0716f' : '#ffffff', 28, 220, 0.45, 4);
+    addP(player.x, player.y, '#d0716f', 12, 320, 0.35, 5); // extra red splash
+    addFxText(player.x, player.y - 20, '-1', '#d0716f', 0.7, 30);
     screenShake = Math.min(3.6, screenShake + (source === 'boss' ? 1.4 : 0.95));
     powerPulse = Math.min(2.6, powerPulse + 0.4);
     playSfx('hit', source === 'boss' ? 1.25 : 1.1);
@@ -5940,7 +6236,7 @@ function damagePlayer(source) {
     // (rank 3 still grants 3s i-frames on hp loss, kept as a defensive perk.)
     if (player.phoenixDouble) {
         player.invulnerable = Math.max(player.invulnerable, 3);
-        addFxText(player.x, player.y - 30, 'PHOENIX!', '#ff6b35', 0.45, 20);
+        addFxText(player.x, player.y - 30, 'PHOENIX!', '#cd764e', 0.45, 20);
     }
 
     // Trigger HUD heart shake/lost animation
@@ -5960,8 +6256,8 @@ function damagePlayer(source) {
         player.lethalBlockUsed = true;
         player.hp = 1;
         player.invulnerable = Math.max(player.invulnerable, player.spiritInvul || 2);
-        addP(player.x, player.y, '#ffd14d', 24, 220, 0.4, 5);
-        addFxText(player.x, player.y - 28, 'SAVED!', '#ffd14d', 0.6, 22);
+        addP(player.x, player.y, '#d6b36a', 24, 220, 0.4, 5);
+        addFxText(player.x, player.y - 28, 'SAVED!', '#d6b36a', 0.6, 22);
         playSfx('ability', 1.3);
         playHaptic('hard');
         syncHpDangerFlair();
@@ -5974,8 +6270,8 @@ function damagePlayer(source) {
         player.phoenixReviveUsed = true;
         player.hp = player.maxHp;
         player.invulnerable = 3;
-        addP(player.x, player.y, '#ff6b35', 40, 320, 0.6, 8);
-        addFxText(player.x, player.y - 30, 'REVIVE!', '#ff6b35', 0.8, 26);
+        addP(player.x, player.y, '#cd764e', 40, 320, 0.6, 8);
+        addFxText(player.x, player.y - 30, 'REVIVE!', '#cd764e', 0.8, 26);
         playSfx('win', 1);
         playHaptic('hard');
         syncHpDangerFlair();
@@ -6055,11 +6351,38 @@ function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, sec
     let starsHtml = '';
     if (!loss && stars >= 0) {
         const lit = Math.max(0, Math.min(3, stars));
-        starsHtml = `<div class="result-stars">${[0,1,2].map((i) => `<span class="result-star ${i < lit ? 'lit' : ''}" style="--star-delay:${(i*0.15+0.2).toFixed(2)}s">★</span>`).join('')}</div>`;
+        starsHtml = `<div class="result-stars">${[0,1,2].map((i) => `<img class="result-star ${i < lit ? 'lit' : ''}" style="--star-delay:${(i*0.15+0.2).toFixed(2)}s" src="icons/small/star-48.png" alt="">`).join('')}</div>`;
     }
 
-    statsNode.innerHTML = starsHtml + stats.map((entry) => `<div class="result-line"><span>${entry.label}</span><strong>${entry.value}</strong></div>`).join('');
-    primary.textContent = primaryLabel;
+    statsNode.innerHTML = starsHtml + stats.map((entry) => `<div class="result-line">${entry.icon ? `<img class="result-line-icon" src="icons/small/${entry.icon}-48.png" alt="">` : ''}<span>${entry.label}</span><strong${entry.color ? ` style="--line-color:${entry.color}"` : ''}>${entry.value}</strong></div>`).join('');
+
+    // Level progress toward the next ability-milestone unlock. There is no
+    // XP-within-level value in this game (save.unlocked is a flat stage
+    // counter) — this is honestly "how close to the next real unlock",
+    // computed from the same LEVEL_MILESTONES data the Ability Archive uses,
+    // not a fabricated XP bar.
+    const progressBlock = document.getElementById('result-level-progress');
+    if (progressBlock) {
+        const current = save.unlocked || 0;
+        const next = LEVEL_MILESTONES.find((m) => m.level > current);
+        if (!loss && next) {
+            const prevLevel = [...LEVEL_MILESTONES].reverse().find((m) => m.level <= current)?.level || 0;
+            const span = Math.max(1, next.level - prevLevel);
+            const pct = Math.max(0, Math.min(100, ((current - prevLevel) / span) * 100));
+            const labelNode = document.getElementById('rlp-label');
+            const valueNode = document.getElementById('rlp-value');
+            const fillNode = document.getElementById('rlp-fill');
+            if (labelNode) labelNode.textContent = `LV ${current} → ${next.title.toUpperCase()} AT LV ${next.level}`;
+            if (valueNode) valueNode.textContent = `${current}/${next.level}`;
+            if (fillNode) fillNode.style.width = `${pct}%`;
+            progressBlock.style.display = '';
+        } else {
+            progressBlock.style.display = 'none';
+        }
+    }
+
+    const primaryLabelEl = document.getElementById('result-primary-label');
+    if (primaryLabelEl) primaryLabelEl.textContent = primaryLabel; else primary.textContent = primaryLabel;
     secondary.textContent = secondaryLabel;
     if (home) home.textContent = homeLabel || t('result.home');
     resultPrimaryAction = onPrimary;
@@ -6122,10 +6445,10 @@ function gameOver() {
             title: t('result.endlessOver'),
             copy: t('result.endlessCopy'),
             stats: [
-                { label: t('result.statWaves'), value: `${currentWave + 1}` },
-                { label: t('result.statScaled'), value: `${currentLevel}` },
-                { label: t('result.statGold'), value: `+${formatCompactNumber(endlessGold)}` },
-                { label: t('result.statGems'), value: `+${endlessGems}` }
+                { label: t('result.statWaves'), value: `${currentWave + 1}`, icon: 'skull', color: 'var(--r-red)' },
+                { label: t('result.statScaled'), value: `${currentLevel}`, icon: 'bolt', color: 'var(--r-blue)' },
+                { label: t('result.statGold'), value: `+${formatCompactNumber(endlessGold)}`, icon: 'coin', color: 'var(--r-gold)' },
+                { label: t('result.statGems'), value: `+${endlessGems}`, icon: 'gem', color: 'var(--r-dark)' }
             ],
             primaryLabel: t('result.runEndless'),
             secondaryLabel: t('result.skills'),
@@ -6137,12 +6460,12 @@ function gameOver() {
         return;
     }
     const failStats = [
-        { label: t('result.statMission'), value: `${t('cta.level')} ${currentLevel}` },
-        { label: t('result.statBestReach'), value: `${t('hud.waveShort')} ${Math.min(currentWave + 1, Math.max(1, currentLevelWaves.length))}/${Math.max(1, currentLevelWaves.length)}` },
-        { label: t('result.statGoldBank'), value: formatCompactNumber(save.gold) }
+        { label: t('result.statMission'), value: `${t('cta.level')} ${currentLevel}`, icon: 'trophy', color: 'var(--r-dark)' },
+        { label: t('result.statBestReach'), value: `${t('hud.waveShort')} ${Math.min(currentWave + 1, Math.max(1, currentLevelWaves.length))}/${Math.max(1, currentLevelWaves.length)}`, icon: 'skull', color: 'var(--r-red)' },
+        { label: t('result.statGoldBank'), value: formatCompactNumber(save.gold), icon: 'coin', color: 'var(--r-gold)' }
     ];
     const failSkills = formatRunSkillsList(save.lastRunSkills);
-    if (failSkills) failStats.push({ label: t('result.statSkillsUsed'), value: failSkills });
+    if (failSkills) failStats.push({ label: t('result.statSkillsUsed'), value: failSkills, icon: 'upgrades', color: 'var(--r-blue)' });
     showResultOverlay({
         loss: true,
         title: t('result.failTitle'),
@@ -6205,16 +6528,16 @@ function victory() {
     // Star rating: 1 (cleared), 2 (cleared with HP > half), 3 (cleared full HP)
     const stars = player && player.maxHp ? (player.hp >= player.maxHp ? 3 : (player.hp > player.maxHp / 2 ? 2 : 1)) : 1;
     const stats = [
-        { label: t('result.statGold'), value: `+${formatCompactNumber(goldReward)}` },
-        { label: t('result.statGems'), value: `+${gemReward}` },
-        { label: t('result.statNextMission'), value: `${t('cta.level')} ${save.unlocked}` }
+        { label: t('result.statGold'), value: `+${formatCompactNumber(goldReward)}`, icon: 'coin', color: 'var(--r-gold)' },
+        { label: t('result.statGems'), value: `+${gemReward}`, icon: 'gem', color: 'var(--r-dark)' },
+        { label: t('result.statNextMission'), value: `${t('cta.level')} ${save.unlocked}`, icon: 'trophy', color: 'var(--r-blue)' }
     ];
     if (milestoneBonus) {
-        stats.push({ label: t('result.statMilestone'), value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || t('result.pack')}` });
+        stats.push({ label: t('result.statMilestone'), value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || t('result.pack')}`, icon: 'chest', color: 'var(--r-gold)' });
     }
     const skillsSummary = formatRunSkillsList(save.lastRunSkills);
     if (skillsSummary) {
-        stats.push({ label: t('result.statSkillsUsed'), value: skillsSummary });
+        stats.push({ label: t('result.statSkillsUsed'), value: skillsSummary, icon: 'bolt', color: 'var(--r-blue)' });
     }
     const lbAfter = (function() {
         try {
@@ -6302,8 +6625,15 @@ function updateHubVisualization(focusId) {
     if (!holder || !readout) return;
 
     holder.innerHTML = '';
-    const radii = [150, 110, 75]; // matching .ring-outer/-mid/-inner
-    // Build a single inline SVG that contains 3 progress arcs — one per upgrade —
+    // One arc per upgrade, spaced evenly between the outer and inner ring.
+    // This used to be a fixed [150, 110, 75] for exactly three upgrades — the
+    // two new defensive paths would have got radius `undefined` and rendered
+    // nothing. Derived from UPGRADES.length so it stays correct if more are added.
+    const R_OUTER = 150, R_INNER = 62;
+    const arcCount = Math.max(1, UPGRADES.length);
+    const radii = UPGRADES.map((_, i) =>
+        arcCount === 1 ? R_OUTER : R_OUTER - ((R_OUTER - R_INNER) * (i / (arcCount - 1))));
+    // Build a single inline SVG that contains one progress arc per upgrade,
     // each driven by stroke-dasharray (so it actually GROWS as level rises,
     // it doesn't just rotate around).
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -6340,7 +6670,6 @@ function updateHubVisualization(focusId) {
         arc.setAttribute('stroke-dasharray', `${(circ * ratio).toFixed(1)} ${circ.toFixed(1)}`);
         arc.setAttribute('stroke-dashoffset', '0');
         arc.setAttribute('transform', 'rotate(-90)');
-        arc.style.filter = `drop-shadow(0 0 6px ${upgrade.color}) drop-shadow(0 0 14px ${upgrade.color}66)`;
         arc.style.transition = 'stroke-dasharray .35s ease, stroke-width .25s ease';
         svg.appendChild(arc);
     });
@@ -6348,15 +6677,36 @@ function updateHubVisualization(focusId) {
     holder.appendChild(svg);
 
     const focused = UPGRADES.find((entry) => entry.id === (focusId || lastUpgradeId)) || UPGRADES[0];
-    const current = getUpgradePreviewValue(focused.id, save.stats[focused.id] || 0);
-    const next = getUpgradePreviewValue(focused.id, Math.min(focused.max, (save.stats[focused.id] || 0) + 1));
-    readout.textContent = `${focused.name}: ${current} > ${next}`;
+    const level = save.stats[focused.id] || 0;
+    const current = getUpgradePreviewValue(focused.id, level);
+    const next = getUpgradePreviewValue(focused.id, Math.min(focused.max, level + 1));
+
+    if (current !== next) {
+        readout.textContent = `${upgradeName(focused)}: ${current} > ${next}`;
+    } else {
+        // Stats that land on whole numbers (hearts) don't move every level, so
+        // "5 HP > 5 HP" made the purchase look pointless. Show how many levels
+        // are left until the value actually ticks up instead.
+        let steps = 0;
+        for (let l = level + 1; l <= focused.max; l++) {
+            steps++;
+            if (getUpgradePreviewValue(focused.id, l) !== current) {
+                readout.textContent = `${upgradeName(focused)}: ${current} > ${getUpgradePreviewValue(focused.id, l)} in ${steps} Lv`;
+                return;
+            }
+        }
+        readout.textContent = `${upgradeName(focused)}: ${current} (max)`;
+    }
 }
 
 function getUpgradePreviewValue(id, level) {
     if (id === 'dmg') return (PLAYER_STATS.dmg.base + getUpgradeBonus(PLAYER_STATS.dmg, level, 'dmg')).toFixed(1);
     if (id === 'atkSpd') return (PLAYER_STATS.atkSpd.base + getUpgradeBonus(PLAYER_STATS.atkSpd, level, 'atkSpd')).toFixed(2);
     if (id === 'economy') return `+${Math.round(getUpgradeBonus(PLAYER_STATS.economy, level, 'economy') * 100)}%`;
+    // Without these the two defensive paths fell through to `return level` and
+    // the hub readout showed a bare upgrade level instead of the actual effect.
+    if (id === 'hearts') return `${PLAYER_STATS.hearts.base + Math.floor(getUpgradeBonus(PLAYER_STATS.hearts, level, 'hearts'))} HP`;
+    if (id === 'armor') return `${Math.round(getArmorDeflectChance(getUpgradeBonus(PLAYER_STATS.armor, level, 'armor')) * 100)}%`;
     return level;
 }
 
@@ -6373,12 +6723,12 @@ function renderHub() {
         card.className = `shop-card ${lastUpgradeId === upgrade.id ? 'upgraded' : ''}`.trim();
         card.innerHTML = `
             <div class="upgrade-card-topline">
-                <div class="card-icon" style="color:${upgrade.color}; border-color:${upgrade.color}55;">${upgrade.icon}</div>
+                <div class="card-icon" style="border-color:${upgrade.color}66;"><img src="icons/small/${upgrade.icon}" alt="" class="upgrade-stat-icon"></div>
                 <div class="upgrade-tag ${meta.tier.isMajor ? 'major' : 'minor'}">${meta.phaseLabel}</div>
             </div>
-            <div class="card-title">${upgrade.name}</div>
-            <div class="card-meta">${meta.surgeLabel} | ${level >= upgrade.max ? 'Maxed' : (meta.tier.nextIsMajor ? 'Next: Big spike' : 'Build-up active')}</div>
-            <div class="card-copy">${upgrade.desc}</div>
+            <div class="card-title">${upgradeName(upgrade)}</div>
+            <div class="card-meta">${meta.surgeLabel} | ${getUpgradeStatusLabel(upgrade, level, meta)}</div>
+            <div class="card-copy">${upgradeCopy(upgrade)}</div>
             <div class="upgrade-card-footer">
                 <div class="upgrade-surge">${meta.tier.isMajor ? 'Major step' : `Cycle ${Math.min(meta.tier.step, meta.tier.cycleSize)}/${meta.tier.cycleSize}`}</div>
                 <button class="inline-button" type="button" ${level >= upgrade.max ? 'disabled' : ''}>${level >= upgrade.max ? 'MAXED' : `${meta.buttonLabel} ${cost} GOLD`}</button>
@@ -6401,10 +6751,10 @@ function renderShop() {
     renderRealMoneyColumn();
 }
 
-// Wire up data-buy / data-peek buttons on a freshly-rendered pack card
+// Wire up data-buy on a freshly-rendered pack card, plus a tap-anywhere-else
+// peek (the compact card has no dedicated "peek odds" row — see getPackOfferMarkup).
 function wirePackCardButtons(card, item, premium) {
     const buyBtn = card.querySelector('[data-buy]');
-    const peekBtn = card.querySelector('[data-peek]');
     if (buyBtn) {
         buyBtn.onclick = (e) => {
             e.stopPropagation();
@@ -6414,13 +6764,12 @@ function wirePackCardButtons(card, item, premium) {
             else buyShopItem(item.id);
         };
     }
-    if (peekBtn) {
-        peekBtn.onclick = (e) => {
-            e.stopPropagation();
+    const packKey = item.reward?.packKey;
+    if (packKey) {
+        card.onclick = () => {
             playSfx('tap', 0.7);
             playHaptic('tap');
-            const key = peekBtn.getAttribute('data-peek');
-            if (key) showPackPeek(key);
+            showPackPeek(packKey);
         };
     }
 }
@@ -6486,55 +6835,64 @@ function getPackOfferMarkup(item, packDef, premium = false) {
     }
     const title = packDef.name;
     // Compact price: drop the currency word, use a short symbol prefix
-    const priceCompact = premium ? item.price : (item.currency === 'gems' ? `◆ ${item.cost}` : `${item.cost}G`);
+    const priceCompact = premium ? item.price : (item.currency === 'gems' ? `${item.cost}` : `${item.cost}G`);
     const priceClass = premium ? 'money' : (item.currency === 'gems' ? 'gems' : 'gold');
     const tierKey = item.reward?.packKey || 'supply_pack_i';
     const buttonClass = premium ? 'btn-glossy btn-gold' : (packDef.rarity === 'gold' || packDef.rarity === 'red' ? 'btn-glossy btn-purple' : 'btn-glossy');
 
     const best = getBestDropForPack(item.reward.packKey);
-    const heroSvg = best ? getRewardArtSvg(best.id, packDef.rewardType === 'skin' ? 'skin' : 'chip') : '';
+    // Each pack tier gets its own dedicated design-pack badge icon (drawn to
+    // match) instead of the procedural chip-rarity ring / shared orb icon,
+    // which read as near-identical across every card at this small size.
+    const packIconFile = getPackIconFile(item.reward.packKey);
+    const heroSvg = packIconFile
+        ? `<img src="icons/small/${packIconFile}-48.png" alt="">`
+        : (best ? getRewardArtSvg(best.id, 'chip') : '');
     const tierLabel = getRarityLabel(packDef.rarity);
     const minis = getMiniDropsForPack(item.reward.packKey);
     const bestName = best ? (best.def.name || best.id) : '';
 
+    const currencyIcon = premium ? '' : `<img src="icons/small/${item.currency === 'gems' ? 'gem' : 'coin'}-48.png" class="pack-price-pill-icon" alt="">`;
+    // No separate "peek odds" row and no description line — just icon+title
+    // and price. Tapping the card opens the odds peek (where the full drop
+    // list already lives); the price pill is its own stopPropagation target
+    // so it still buys instead.
     return `
-        <div class="pack-card-v2 tier-${tierKey}" data-pack="${tierKey}" onclick="playSfx('tap',0.7); playHaptic('tap');">
-            <div class="pack-foil"></div>
-            <div class="pack-hero">
-                <div class="pack-hero-tag">★ ${bestName}</div>
-                <div class="pack-tier-badge">${tierLabel}</div>
-                <div class="pack-hero-icon">${heroSvg}</div>
-            </div>
-            <div class="pack-mini-strip">
-                ${minis.map((m) => `<div class="pack-mini-drop tier-${m.tier}" title="${m.name}">${getMiniArtSvgInline(m.id, packDef.rewardType === 'skin' ? 'skin' : 'chip')}</div>`).join('')}
-            </div>
-            <div class="pack-body">
-                <div class="pack-name">${title}</div>
-                <div class="pack-sub">${item.bonus || formatPackOdds(packDef)}</div>
-                <div class="pack-actions">
-                    <button class="pack-peek-btn" type="button" data-peek="${item.reward.packKey}">PEEK</button>
-                    <button class="${buttonClass} pack-buy-btn" type="button" data-buy="1">
-                        <span class="pack-price-chip ${priceClass}">${priceCompact}</span>
-                    </button>
+        <div class="pack-card-v2 tier-${tierKey} rarity-edge-${packDef.rarity}" data-pack="${tierKey}">
+            <div class="pack-v2-head">
+                <div class="pack-v2-icon">${heroSvg}</div>
+                <div class="pack-v2-title">
+                    <span class="pack-v2-rarity">${tierLabel}</span>
+                    <span class="pack-v2-name">${title}</span>
                 </div>
             </div>
+            <button class="pack-price-pill ${priceClass}" type="button" data-buy="1">${currencyIcon}<span>${priceCompact}</span></button>
         </div>
     `;
+}
+
+// Real-money rows show no currency icon (just "$4.99"); gold/gem rows show
+// the matching coin/gem icon next to the price — matches the vorlage exactly.
+function currencyIconImg(item, premium) {
+    if (premium) return '';
+    const icon = item.currency === 'gems' ? 'gem' : 'coin';
+    return `<img src="icons/small/${icon}-48.png" class="item-buy-icon" alt="">`;
 }
 
 // Generic shop item markup (gems/utility/real-money non-pack)
 function getShopItemMarkup(item, premium = false) {
     const utilClass = getUtilClass(item.id);
-    const price = premium ? item.price : `${item.cost} ${item.currency.toUpperCase()}`;
+    const price = premium ? item.price : `${item.cost}`;
     const priceClass = premium ? 'money' : (item.currency === 'gems' ? 'gems' : 'gold');
-    const buttonClass = premium ? 'btn-glossy btn-gold' : 'btn-glossy';
     return `
         <div class="shop-item-v2 ${utilClass}">
             <div class="util-art">${getUtilSvg(item.id, item.icon)}</div>
-            <div class="util-name">${item.name}</div>
-            <div class="util-desc">${item.bonus}</div>
-            <button class="${buttonClass} item-buy" type="button" data-buy="1">
-                ${premium ? 'Buy' : 'Get'} <span class="pack-price-chip ${priceClass}">${price}</span>
+            <div class="util-info">
+                <div class="util-name">${item.name}</div>
+                <div class="util-desc">${item.bonus}</div>
+            </div>
+            <button class="item-buy price-${priceClass}" type="button" data-buy="1">
+                ${currencyIconImg(item, premium)}<span>${price}</span>
             </button>
         </div>
     `;
@@ -6543,7 +6901,6 @@ function getShopItemMarkup(item, premium = false) {
 function getUtilClass(id) {
     const map = {
         reroll_pack: 'util-reroll',
-        storm_license: 'util-storm',
         boss_pass: 'util-boss',
         neon_skin: 'util-trail',
         gold_stash_s: 'util-gold-stash',
@@ -6561,19 +6918,18 @@ function getUtilClass(id) {
 
 function getUtilSvg(id, fallback) {
     const svgs = {
-        reroll_pack:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11A8 8 0 0 0 7 7"/><polyline points="21,4 21,11 14,11"/><path d="M5 15a8 8 0 0 0 14 4"/><polyline points="5,22 5,15 12,15"/></svg>`,
-        storm_license:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="14,2 6,14 12,14 9,24 20,11 13,11 16,2"/></svg>`,
-        boss_pass:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3l3 6 6 1-4.5 4.5L19 21l-6-3-6 3 1.5-6.5L4 10l6-1z"/><circle cx="13" cy="13" r="2"/></svg>`,
-        neon_skin:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h6l2-7 4 14 2-7h6"/></svg>`,
-        gold_stash_s:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="8"/><path d="M10 13h6M13 10v6"/></svg>`,
-        gold_stash_l:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="18" height="13" rx="2"/><path d="M7 8V6a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="13" cy="14.5" r="2"/></svg>`,
-        gems_pouch_s:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 22,11 13,23 4,11"/><polyline points="4,11 22,11"/><polyline points="13,3 9,11 13,23"/><polyline points="13,3 17,11 13,23"/></svg>`,
-        gems_pouch_l:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,2 22,11 13,24 4,11"/><polygon points="9,11 13,7 17,11 13,15"/></svg>`,
-        no_ads:         `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="10"/><line x1="6" y1="6" x2="20" y2="20"/></svg>`,
-        starter_bundle: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="20" height="13" rx="1.5"/><polyline points="3,9 13,3 23,9"/><line x1="13" y1="3" x2="13" y2="22"/></svg>`,
-        supporter_pack: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 22s-9-6-9-13a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 13-9 13z"/></svg>`,
-        extra_normal_slot:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="18" height="14" rx="2"/><line x1="13" y1="10" x2="13" y2="16"/><line x1="10" y1="13" x2="16" y2="13"/></svg>`,
-        extra_legend_slot:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 16,10 23,10 17.5,14 19.5,21 13,17 6.5,21 8.5,14 3,10 10,10"/></svg>`,
+        reroll_pack:    `<img src="icons/small/reroll-48.png" alt="" class="util-art-img">`,
+        boss_pass:      `<img src="icons/small/skull-48.png" alt="" class="util-art-img">`,
+        neon_skin:      `<img src="icons/small/neon-trail-48.png" alt="" class="util-art-img">`,
+        gold_stash_s:   `<img src="icons/small/gold-stash-48.png" alt="" class="util-art-img">`,
+        gold_stash_l:   `<img src="icons/small/gold-crate-48.png" alt="" class="util-art-img">`,
+        gems_pouch_s:   `<img src="icons/small/gem-pouch-48.png" alt="" class="util-art-img">`,
+        gems_pouch_l:   `<img src="icons/small/gem-vault-48.png" alt="" class="util-art-img">`,
+        no_ads:         `<img src="icons/small/no-ads-48.png" alt="" class="util-art-img">`,
+        starter_bundle: `<img src="icons/small/starter-bundle-48.png" alt="" class="util-art-img">`,
+        supporter_pack: `<img src="icons/small/supporter-pack-48.png" alt="" class="util-art-img">`,
+        extra_normal_slot:  `<img src="icons/small/deck-slot-48.png" alt="" class="util-art-img">`,
+        extra_legend_slot:  `<img src="icons/small/legend-slot-48.png" alt="" class="util-art-img">`,
         premium_alpha:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7"><polygon points="13,3 22,9 22,17 13,23 4,17 4,9"/><polyline points="13,3 13,23"/><polyline points="4,9 22,17"/><polyline points="22,9 4,17"/></svg>`,
         royal_omega:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7"><polygon points="13,3 22,9 22,17 13,23 4,17 4,9"/><circle cx="13" cy="13" r="3"/></svg>`,
         legend_skin_pack: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7"><polygon points="13,3 22,9 22,17 13,23 4,17 4,9"/></svg>`
@@ -6625,6 +6981,8 @@ function getMiniArtSvgInline(id, type) {
         return `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polyline points="15,2 9,13 13.5,13 10,24"/></svg>`;
     }
     // chip
+    if (id === 'magnet_chip')   return `<img src="icons/small/magnet-48.png" class="mini-chip-icon-img" alt="">`;
+    if (id === 'ballast_plate') return `<img src="icons/small/plate-48.png" class="mini-chip-icon-img" alt="">`;
     const card = INVENTORY_CARDS[id];
     const sigil = card?.sigil || card?.icon || '?';
     return `<span style="font-family:var(--font-ui); font-size:8px; letter-spacing:0.6px;">${(sigil || '').slice(0,4)}</span>`;
@@ -6728,7 +7086,7 @@ function getRewardArtSvg(id, type) {
             <polyline points="43,17 40,32 45,42 38,55 43,62" fill="none" stroke="${s.core}" stroke-width="1.7" opacity="0.92" stroke-linecap="round" stroke-linejoin="round"/>
             <polyline points="41,22 44,34 38,46" fill="none" stroke="#fff8d0" stroke-width="1.0" opacity="0.78" stroke-linecap="round"/>
             <polyline points="57,17 60,30 55,42 62,54" fill="none" stroke="${s.core}" stroke-width="1.5" opacity="0.88" stroke-linecap="round" stroke-linejoin="round"/>
-            <polyline points="59,25 56,38 60,50" fill="none" stroke="#ffe168" stroke-width="0.9" opacity="0.72" stroke-linecap="round"/>
+            <polyline points="59,25 56,38 60,50" fill="none" stroke="#e0c584" stroke-width="0.9" opacity="0.72" stroke-linecap="round"/>
             <line x1="50" y1="30" x2="46" y2="38" stroke="#ffffff" stroke-width="0.5" opacity="0.5"/>
             <line x1="50" y1="30" x2="54" y2="40" stroke="#ffffff" stroke-width="0.5" opacity="0.5"/>
             <line x1="50" y1="44" x2="44" y2="50" stroke="${s.core}" stroke-width="0.5" opacity="0.6"/>
@@ -6769,7 +7127,7 @@ function getRewardArtSvg(id, type) {
             <circle cx="50" cy="50" r="35" fill="none" stroke="${s.core}"  stroke-width="0.7"  opacity="0.25" stroke-dasharray="2 5"/>
             <circle cx="50" cy="50" r="27" fill="none" stroke="${s.pulse}" stroke-width="0.9"  opacity="0.32" stroke-dasharray="1 4"/>
             <circle cx="50" cy="50" r="19" fill="none" stroke="${s.core}"  stroke-width="1.0"  opacity="0.4"/>
-            <circle cx="50" cy="50" r="12" fill="none" stroke="#d78fff"    stroke-width="0.8"  opacity="0.55"/>
+            <circle cx="50" cy="50" r="12" fill="none" stroke="#bb9bd8"    stroke-width="0.8"  opacity="0.55"/>
             <polygon points="36,32 2,64 18,57"  fill="${s.pulse}" opacity="0.14"/>
             <polygon points="37,36 5,61 20,55"  fill="${s.ship}"  opacity="0.20"/>
             <polygon points="38,40 9,59 22,54"  fill="${s.ship}"  opacity="0.28"/>
@@ -6782,11 +7140,11 @@ function getRewardArtSvg(id, type) {
             <line x1="98"  y1="64" x2="100" y2="58" stroke="${s.core}" stroke-width="0.9" opacity="0.45" stroke-linecap="round"/>
             <polygon points="50,12 70,62 50,52 30,62" fill="url(#wave-${gid})" stroke="${s.core}" stroke-width="1.4" stroke-linejoin="round"/>
             <polygon points="50,22 64,56 50,47 36,56" fill="${s.pulse}" opacity="0.32"/>
-            <polyline points="24,26 17,38 27,46 16,55 23,64" fill="none" stroke="#d78fff" stroke-width="1.4" opacity="0.72" stroke-linecap="round" stroke-linejoin="round"/>
-            <polyline points="76,26 83,38 73,46 84,55 77,64" fill="none" stroke="#d78fff" stroke-width="1.4" opacity="0.72" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="17" cy="38" r="1.6" fill="#d78fff" opacity="0.88"/>
+            <polyline points="24,26 17,38 27,46 16,55 23,64" fill="none" stroke="#bb9bd8" stroke-width="1.4" opacity="0.72" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="76,26 83,38 73,46 84,55 77,64" fill="none" stroke="#bb9bd8" stroke-width="1.4" opacity="0.72" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="17" cy="38" r="1.6" fill="#bb9bd8" opacity="0.88"/>
             <circle cx="27" cy="46" r="1.3" fill="#ffffff"  opacity="0.82"/>
-            <circle cx="83" cy="38" r="1.6" fill="#d78fff" opacity="0.88"/>
+            <circle cx="83" cy="38" r="1.6" fill="#bb9bd8" opacity="0.88"/>
             <circle cx="73" cy="46" r="1.3" fill="#ffffff"  opacity="0.82"/>
             <circle cx="16" cy="55" r="1.2" fill="${s.core}" opacity="0.75"/>
             <circle cx="84" cy="55" r="1.2" fill="${s.core}" opacity="0.75"/>
@@ -6794,8 +7152,8 @@ function getRewardArtSvg(id, type) {
             <circle cx="90" cy="24" r="1.6" fill="${s.core}"  opacity="0.63"/>
             <circle cx="7"  cy="74" r="1.5" fill="${s.pulse}" opacity="0.6"/>
             <circle cx="93" cy="78" r="1.5" fill="${s.pulse}" opacity="0.62"/>
-            <circle cx="20" cy="10" r="1.1" fill="#d78fff"    opacity="0.55"/>
-            <circle cx="80" cy="12" r="1.0" fill="#d78fff"    opacity="0.55"/>
+            <circle cx="20" cy="10" r="1.1" fill="#bb9bd8"    opacity="0.55"/>
+            <circle cx="80" cy="12" r="1.0" fill="#bb9bd8"    opacity="0.55"/>
             <circle cx="14" cy="46" r="0.9" fill="#ffffff"    opacity="0.5"/>
             <circle cx="86" cy="42" r="0.9" fill="#ffffff"    opacity="0.5"/>
             <path d="M 42 63 Q 38 78 43 88 Q 50 83 57 88 Q 62 78 58 63 Z" fill="${s.pulse}" opacity="0.48"/>
@@ -6823,7 +7181,7 @@ function getRewardArtSvg(id, type) {
                     <stop offset="0%"   stop-color="#ffffff"   stop-opacity="1"/>
                     <stop offset="25%"  stop-color="#fffde0"   stop-opacity="1"/>
                     <stop offset="55%"  stop-color="${s.core}" stop-opacity="1"/>
-                    <stop offset="80%"  stop-color="#ff9900"   stop-opacity="0.92"/>
+                    <stop offset="80%"  stop-color="#cf9440"   stop-opacity="0.92"/>
                     <stop offset="100%" stop-color="${s.pulse}" stop-opacity="0.75"/>
                 </radialGradient>
                 <radialGradient id="corona-${gid}" cx="50%" cy="50%" r="50%">
@@ -6922,22 +7280,22 @@ function getRewardArtSvg(id, type) {
             body = `
             <defs>
                 <linearGradient id="aur-rainbow-${gid}" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%"   stop-color="#7be8ff"/>
+                    <stop offset="0%"   stop-color="#97c7d6"/>
                     <stop offset="22%"  stop-color="#fffbe8"/>
-                    <stop offset="44%"  stop-color="#ffd14d"/>
-                    <stop offset="66%"  stop-color="#ff8ba2"/>
-                    <stop offset="100%" stop-color="#bc13fe"/>
+                    <stop offset="44%"  stop-color="#d6b36a"/>
+                    <stop offset="66%"  stop-color="#d49aa4"/>
+                    <stop offset="100%" stop-color="#a184c9"/>
                 </linearGradient>
                 <radialGradient id="aur-halo-${gid}" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%"   stop-color="#ffd14d"  stop-opacity="0.7"/>
-                    <stop offset="45%"  stop-color="#7be8ff"  stop-opacity="0.3"/>
-                    <stop offset="100%" stop-color="#bc13fe"  stop-opacity="0"/>
+                    <stop offset="0%"   stop-color="#d6b36a"  stop-opacity="0.7"/>
+                    <stop offset="45%"  stop-color="#97c7d6"  stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#a184c9"  stop-opacity="0"/>
                 </radialGradient>
                 <linearGradient id="aur-vert-${gid}" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stop-color="#7be8ff"/>
-                    <stop offset="33%"  stop-color="#ffd14d"/>
-                    <stop offset="66%"  stop-color="#ff8ba2"/>
-                    <stop offset="100%" stop-color="#bc13fe"/>
+                    <stop offset="0%"   stop-color="#97c7d6"/>
+                    <stop offset="33%"  stop-color="#d6b36a"/>
+                    <stop offset="66%"  stop-color="#d49aa4"/>
+                    <stop offset="100%" stop-color="#a184c9"/>
                 </linearGradient>
                 <linearGradient id="hull-au-${gid}" x1="50" y1="12" x2="50" y2="66" gradientUnits="userSpaceOnUse">
                     <stop offset="0%"   stop-color="${s.ship}" stop-opacity="0.95"/>
@@ -6945,32 +7303,32 @@ function getRewardArtSvg(id, type) {
                 </linearGradient>
             </defs>
             <circle cx="50" cy="50" r="47" fill="url(#aur-halo-${gid})"/>
-            <path d="M 0  18 Q 25  8 50 16 Q 75 24 100 12" fill="none" stroke="#7be8ff" stroke-width="5"   opacity="0.20" stroke-linecap="round"/>
+            <path d="M 0  18 Q 25  8 50 16 Q 75 24 100 12" fill="none" stroke="#97c7d6" stroke-width="5"   opacity="0.20" stroke-linecap="round"/>
             <path d="M 0  26 Q 28 16 50 24 Q 72 32 100 20" fill="none" stroke="#fffbe8" stroke-width="4.5" opacity="0.17" stroke-linecap="round"/>
-            <path d="M 0  34 Q 26 25 50 32 Q 74 39 100 28" fill="none" stroke="#ffd14d" stroke-width="4"   opacity="0.19" stroke-linecap="round"/>
-            <path d="M 2  42 Q 27 34 50 40 Q 73 46 98 38"  fill="none" stroke="#ff8ba2" stroke-width="3.5" opacity="0.20" stroke-linecap="round"/>
-            <path d="M 4  50 Q 27 43 50 49 Q 73 55 96 47"  fill="none" stroke="#bc13fe" stroke-width="3"   opacity="0.22" stroke-linecap="round"/>
+            <path d="M 0  34 Q 26 25 50 32 Q 74 39 100 28" fill="none" stroke="#d6b36a" stroke-width="4"   opacity="0.19" stroke-linecap="round"/>
+            <path d="M 2  42 Q 27 34 50 40 Q 73 46 98 38"  fill="none" stroke="#d49aa4" stroke-width="3.5" opacity="0.20" stroke-linecap="round"/>
+            <path d="M 4  50 Q 27 43 50 49 Q 73 55 96 47"  fill="none" stroke="#a184c9" stroke-width="3"   opacity="0.22" stroke-linecap="round"/>
             <circle cx="50" cy="50" r="43" fill="none" stroke="url(#aur-rainbow-${gid})" stroke-width="1.5" opacity="0.68" stroke-dasharray="6 3"/>
             <circle cx="50" cy="50" r="35" fill="none" stroke="url(#aur-rainbow-${gid})" stroke-width="1.1" opacity="0.52" stroke-dasharray="3 5"/>
             <circle cx="50" cy="50" r="27" fill="none" stroke="url(#aur-rainbow-${gid})" stroke-width="0.9" opacity="0.40" stroke-dasharray="2 6"/>
-            <polygon points="12,32 17,25 22,32 17,39" fill="#7be8ff" opacity="0.42"/>
-            <polygon points="78,30 83,23 88,30 83,37" fill="#ffd14d" opacity="0.42"/>
-            <polygon points="10,64 15,57 20,64 15,71" fill="#ff8ba2" opacity="0.38"/>
-            <polygon points="80,62 85,55 90,62 85,69" fill="#bc13fe" opacity="0.38"/>
-            <circle cx="11" cy="10" r="1.4" fill="#7be8ff" opacity="0.8"/>
-            <circle cx="89" cy="9"  r="1.2" fill="#ffd14d" opacity="0.75"/>
-            <circle cx="7"  cy="82" r="1.3" fill="#ff8ba2" opacity="0.7"/>
-            <circle cx="93" cy="80" r="1.4" fill="#bc13fe" opacity="0.7"/>
+            <polygon points="12,32 17,25 22,32 17,39" fill="#97c7d6" opacity="0.42"/>
+            <polygon points="78,30 83,23 88,30 83,37" fill="#d6b36a" opacity="0.42"/>
+            <polygon points="10,64 15,57 20,64 15,71" fill="#d49aa4" opacity="0.38"/>
+            <polygon points="80,62 85,55 90,62 85,69" fill="#a184c9" opacity="0.38"/>
+            <circle cx="11" cy="10" r="1.4" fill="#97c7d6" opacity="0.8"/>
+            <circle cx="89" cy="9"  r="1.2" fill="#d6b36a" opacity="0.75"/>
+            <circle cx="7"  cy="82" r="1.3" fill="#d49aa4" opacity="0.7"/>
+            <circle cx="93" cy="80" r="1.4" fill="#a184c9" opacity="0.7"/>
             <circle cx="17" cy="46" r="1.0" fill="#fffbe8" opacity="0.65"/>
-            <circle cx="83" cy="42" r="1.0" fill="#7be8ff" opacity="0.65"/>
-            <circle cx="50" cy="5"  r="1.2" fill="#ffd14d" opacity="0.7"/>
-            <circle cx="50" cy="95" r="1.1" fill="#7be8ff" opacity="0.6"/>
-            <circle cx="28" cy="18" r="0.9" fill="#ff8ba2" opacity="0.6"/>
-            <circle cx="72" cy="16" r="0.9" fill="#bc13fe" opacity="0.6"/>
-            <circle cx="22" cy="70" r="0.8" fill="#ffd14d" opacity="0.55"/>
-            <circle cx="78" cy="72" r="0.8" fill="#7be8ff" opacity="0.55"/>
+            <circle cx="83" cy="42" r="1.0" fill="#97c7d6" opacity="0.65"/>
+            <circle cx="50" cy="5"  r="1.2" fill="#d6b36a" opacity="0.7"/>
+            <circle cx="50" cy="95" r="1.1" fill="#97c7d6" opacity="0.6"/>
+            <circle cx="28" cy="18" r="0.9" fill="#d49aa4" opacity="0.6"/>
+            <circle cx="72" cy="16" r="0.9" fill="#a184c9" opacity="0.6"/>
+            <circle cx="22" cy="70" r="0.8" fill="#d6b36a" opacity="0.55"/>
+            <circle cx="78" cy="72" r="0.8" fill="#97c7d6" opacity="0.55"/>
             <circle cx="6"  cy="55" r="0.7" fill="#fffbe8" opacity="0.5"/>
-            <circle cx="94" cy="58" r="0.7" fill="#bc13fe" opacity="0.5"/>
+            <circle cx="94" cy="58" r="0.7" fill="#a184c9" opacity="0.5"/>
             <line x1="50" y1="12" x2="50" y2="22" stroke="url(#aur-vert-${gid})" stroke-width="1.6" opacity="0.52" stroke-linecap="round"/>
             <line x1="50" y1="78" x2="50" y2="90" stroke="url(#aur-vert-${gid})" stroke-width="1.6" opacity="0.52" stroke-linecap="round"/>
             <line x1="6"  y1="50" x2="18" y2="50" stroke="url(#aur-rainbow-${gid})" stroke-width="1.5" opacity="0.52" stroke-linecap="round"/>
@@ -6998,36 +7356,48 @@ function getRewardArtSvg(id, type) {
     if (type === 'chip') {
         const chip = INVENTORY_CARDS[id];
         if (!chip) return '';
-        const colorMap = { blue: '#2b96ff', dark: '#5566ff', purple: '#bc13fe', red: '#ff375f', gold: '#ffd14d' };
-        const color = colorMap[chip.rarity] || '#fff';
-        const shapeMap = {
-            damage_chip:      `<polyline points="50,15 32,55 50,55 42,85" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`,
-            magnet_chip:      `<path d="M30 55 a20 20 0 0 1 40 0" fill="none" stroke="${color}" stroke-width="4"/><line x1="30" y1="55" x2="30" y2="78" stroke="${color}" stroke-width="4"/><line x1="70" y1="55" x2="70" y2="78" stroke="${color}" stroke-width="4"/>`,
-            stability_chip:   `<rect x="22" y="40" width="56" height="20" rx="3" fill="none" stroke="${color}" stroke-width="2"/><line x1="32" y1="50" x2="68" y2="50" stroke="${color}" stroke-width="2"/>`,
-            rpm_chip:         `<line x1="20" y1="30" x2="80" y2="30" stroke="${color}" stroke-width="3"/><line x1="20" y1="50" x2="80" y2="50" stroke="${color}" stroke-width="3"/><line x1="20" y1="70" x2="80" y2="70" stroke="${color}" stroke-width="3"/><polyline points="62,22 80,30 62,38" fill="none" stroke="${color}" stroke-width="2.5"/><polyline points="62,42 80,50 62,58" fill="none" stroke="${color}" stroke-width="2.5"/><polyline points="62,62 80,70 62,78" fill="none" stroke="${color}" stroke-width="2.5"/>`,
-            overcharge_core:  `<circle cx="50" cy="50" r="22" fill="none" stroke="${color}" stroke-width="3"/><polygon points="50,30 56,50 50,70 44,50" fill="${color}"/>`,
-            arc_battery:      `<rect x="32" y="22" width="36" height="56" rx="4" fill="none" stroke="${color}" stroke-width="2.5"/><rect x="42" y="14" width="16" height="8" fill="${color}"/><polyline points="42,40 56,50 42,55 56,68" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`,
-            siege_loader:     `<polygon points="20,80 50,20 80,80" fill="none" stroke="${color}" stroke-width="3"/><line x1="35" y1="55" x2="65" y2="55" stroke="${color}" stroke-width="2.5"/>`,
-            apex_emblem:      `<polygon points="50,12 88,32 80,76 50,90 20,76 12,32" fill="none" stroke="${color}" stroke-width="3"/><polygon points="50,30 70,42 65,68 50,76 35,68 30,42" fill="${color}" opacity="0.6"/>`,
-            minigun_protocol: `<line x1="22" y1="40" x2="78" y2="40" stroke="${color}" stroke-width="4"/><line x1="22" y1="55" x2="78" y2="55" stroke="${color}" stroke-width="4"/><line x1="22" y1="70" x2="78" y2="70" stroke="${color}" stroke-width="4"/><circle cx="20" cy="40" r="3" fill="${color}"/><circle cx="20" cy="55" r="3" fill="${color}"/><circle cx="20" cy="70" r="3" fill="${color}"/>`,
-            vortex_array:     `<circle cx="50" cy="50" r="32" fill="none" stroke="${color}" stroke-width="2"/><circle cx="50" cy="50" r="22" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4 4"/><circle cx="50" cy="50" r="10" fill="${color}"/>`,
-            solar_crown:      `<polygon points="20,80 30,40 50,55 50,15 50,55 70,40 80,80" fill="none" stroke="${color}" stroke-width="3"/><circle cx="50" cy="55" r="6" fill="${color}"/>`,
-            crimson_zero:     `<line x1="20" y1="50" x2="80" y2="50" stroke="${color}" stroke-width="3"/><polyline points="62,38 80,50 62,62" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/><circle cx="22" cy="50" r="6" fill="none" stroke="${color}" stroke-width="2.5"/>`
-        };
-        const shape = shapeMap[id] || `<rect x="30" y="30" width="40" height="40" fill="none" stroke="${color}" stroke-width="3"/>`;
-        return `
-            <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <radialGradient id="cg-${gid}" cx="50%" cy="50%" r="55%">
-                        <stop offset="0%" stop-color="${color}" stop-opacity="0.45"/>
-                        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-                    </radialGradient>
-                </defs>
-                <circle cx="50" cy="50" r="42" fill="url(#cg-${gid})"/>
-                ${shape}
-            </svg>`;
+        // Every chip has its own pixel-art icon now — flat img, no procedural
+        // SVG shape/glow wrapper, matching the flat shop style everywhere else.
+        const file = getChipIconFile(id);
+        return file ? `<img src="icons/small/${file}-48.png" alt="">` : '';
     }
     return '';
+}
+
+// Shared chip-id -> icon-filename lookup (Peek tiles, Equipment slots, etc.)
+function getChipIconFile(id) {
+    const iconMap = {
+        damage_chip: 'damage-chip', magnet_chip: 'magnet', stability_chip: 'stability-chip',
+        rpm_chip: 'rpm-chip', overcharge_core: 'overcharge-core', arc_battery: 'arc-battery',
+        siege_loader: 'siege-loader', apex_emblem: 'apex-emblem', minigun_protocol: 'minigun-protocol',
+        vortex_array: 'vortex-array', solar_crown: 'solar-crown', crimson_zero: 'crimson-zero',
+        thruster_chip: 'thruster-chip', scout_lens: 'scout-lens', kinetic_frame: 'kinetic-frame',
+        ballast_plate: 'plate', phase_rotor: 'phase-rotor', heavy_rig: 'heavy-rig',
+        flux_capacitor: 'flux-capacitor', warp_drive: 'warp-drive', siege_anchor: 'siege-anchor',
+        singularity_lens: 'singularity-lens', omega_core: 'omega-core'
+    };
+    return iconMap[id] || null;
+}
+
+// Dedicated badge icon per pack tier — shared by the Shop offer cards and
+// the Inventory "Stored Packs" cards so both use the exact same art.
+function getPackIconFile(packKey) {
+    const iconMap = {
+        supply_pack_i: 'supply-pack-i', strike_pack_ii: 'strike-pack-ii', apex_pack_iii: 'apex-pack-iii',
+        premium_alpha_crate: 'premium-alpha-crate', royal_omega_crate: 'royal-omega-crate',
+        street_skin_pack: 'street-skin-pack', prism_skin_pack: 'prism-skin-pack', legend_skin_pack: 'legend-skin-pack'
+    };
+    return iconMap[packKey] || null;
+}
+
+// Flat pixel badge per skin — used for skin tiles/peek art instead of the
+// full procedural ship render (that stays reserved for the pack-reveal moment).
+function getSkinIconFile(id) {
+    const iconMap = {
+        stock: 'skin-stock', ember_blade: 'skin-ember-blade', violet_drift: 'skin-violet-drift',
+        solar_flare: 'skin-solar-flare', crimson_afterburn: 'skin-crimson-afterburn', aurora_zero: 'skin-aurora-zero'
+    };
+    return iconMap[id] || null;
 }
 
 // Mount the shop feature banner (shows the rarest pack in shop as the "headline")
@@ -7082,6 +7452,8 @@ window.showPackPeek = function(packKey) {
     }).join('');
 
     // tiles, grouped by rarity descending
+    // Skin peek tiles get a flat pixel badge instead of the full procedural
+    // ship render (that stays reserved for the pack-opening reveal moment).
     const tiles = [];
     ['gold','red','purple','dark','blue'].forEach((r) => {
         if ((packDef.odds[r] || 0) <= 0) return;
@@ -7090,7 +7462,10 @@ window.showPackPeek = function(packKey) {
         const totalWeight = pool.reduce((s, [, def]) => s + (def.weight || 1), 0);
         pool.forEach(([id, def]) => {
             const slice = ((def.weight || 1) / totalWeight) * (packDef.odds[r] / total) * 100;
-            const art = getRewardArtSvg(id, packDef.rewardType === 'skin' ? 'skin' : 'chip');
+            const skinIconFile = getSkinIconFile(id);
+            const art = packDef.rewardType === 'skin'
+                ? (skinIconFile ? `<img src="icons/small/${skinIconFile}-48.png" alt="">` : getRewardArtSvg(id, 'skin'))
+                : getRewardArtSvg(id, 'chip');
             tiles.push(`
                 <div class="peek-tile r-${r}">
                     <div class="peek-art">${art}</div>
@@ -7116,9 +7491,9 @@ window.closePackPeek = function(event) {
 // ─────────────────────────── DAILY OVERLAY (popup) ────────────
 // Reward icon mapping (small SVG glyph)
 function _rewardIconFor(reward) {
-    if (reward.gold || /gold/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd14d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="9,9 15,9 12,15 15,15"/></svg>';
-    if (reward.gems || /gems/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#bc13fe" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,11 12,22 2,11"/><polyline points="2,11 22,11"/></svg>';
-    if (reward.packKey || /pack/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#ff67ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,9 22,17 12,23 2,17 2,9"/></svg>';
+    if (reward.gold || /gold/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#d6b36a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="9,9 15,9 12,15 15,15"/></svg>';
+    if (reward.gems || /gems/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#a184c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,11 12,22 2,11"/><polyline points="2,11 22,11"/></svg>';
+    if (reward.packKey || /pack/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#bf8bba" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,9 22,17 12,23 2,17 2,9"/></svg>';
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>';
 }
 
@@ -7133,8 +7508,8 @@ window.openDailyOverlay = function() {
 
     if (status) {
         status.innerHTML = claimedToday
-            ? `<span style="color:#1eff8c">✓ Tag ${cycleDay} eingesammelt</span> · komm morgen wieder · Streak <strong style="color:#ffd14d">${streak}</strong>`
-            : `<span style="color:#67d4ff">Tag ${cycleDay} bereit</span> · Streak <strong style="color:#ffd14d">${streak}</strong>`;
+            ? `<span style="color:#6ec496">✓ Tag ${cycleDay} eingesammelt</span> · komm morgen wieder · Streak <strong style="color:#d6b36a">${streak}</strong>`
+            : `<span style="color:#93c1d8">Tag ${cycleDay} bereit</span> · Streak <strong style="color:#d6b36a">${streak}</strong>`;
     }
 
     grid.innerHTML = DAILY_LOGIN_REWARDS.map((reward, index) => {
@@ -7151,6 +7526,7 @@ window.openDailyOverlay = function() {
             </div>
         `;
     }).join('');
+    renderChallengesInto(overlay);
     overlay.classList.add('active');
     playSfx('peekOpen', 0.85);
     playHaptic('peek');
@@ -7167,7 +7543,7 @@ const DAILY_CHALLENGES = [
     { id: 'wave5',   title: 'Reach wave 5 in Endless',       goal: 5,   reward: { gems: 12, label: '12 Gems' },     tier: 'rare' },
     { id: 'evolve',  title: 'Evolve an ability twice in a run', goal: 2, reward: { packKey: 'strike', label: '1 Pack II' }, tier: 'epic' },
     { id: 'noHit',   title: 'Clear a mission without damage', goal: 1,  reward: { gems: 20, label: '20 Gems' },     tier: 'epic' },
-    { id: 'kills500',title: 'Eliminate 500 enemies (weekly)', goal: 500, reward: { gold: 800, label: '800 Gold' },  tier: 'legendary' }
+    { id: 'kills500',title: 'Eliminate 500 enemies (weekly)', goal: 500, reward: { gold: 800, label: '800 Gold' },  tier: 'legendary', weekly: true }
 ];
 
 function getChallengeProgress(c) {
@@ -7176,11 +7552,30 @@ function getChallengeProgress(c) {
     return { value: v, pct: Math.min(1, v / c.goal) };
 }
 
-window.openChallengesOverlay = function() {
-    const overlay = document.getElementById('challenges-overlay');
-    const list = document.getElementById('challenges-list');
-    if (!overlay || !list) return;
-    list.innerHTML = DAILY_CHALLENGES.map((c) => {
+// Renders the weekly-pass banner + the regular (non-weekly) challenge cards
+// into the merged Daily/Quests overlay. Shared by openDailyOverlay() so both
+// rail entry points (Daily, Quests) land on the same combined screen.
+function renderChallengesInto(overlay) {
+    const list = overlay.querySelector('#challenges-list');
+    const weeklyBanner = overlay.querySelector('#weekly-pass-banner');
+    if (!list) return;
+
+    const weeklyDef = DAILY_CHALLENGES.find((c) => c.weekly);
+    if (weeklyBanner && weeklyDef) {
+        const wp = getChallengeProgress(weeklyDef);
+        weeklyBanner.style.display = '';
+        weeklyBanner.innerHTML = `
+            <img src="icons/small/pack-48.png" alt="" class="weekly-pass-icon">
+            <div class="weekly-pass-body">
+                <span class="weekly-pass-label">WEEKLY PASS · ${wp.value} / ${weeklyDef.goal} KILLS</span>
+                <div class="weekly-pass-bar"><div class="weekly-pass-fill" style="width:${(wp.pct * 100).toFixed(0)}%"></div></div>
+            </div>
+        `;
+    } else if (weeklyBanner) {
+        weeklyBanner.style.display = 'none';
+    }
+
+    list.innerHTML = DAILY_CHALLENGES.filter((c) => !c.weekly).map((c) => {
         const p = getChallengeProgress(c);
         const done = p.value >= c.goal;
         const tierClass = `tier-${c.tier}`;
@@ -7202,14 +7597,15 @@ window.openChallengesOverlay = function() {
             </div>
         `;
     }).join('');
-    overlay.classList.add('active');
-    playSfx('peekOpen', 0.85);
-    playHaptic('peek');
+}
+
+// Quests now lives on the same merged screen as Daily Login — both rail
+// buttons open the one combined overlay.
+window.openChallengesOverlay = function() {
+    window.openDailyOverlay();
 };
 window.closeChallengesOverlay = function(event) {
-    if (event && event.currentTarget && event.target !== event.currentTarget) return;
-    const overlay = document.getElementById('challenges-overlay');
-    if (overlay) overlay.classList.remove('active');
+    window.closeDailyOverlay(event);
 };
 
 // ─────────────────────────── LEADERBOARD ──────────────────────
@@ -7401,6 +7797,12 @@ function renderInventory() {
     if (!grid) return;
     grid.innerHTML = '';
 
+    const counter = document.getElementById('inventory-counter');
+    if (counter) {
+        const ownedDistinct = new Set(save.inventory).size;
+        counter.textContent = `${ownedDistinct}/${Object.keys(INVENTORY_CARDS).length}`;
+    }
+
     if (save.inventory.length === 0 && save.packs.length === 0 && (!save.skins || save.skins.length <= 1)) {
         const empty = document.createElement('div');
         empty.className = 'shop-card';
@@ -7425,43 +7827,42 @@ function renderInventory() {
 
     if (packEntries.length) {
         grid.appendChild(createInventorySection('Stored Packs', 'Open card packs and skin packs here.'));
-    }
-
-    packEntries.forEach(([packKey, count]) => {
-        const pack = PACK_DEFINITIONS[packKey];
-        if (!pack) return;
-        const best = getBestDropForPack(packKey);
-        const heroSvg = best ? getRewardArtSvg(best.id, pack.rewardType === 'skin' ? 'skin' : 'chip') : '';
-        const minis = getMiniDropsForPack(packKey);
-        const box = document.createElement('div');
-        box.innerHTML = `
-            <div class="pack-card-v2 tier-${packKey}" data-pack="${packKey}">
-                <div class="pack-foil"></div>
-                <div class="pack-hero">
-                    <div class="pack-hero-tag">★ Stored ${count > 1 ? `× ${count}` : ''}</div>
-                    <div class="pack-tier-badge">${getRarityLabel(pack.rarity)}</div>
-                    <div class="pack-hero-icon">${heroSvg}</div>
-                </div>
-                <div class="pack-mini-strip">
-                    ${minis.map((m) => `<div class="pack-mini-drop tier-${m.tier}" title="${m.name}">${getMiniArtSvgInline(m.id, pack.rewardType === 'skin' ? 'skin' : 'chip')}</div>`).join('')}
-                </div>
-                <div class="pack-body">
-                    <div class="pack-name">${pack.name}</div>
-                    <div class="pack-sub">${formatPackOdds(pack)}</div>
-                    <div class="pack-actions">
-                        <button class="pack-peek-btn" type="button" data-peek="${packKey}">PEEK</button>
-                        <button class="btn-glossy btn-gold" type="button" data-buy="1">OPEN</button>
+        const packGrid = document.createElement('div');
+        packGrid.className = 'shop-grid pack-shop-grid inventory-pack-grid';
+        packEntries.forEach(([packKey, count]) => {
+            const pack = PACK_DEFINITIONS[packKey];
+            if (!pack) return;
+            const packIconFile = getPackIconFile(packKey);
+            const best = getBestDropForPack(packKey);
+            const heroSvg = packIconFile
+                ? `<img src="icons/small/${packIconFile}-48.png" alt="">`
+                : (best ? getRewardArtSvg(best.id, pack.rewardType === 'skin' ? 'skin' : 'chip') : '');
+            const tierLabel = getRarityLabel(pack.rarity);
+            const box = document.createElement('div');
+            box.innerHTML = `
+                <div class="pack-card-v2 rarity-edge-${pack.rarity}" data-pack="${packKey}">
+                    <div class="pack-v2-head">
+                        <div class="pack-v2-icon">${heroSvg}</div>
+                        <div class="pack-v2-title">
+                            <span class="pack-v2-rarity">${tierLabel}${count > 1 ? ` · ×${count}` : ''}</span>
+                            <span class="pack-v2-name">${pack.name}</span>
+                        </div>
+                    </div>
+                    <div class="pack-v2-actions">
+                        <button class="pack-v2-peek-btn" type="button" data-peek="${packKey}">PEEK</button>
+                        <button class="pack-v2-open-btn" type="button" data-buy="1">OPEN</button>
                     </div>
                 </div>
-            </div>
-        `;
-        const card = box.firstElementChild;
-        const openBtn = card.querySelector('[data-buy]');
-        const peekBtn = card.querySelector('[data-peek]');
-        if (openBtn) openBtn.onclick = (e) => { e.stopPropagation(); playSfx('tapAccent', 1); playHaptic('tap'); openStoredPack(packKey); };
-        if (peekBtn) peekBtn.onclick = (e) => { e.stopPropagation(); playSfx('tap', 0.7); playHaptic('tap'); showPackPeek(packKey); };
-        grid.appendChild(card);
-    });
+            `;
+            const card = box.firstElementChild;
+            const openBtn = card.querySelector('[data-buy]');
+            const peekBtn = card.querySelector('[data-peek]');
+            if (openBtn) openBtn.onclick = (e) => { e.stopPropagation(); playSfx('tapAccent', 1); playHaptic('tap'); openStoredPack(packKey); };
+            if (peekBtn) peekBtn.onclick = (e) => { e.stopPropagation(); playSfx('tap', 0.7); playHaptic('tap'); showPackPeek(packKey); };
+            packGrid.appendChild(card);
+        });
+        grid.appendChild(packGrid);
+    }
 
     if (save.premium?.neonTrail) {
         grid.appendChild(createInventorySection('Trail Toggle', 'Turn the premium neon trail on or off whenever you want.'));
@@ -7469,11 +7870,8 @@ function renderInventory() {
         trailBox.className = `shop-card ${save.premium.neonTrailEnabled === false ? '' : 'rarity-purple'}`.trim();
         const enabled = save.premium.neonTrailEnabled !== false;
         trailBox.innerHTML = `
-            <div class="skin-visual">
-                <span class="skin-visual-aura"></span>
-                <span class="skin-visual-trail"></span>
-                <span class="skin-visual-ship"></span>
-                <span class="skin-visual-core"></span>
+            <div class="inventory-card-icon-box inventory-trail-icon">
+                <img src="icons/small/neon-trail-48.png" alt="">
             </div>
             <div class="card-title">Neon Trail</div>
             <div class="card-meta">PREMIUM VFX</div>
@@ -7503,14 +7901,15 @@ function renderInventory() {
 
     skinEntries.forEach(([skinId, skin]) => {
         const equipped = save.equippedSkin === skinId;
-        const box = renderFlipCard({
-            id: skinId,
-            type: 'skin',
-            def: skin,
+        const skinIconFile = getSkinIconFile(skinId);
+        const box = renderInventoryTile({
+            rarity: skin.rarity,
+            iconHtml: skinIconFile ? `<img src="icons/small/${skinIconFile}-48.png" alt="">` : '',
             count: 1,
-            extraMeta: equipped ? 'EQUIPPED' : 'OWNED',
-            cta: equipped ? 'EQUIPPED' : 'EQUIP SKIN',
-            ctaDisabled: equipped,
+            name: skin.name,
+            meta: equipped ? 'EQUIPPED' : 'OWNED',
+            ctaLabel: equipped ? 'EQUIPPED' : 'EQUIP SKIN',
+            ctaState: equipped ? 'equipped' : 'equip',
             onCta: () => equipSkin(skinId)
         });
         grid.appendChild(box);
@@ -7520,11 +7919,11 @@ function renderInventory() {
         acc[cardId] = (acc[cardId] || 0) + 1;
         return acc;
     }, {});
+    const rarityOrder = { gold: 0, red: 1, purple: 2, dark: 3, blue: 4 };
     const sortedCards = Object.entries(counts).sort((a, b) => {
         const cardA = INVENTORY_CARDS[a[0]];
         const cardB = INVENTORY_CARDS[b[0]];
-        const rarityOrder = { blue: 0, dark: 1, purple: 2, red: 3, gold: 4 };
-        const rarityDelta = (rarityOrder[cardA?.rarity] ?? 0) - (rarityOrder[cardB?.rarity] ?? 0);
+        const rarityDelta = (rarityOrder[cardA?.rarity] ?? 9) - (rarityOrder[cardB?.rarity] ?? 9);
         if (rarityDelta !== 0) return rarityDelta;
         const tierDelta = (cardA?.tier ?? 0) - (cardB?.tier ?? 0);
         if (tierDelta !== 0) return tierDelta;
@@ -7532,33 +7931,119 @@ function renderInventory() {
     });
 
     if (sortedCards.length) {
-        grid.appendChild(createInventorySection('Cards', 'Tap cards to flip them. Sell extra copies for gold.'));
+        grid.appendChild(createInventorySection('Cards', 'Sell extra copies for gold.'));
+
+        // Rarity filter chips — real filter over the cards actually owned,
+        // built from the same blue/dark/purple/red/gold tiers the cards use.
+        const presentRarities = [...new Set(sortedCards.map(([id]) => INVENTORY_CARDS[id]?.rarity).filter(Boolean))]
+            .sort((a, b) => (rarityOrder[a] ?? 9) - (rarityOrder[b] ?? 9));
+        if (!presentRarities.includes(inventoryFilter) && inventoryFilter !== 'all') inventoryFilter = 'all';
+        const chipBar = document.createElement('div');
+        chipBar.className = 'inventory-filter-bar';
+        const chipDefs = [['all', 'All'], ...presentRarities.map((r) => [r, getRarityLabel(r)])];
+        chipBar.innerHTML = chipDefs.map(([key, label]) => (
+            `<button type="button" class="inventory-filter-chip tier-${key} ${inventoryFilter === key ? 'active' : ''}" data-filter="${key}">${label}</button>`
+        )).join('');
+        chipBar.querySelectorAll('[data-filter]').forEach((btn) => {
+            btn.onclick = () => {
+                inventoryFilter = btn.getAttribute('data-filter');
+                playSfx && playSfx('tap', 0.6);
+                setTimeout(renderInventory, 90);
+            };
+        });
+        grid.appendChild(chipBar);
     }
 
-    sortedCards.forEach(([cardId, count]) => {
-        const card = INVENTORY_CARDS[cardId];
-        if (!card) return;
-        const equippedCount = getEquippedCounts()[cardId] || 0;
-        const sellable = Math.max(0, count - equippedCount);
-        const box = renderFlipCard({
-            id: cardId,
-            type: 'chip',
-            def: card,
-            count,
-            extraMeta: `Tier ${card.tier} · Free ${sellable}`,
-            cta: sellable <= 0 ? 'LOCKED' : `SELL ${getCardSellValue(cardId)}G`,
-            ctaDisabled: sellable <= 0,
-            onCta: () => sellInventoryCard(cardId)
+    // Group into rarity sections so each shows a "GOLD · 2" style header,
+    // filtered down to the active chip (or all of them for 'all'). Each card
+    // is a flip tile — front is icon+count+name+tier, tapping it flips to a
+    // back face with real effect stat rows (via LOADOUT_SYNERGY_AXES) and
+    // the sell action, instead of a separate always-visible description.
+    const grouped = presentRaritiesGroup(sortedCards);
+    Object.keys(rarityOrder).forEach((rarityKey) => {
+        const entries = grouped[rarityKey];
+        if (!entries || !entries.length) return;
+        if (inventoryFilter !== 'all' && inventoryFilter !== rarityKey) return;
+
+        const header = document.createElement('div');
+        header.className = 'inventory-rarity-header';
+        header.innerHTML = `<span class="tier-${rarityKey}">${getRarityLabel(rarityKey)}</span><em>${entries.length}</em>`;
+        grid.appendChild(header);
+
+        const sectionGrid = document.createElement('div');
+        sectionGrid.className = 'inventory-cards-grid';
+        entries.forEach(([cardId, count]) => {
+            const card = INVENTORY_CARDS[cardId];
+            if (!card) return;
+            const equippedCount = getEquippedCounts()[cardId] || 0;
+            const sellable = Math.max(0, count - equippedCount);
+            const iconFile = getChipIconFile(cardId);
+            const statRows = LOADOUT_SYNERGY_AXES
+                .filter(({ key }) => card.effect[key])
+                .map(({ key, name, format }) => `
+                    <div class="inv-flip-row">
+                        <span class="inv-flip-row-label">${name}</span>
+                        <span class="inv-flip-row-value tier-${card.rarity}">${format(card.effect[key])}</span>
+                    </div>
+                `).join('');
+
+            const flip = document.createElement('div');
+            flip.className = 'inv-flip-card';
+            flip.innerHTML = `
+                <div class="inv-flip-inner">
+                    <div class="inv-flip-face inv-flip-front rarity-${card.rarity}">
+                        <div class="inventory-card-icon-box">
+                            ${count > 1 ? `<span class="inventory-card-badge badge-${card.rarity}">${count}</span>` : ''}
+                            ${iconFile ? `<img src="icons/small/${iconFile}-48.png" alt="">` : ''}
+                        </div>
+                        <span class="inventory-card-tile-name">${card.name}</span>
+                        <span class="inventory-card-tile-tier tier-${card.rarity}">TIER ${card.tier}</span>
+                        <span class="inv-flip-hint">TAP TO FLIP</span>
+                    </div>
+                    <div class="inv-flip-face inv-flip-back rarity-${card.rarity}">
+                        <span class="inv-flip-back-label tier-${card.rarity}">${getRarityLabel(card.rarity)} · TIER ${card.tier}</span>
+                        <span class="inv-flip-back-name">${card.name}</span>
+                        ${statRows}
+                        <span class="inv-flip-desc">${card.desc || ''}</span>
+                        <button class="inv-flip-cta ${sellable <= 0 ? 'state-noslot' : ''}" type="button" ${sellable <= 0 ? 'disabled' : ''}>
+                            ${sellable <= 0 ? 'LOCKED' : `SELL ${getCardSellValue(cardId)}G`}
+                        </button>
+                    </div>
+                </div>
+            `;
+            flip.addEventListener('click', (e) => {
+                if (e.target.closest('.inv-flip-cta')) return;
+                flip.classList.toggle('flipped');
+                playSfx && playSfx('tap', 0.5);
+            });
+            if (sellable > 0) {
+                flip.querySelector('.inv-flip-cta').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    sellInventoryCard(cardId);
+                });
+            }
+            sectionGrid.appendChild(flip);
         });
-        grid.appendChild(box);
+        grid.appendChild(sectionGrid);
     });
+}
+
+// Buckets [cardId, count] entries by INVENTORY_CARDS rarity for section grouping.
+function presentRaritiesGroup(sortedCards) {
+    const out = {};
+    sortedCards.forEach(([cardId, count]) => {
+        const rarity = INVENTORY_CARDS[cardId]?.rarity;
+        if (!rarity) return;
+        (out[rarity] = out[rarity] || []).push([cardId, count]);
+    });
+    return out;
 }
 
 window.equipSkin = function(skinId) {
     if (!save.skins.includes(skinId) || !SKIN_DEFINITIONS[skinId]) return;
     save.equippedSkin = skinId;
     saveSave();
-    renderInventory();
+    setTimeout(renderInventory, 90);
     playSfx('upgrade', 0.9);
     playHaptic('soft');
     showToast(`${SKIN_DEFINITIONS[skinId].name} equipped.`);
@@ -7574,16 +8059,134 @@ window.toggleNeonTrail = function() {
     showToast(save.premium.neonTrailEnabled === false ? 'Neon Trail disabled.' : 'Neon Trail enabled.');
 };
 
+// Flavor-only readout of what the currently-equipped cards actually add up
+// to, axis by axis. Purely additive/informational — it mirrors the exact
+// same fields getInventoryBonuses() already sums into real gameplay stats,
+// it does not introduce a new "item set" mechanic or change any numbers.
+const LOADOUT_SYNERGY_AXES = [
+    { key: 'damageMultiplier',      name: 'Beam mastery',      format: (v) => `+${Math.round(v * 100)}% DMG` },
+    { key: 'attackSpeedMultiplier', name: 'Overcharge tempo',  format: (v) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}% RATE` },
+    { key: 'speedMultiplier',       name: 'Thruster synergy',  format: (v) => `+${Math.round(v * 100)}% SPD` },
+    { key: 'magnetFlat',            name: 'Hull magnetism',    format: (v) => `+${Math.round(v)} MAGNET` },
+];
+
+function getEquippedSynergy() {
+    return save.equippedCards.reduce((acc, cardId) => {
+        const card = INVENTORY_CARDS[cardId];
+        if (!card) return acc;
+        LOADOUT_SYNERGY_AXES.forEach(({ key }) => { acc[key] = (acc[key] || 0) + (card.effect[key] || 0); });
+        return acc;
+    }, {});
+}
+
+// Real example cards that actually carry this effect — used as a hint under
+// a locked synergy row so the player knows what to go equip, not a guess.
+function getSynergyExampleCards(key) {
+    return Object.values(INVENTORY_CARDS)
+        .filter((c) => (c.effect[key] || 0) > 0)
+        .sort((a, b) => a.tier - b.tier)
+        .slice(0, 2)
+        .map((c) => c.name);
+}
+
+let loadoutSynergyOpen = true;
+window.toggleLoadoutSynergy = function() {
+    loadoutSynergyOpen = !loadoutSynergyOpen;
+    // Tiny delay so the tapped button's own press-down shadow effect has
+    // time to actually paint before its DOM gets replaced — otherwise an
+    // instant re-render destroys the element mid-press and the :active
+    // state never becomes visible at all.
+    setTimeout(renderLoadoutSynergy, 90);
+};
+
+function renderLoadoutSynergy() {
+    const box = document.getElementById('loadout-synergy');
+    if (!box) return;
+    const totals = getEquippedSynergy();
+    const active = LOADOUT_SYNERGY_AXES.filter((a) => Math.round((totals[a.key] || 0) * 100) !== 0);
+    // Headline preview for the collapsed state — damage is the marquee stat
+    // when it's active, otherwise fall back to whichever axis is active.
+    const headline = active.find((a) => a.key === 'damageMultiplier') || active[0];
+    box.innerHTML = `
+        <button class="synergy-head" type="button" onclick="toggleLoadoutSynergy()">
+            <span class="eyebrow">Loadout Synergy</span>
+            <span class="synergy-count">${active.length}/${LOADOUT_SYNERGY_AXES.length} ACTIVE</span>
+            ${!loadoutSynergyOpen && headline ? `<span class="synergy-headline">${headline.format(totals[headline.key])}</span>` : ''}
+            <span class="synergy-chevron ${loadoutSynergyOpen ? 'open' : ''}" aria-hidden="true">▾</span>
+        </button>
+        <div class="synergy-list" ${loadoutSynergyOpen ? '' : 'hidden'}>
+            ${LOADOUT_SYNERGY_AXES.map((axis) => {
+                const value = totals[axis.key] || 0;
+                const isActive = Math.round(value * 100) !== 0;
+                const examples = isActive ? [] : getSynergyExampleCards(axis.key);
+                return `
+                    <div class="synergy-row ${isActive ? 'active' : 'locked'}">
+                        <span class="synergy-dot" aria-hidden="true">${isActive ? '✓' : `<img src="icons/small/lock-48.png" class="synergy-lock-icon" alt="">`}</span>
+                        <div class="synergy-name-col">
+                            <span class="synergy-name">${axis.name}</span>
+                            ${examples.length ? `<span class="synergy-hint">Equip: ${examples.join(', ')}</span>` : ''}
+                        </div>
+                        <span class="synergy-value">${isActive ? axis.format(value) : 'LOCKED'}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+const LOADOUT_RARITY_ORDER = ['gold', 'red', 'purple', 'dark', 'blue'];
+
+// Two-tab state: which tab is showing, and (on the Cards tab) whether the
+// user is filling one specific slot or just browsing/filtering freely.
+let loadoutTab = 'loadout';
+let loadoutPickSlot = null; // { type: 'normal'|'legendary', index } or null
+let loadoutFilter = 'all';  // 'all' or a rarity key
+
+// These all defer their re-render by one beat (see the note on
+// toggleLoadoutSynergy above) so the tapped button's press-shadow effect
+// gets a chance to actually paint before its DOM is replaced.
+window.setLoadoutTab = function(tab) {
+    loadoutTab = tab;
+    if (tab === 'loadout') loadoutPickSlot = null;
+    setTimeout(renderLoadout, 90);
+    playHaptic('soft');
+};
+
+window.cancelLoadoutPick = function() {
+    loadoutPickSlot = null;
+    setTimeout(renderLoadout, 90);
+};
+
+window.setLoadoutFilter = function(rarity) {
+    loadoutFilter = rarity;
+    setTimeout(renderLoadout, 90);
+};
+
+window.startLoadoutPick = function(type, index) {
+    loadoutPickSlot = { type, index };
+    loadoutTab = 'cards';
+    setTimeout(renderLoadout, 90);
+    playHaptic('soft');
+};
+
 function renderLoadout() {
     const summary = document.getElementById('loadout-summary');
     const normal = document.getElementById('loadout-normal');
     const legendary = document.getElementById('loadout-legendary');
-    const cardsGrid = document.getElementById('loadout-cards');
-    if (!summary || !normal || !legendary || !cardsGrid) return;
+    const featured = document.getElementById('loadout-featured');
+    const actions = document.getElementById('loadout-actions');
+    const tabsEl = document.getElementById('loadout-tabs');
+    const loadoutPanel = document.getElementById('loadout-tab-loadout');
+    const cardsPanel = document.getElementById('loadout-tab-cards');
+    if (!summary || !normal || !legendary) return;
 
     const caps = getLoadoutSlotCaps();
     const normalEquipped = save.equippedCards.filter((cardId) => !isLegendaryCard(cardId));
     const legendaryEquipped = save.equippedCards.filter((cardId) => isLegendaryCard(cardId));
+    const ownedCounts = save.inventory.reduce((acc, cardId) => {
+        acc[cardId] = (acc[cardId] || 0) + 1;
+        return acc;
+    }, {});
 
     summary.innerHTML = `
         <p class="eyebrow">${t('equipment.slotProgression')}</p>
@@ -7591,133 +8194,244 @@ function renderLoadout() {
         <p>${t('equipment.maxNote')}</p>
     `;
 
-    normal.innerHTML = `<p class="eyebrow">${t('equipment.normalSlots')}</p><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped)}</div>`;
-    legendary.innerHTML = `<p class="eyebrow">${t('equipment.legendarySlots')}</p><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped)}</div>`;
+    if (tabsEl) {
+        tabsEl.innerHTML = `
+            <button class="loadout-tab ${loadoutTab === 'loadout' ? 'active' : ''}" type="button" onclick="setLoadoutTab('loadout')">
+                <img src="icons/small/equipment-48.png" alt="" class="loadout-tab-icon">LOADOUT
+                <span class="loadout-tab-count">${save.equippedCards.length}/${caps.normal + caps.legendary}</span>
+            </button>
+            <button class="loadout-tab ${loadoutTab === 'cards' ? 'active' : ''}" type="button" onclick="setLoadoutTab('cards')">
+                <img src="icons/small/inventory-48.png" alt="" class="loadout-tab-icon">CARDS
+                <span class="loadout-tab-count">${save.inventory.length}</span>
+            </button>
+        `;
+    }
+    if (loadoutPanel) loadoutPanel.style.display = loadoutTab === 'loadout' ? '' : 'none';
+    if (cardsPanel) cardsPanel.style.display = loadoutTab === 'cards' ? '' : 'none';
+
+    normal.innerHTML = `<p class="eyebrow">${t('equipment.normalSlots')}</p><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped, ownedCounts)}</div>`;
+    legendary.innerHTML = `<p class="eyebrow">${t('equipment.legendarySlots')}</p><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped, ownedCounts)}</div>`;
+    renderLoadoutSynergy();
+
+    // Featured callout — the best-rarity equipped card gets a description card,
+    // same idea as an inventory "tap to see stats" panel but always-visible for
+    // whichever equipped chip is currently the standout pick.
+    if (featured) {
+        const best = [...save.equippedCards]
+            .map((id) => INVENTORY_CARDS[id])
+            .filter(Boolean)
+            .sort((a, b) => LOADOUT_RARITY_ORDER.indexOf(a.rarity) - LOADOUT_RARITY_ORDER.indexOf(b.rarity))[0];
+        if (best) {
+            const iconFile = getChipIconFile(Object.keys(INVENTORY_CARDS).find((k) => INVENTORY_CARDS[k] === best));
+            featured.innerHTML = `
+                <div class="loadout-featured-card rarity-${best.rarity}">
+                    <div class="loadout-featured-icon">${iconFile ? `<img src="icons/small/${iconFile}-48.png" alt="">` : ''}</div>
+                    <div class="loadout-featured-body">
+                        <span class="loadout-featured-tier">TOP CARD · ${getRarityLabel(best.rarity)}</span>
+                        <span class="loadout-featured-name">${best.name}</span>
+                        <span class="loadout-featured-desc">${best.desc}</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            featured.innerHTML = '';
+        }
+    }
+
+    if (actions) {
+        actions.innerHTML = `
+            <button class="loadout-action-btn primary" type="button" onclick="autoEquipLoadout()"><img src="icons/small/reroll-48.png" class="loadout-action-icon" alt="">AUTO-EQUIP</button>
+        `;
+    }
+
+    renderLoadoutCardsTab(ownedCounts);
+}
+
+function renderLoadoutCardsTab(ownedCounts) {
+    const banner = document.getElementById('loadout-picker-banner');
+    const filtersEl = document.getElementById('loadout-filters');
+    const cardsGrid = document.getElementById('loadout-cards');
+    if (!cardsGrid) return;
+
+    if (banner) {
+        if (loadoutPickSlot) {
+            const label = loadoutPickSlot.type === 'legendary' ? 'a legendary slot' : `slot ${loadoutPickSlot.index + 1}`;
+            banner.innerHTML = `
+                <div class="loadout-pick-banner">
+                    <img src="icons/small/deck-slot-48.png" alt="" class="loadout-pick-banner-icon">
+                    <span>PICK A CARD FOR ${label.toUpperCase()}</span>
+                    <button type="button" onclick="cancelLoadoutPick()">CANCEL</button>
+                </div>
+            `;
+        } else {
+            banner.innerHTML = '';
+        }
+    }
+
+    if (filtersEl) {
+        const rarities = ['all', ...LOADOUT_RARITY_ORDER];
+        filtersEl.innerHTML = rarities.map((r) => `
+            <button class="loadout-filter-btn ${loadoutFilter === r ? 'active' : ''} ${r !== 'all' ? 'rarity-' + r : ''}" type="button" onclick="setLoadoutFilter('${r}')">
+                ${r === 'all' ? 'ALL' : getRarityLabel(r)}
+            </button>
+        `).join('');
+    }
 
     cardsGrid.innerHTML = '';
-    const counts = save.inventory.reduce((acc, cardId) => {
-        acc[cardId] = (acc[cardId] || 0) + 1;
-        return acc;
-    }, {});
     const equippedCounts = getEquippedCounts();
+    const counts = ownedCounts || save.inventory.reduce((acc, cardId) => { acc[cardId] = (acc[cardId] || 0) + 1; return acc; }, {});
 
     Object.entries(counts).forEach(([cardId, count]) => {
         const card = INVENTORY_CARDS[cardId];
         if (!card) return;
+        if (loadoutFilter !== 'all' && card.rarity !== loadoutFilter) return;
+        if (loadoutPickSlot && isLegendaryCard(cardId) !== (loadoutPickSlot.type === 'legendary')) return;
         const freeCopies = count - (equippedCounts[cardId] || 0);
+        const isFullyEquipped = freeCopies <= 0 && (equippedCounts[cardId] || 0) > 0;
         const canEquip = freeCopies > 0 && canEquipCard(cardId);
-        const box = renderFlipCard({
+        const box = renderLoadoutCardTile({
             id: cardId,
-            type: 'chip',
-            def: card,
+            card,
             count,
-            extraMeta: `Free ${Math.max(0, freeCopies)}`,
-            cta: canEquip ? 'EQUIP' : 'NO SLOT',
-            ctaDisabled: !canEquip,
-            onCta: () => equipCard(cardId)
+            freeCopies,
+            state: isFullyEquipped ? 'equipped' : (canEquip ? 'equip' : 'noslot'),
+            onEquip: () => {
+                equipCard(cardId);
+                if (loadoutPickSlot) {
+                    loadoutPickSlot = null;
+                    loadoutTab = 'loadout';
+                    // equipCard() already schedules its own delayed render —
+                    // just let that one land instead of re-rendering twice.
+                }
+            }
         });
         cardsGrid.appendChild(box);
     });
 }
 
-// Generic flippable card used in Loadout + Inventory.
-// Front = peek-style hero art + name + tier; Back = stats + CTA + sigil.
-function renderFlipCard({ id, type, def, count, extraMeta, cta, ctaDisabled, onCta }) {
+// Flat pixel-art card tile for the Cards tab — matches the peek-tile / pack
+// card language (flat panel, rarity top-edge, hard shadow) instead of the
+// older glossy flip-card component used elsewhere.
+function renderLoadoutCardTile({ id, card, count, freeCopies, state, onEquip }) {
     const wrap = document.createElement('div');
-    const tier = (def.rarity || 'blue').toLowerCase();
-    wrap.className = `flip-card rarity-${tier}`;
-    const heroSvg = getRewardArtSvg(id, type);
-    const tierLabel = getRarityLabel(tier);
-    const statsHtml = describeCardEffect(type, def);
+    wrap.className = `loadout-card-tile rarity-${card.rarity}`;
+    const iconFile = getChipIconFile(id);
+    const ctaLabel = state === 'equipped' ? 'EQUIPPED' : state === 'equip' ? 'EQUIP' : 'NO SLOT';
     wrap.innerHTML = `
-        <div class="flip-card-inner">
-            <div class="flip-card-face flip-front">
-                <div class="flip-hero">
-                    <div class="flip-tier-badge tier-${tier}">${tierLabel}</div>
-                    ${count > 1 ? `<div class="flip-count">×${count}</div>` : ''}
-                    <div class="flip-art">${heroSvg}</div>
-                </div>
-                <div class="flip-name">${def.name}</div>
-                <div class="flip-meta">${extraMeta || ''}</div>
-                <div class="flip-flip-hint">tap to flip</div>
-            </div>
-            <div class="flip-card-face flip-back">
-                <div class="flip-back-title">${def.name}</div>
-                <div class="flip-back-tier tier-${tier}">${tierLabel}${def.sigil ? ' · ' + def.sigil : ''}</div>
-                <div class="flip-back-effect">${statsHtml}</div>
-                ${cta ? `<button class="flip-back-cta ${ctaDisabled ? 'disabled' : ''}" type="button" ${ctaDisabled ? 'disabled' : ''}>${cta}</button>` : ''}
-                <div class="flip-flip-hint">tap to flip</div>
-            </div>
+        <div class="loadout-card-icon">
+            ${count > 1 ? `<span class="loadout-card-count">${count}</span>` : ''}
+            ${iconFile ? `<img src="icons/small/${iconFile}-48.png" alt="">` : ''}
         </div>
+        <span class="loadout-card-name">${card.name}</span>
+        <span class="loadout-card-meta">Tier ${card.tier} · Free ${Math.max(0, freeCopies)}</span>
+        <span class="loadout-card-desc">${card.desc}</span>
+        <button class="loadout-card-cta state-${state}" type="button" ${state === 'equipped' || state === 'noslot' ? 'disabled' : ''}>${ctaLabel}</button>
     `;
-    // Click anywhere flips the card; CTA button is excluded
-    wrap.addEventListener('click', (e) => {
-        if (e.target.closest('.flip-back-cta')) return;
-        wrap.classList.toggle('flipped');
-        playSfx && playSfx('tap', 0.6);
-        playHaptic && playHaptic('tap');
-    });
-    const ctaBtn = wrap.querySelector('.flip-back-cta');
-    if (ctaBtn && onCta && !ctaDisabled) {
-        ctaBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            onCta();
-        });
+    if (state === 'equip') {
+        wrap.querySelector('.loadout-card-cta').addEventListener('click', onEquip);
     }
     return wrap;
 }
 
-function describeCardEffect(type, def) {
-    if (type === 'chip' && def.effect) {
-        const parts = [];
-        if (def.effect.damageMultiplier)      parts.push(`<div class="fx-stat">DMG <strong>${(def.effect.damageMultiplier > 0 ? '+' : '')}${(def.effect.damageMultiplier * 100).toFixed(0)}%</strong></div>`);
-        if (def.effect.attackSpeedMultiplier) parts.push(`<div class="fx-stat">RPM <strong>${(def.effect.attackSpeedMultiplier > 0 ? '+' : '')}${(def.effect.attackSpeedMultiplier * 100).toFixed(0)}%</strong></div>`);
-        if (def.effect.magnetFlat)            parts.push(`<div class="fx-stat">MAG <strong>+${def.effect.magnetFlat}</strong></div>`);
-        return parts.join('') + (def.desc ? `<div class="fx-desc">${def.desc}</div>` : '');
+// Same flat tile language, reused for Inventory's Owned Skins / Cards
+// sections in place of the older glossy .flip-card component.
+function renderInventoryTile({ rarity, iconHtml, count, name, meta, desc, ctaLabel, ctaState, onCta }) {
+    const wrap = document.createElement('div');
+    wrap.className = `loadout-card-tile rarity-${rarity || 'blue'}`;
+    const disabled = ctaState === 'equipped' || ctaState === 'noslot';
+    wrap.innerHTML = `
+        <div class="loadout-card-icon">
+            ${count > 1 ? `<span class="loadout-card-count">${count}</span>` : ''}
+            ${iconHtml || ''}
+        </div>
+        <span class="loadout-card-name">${name}</span>
+        <span class="loadout-card-meta">${meta || ''}</span>
+        ${desc ? `<span class="loadout-card-desc">${desc}</span>` : ''}
+        <button class="loadout-card-cta state-${ctaState}" type="button" ${disabled ? 'disabled' : ''}>${ctaLabel}</button>
+    `;
+    if (!disabled && onCta) {
+        wrap.querySelector('.loadout-card-cta').addEventListener('click', onCta);
     }
-    if (type === 'skin') {
-        return `<div class="fx-desc">${def.desc || ''}</div>`;
-    }
-    return def.desc || '';
+    return wrap;
 }
 
-function buildSlotMarkup(type, total, equipped) {
+// Fills empty unlocked slots with the best available unequipped copies —
+// real allocation logic (highest rarity first), nothing fabricated.
+window.autoEquipLoadout = function() {
+    const caps = getLoadoutSlotCaps();
+    let equippedAny = false;
+    [{ legendary: false, cap: caps.normal }, { legendary: true, cap: caps.legendary }].forEach(({ legendary, cap }) => {
+        let equippedOfType = save.equippedCards.filter((id) => isLegendaryCard(id) === legendary).length;
+        if (equippedOfType >= cap) return;
+        const ownedCounts = save.inventory.reduce((acc, id) => { acc[id] = (acc[id] || 0) + 1; return acc; }, {});
+        const usedCounts = getEquippedCounts();
+        const candidates = Object.keys(ownedCounts)
+            .filter((id) => INVENTORY_CARDS[id] && isLegendaryCard(id) === legendary)
+            .filter((id) => ownedCounts[id] > (usedCounts[id] || 0))
+            .sort((a, b) => LOADOUT_RARITY_ORDER.indexOf(INVENTORY_CARDS[a].rarity) - LOADOUT_RARITY_ORDER.indexOf(INVENTORY_CARDS[b].rarity));
+        for (const id of candidates) {
+            // Keep equipping copies of this same card while slots and
+            // spare copies both remain, instead of moving on after one.
+            while (equippedOfType < cap && (usedCounts[id] || 0) < ownedCounts[id]) {
+                save.equippedCards.push(id);
+                usedCounts[id] = (usedCounts[id] || 0) + 1;
+                equippedOfType++;
+                equippedAny = true;
+            }
+            if (equippedOfType >= cap) break;
+        }
+    });
+    if (equippedAny) {
+        saveSave();
+        setTimeout(() => { renderLoadout(); renderInventory(); }, 90);
+        playSfx('upgrade', 0.75);
+        playHaptic('soft');
+        showToast('Loadout auto-filled with your best cards.');
+    } else {
+        showToast('No free cards left to auto-equip.');
+    }
+};
+
+function buildSlotMarkup(type, total, equipped, ownedCounts) {
     const hardCap = type === 'legendary' ? SLOT_HARD_CAPS.legendary : SLOT_HARD_CAPS.normal;
     const slots = [];
 
-    // 1) Already-unlocked slots: show equipped card or "Empty"
+    // 1) Already-unlocked slots: show equipped card, or an "Empty" slot you
+    //    can tap to jump into the Cards tab and pick something for it.
     for (let i = 0; i < total; i++) {
         const cardId = equipped[i];
         if (!cardId) {
-            slots.push(`<div class="loadout-slot empty">${t('equipment.empty')}</div>`);
+            slots.push(`<button class="loadout-slot empty" type="button" onclick="startLoadoutPick('${type}', ${i})">${t('equipment.empty')}</button>`);
             continue;
         }
         const card = INVENTORY_CARDS[cardId];
-        slots.push(`<button class="loadout-slot rarity-${card.rarity}" type="button" onclick="unequipCard('${type}', ${i})"><strong>${card.icon}</strong><span>${card.name}</span></button>`);
+        const iconFile = getChipIconFile(cardId);
+        const owned = ownedCounts?.[cardId] || 1;
+        slots.push(`
+            <button class="loadout-slot rarity-${card.rarity}" type="button" onclick="unequipCard('${type}', ${i})">
+                ${owned > 1 ? `<span class="loadout-slot-badge">${owned}</span>` : ''}
+                ${iconFile ? `<img src="icons/small/${iconFile}-48.png" class="loadout-slot-icon" alt="">` : `<strong>${card.icon}</strong>`}
+                <span>${card.name}</span>
+            </button>
+        `);
     }
 
-    // 2) Locked slots up to the hard cap — show the level they unlock at,
-    //    or "PAID" for the last paid-tier slot so users know it's a shop unlock.
+    // 2) Locked slots up to the hard cap — level-gated slots get a neutral
+    //    dashed border + the level requirement; paid-unlock slots get a
+    //    magenta dashed border + "UNLOCK" so the two locked reasons read
+    //    as visually distinct, not just two shades of the same grey.
     for (let i = total; i < hardCap; i++) {
-        let lockLabel;
-        if (type === 'normal') {
-            // Last 2 normal slots are paid expansions (cap 5 base + 2 paid)
-            if (i >= 5) {
-                lockLabel = `${t('equipment.slotLockedAt')} 60 · PAID`;
-            } else {
-                lockLabel = `${t('equipment.slotLockedAt')} ${getNormalSlotUnlockLevel(i)}`;
-            }
+        const isPaid = type === 'normal' ? i >= 5 : i >= 2;
+        if (isPaid) {
+            slots.push(`<div class="loadout-slot empty locked-slot locked-paid" title="Unlock via the shop">
+                <span class="lock-pill"><img src="icons/small/lock-48.png" class="lock-pill-icon" alt="">UNLOCK</span>
+            </div>`);
         } else {
-            // Legendary: 0->lvl 30, 1->lvl 60, 2->paid
-            if (i >= 2) {
-                lockLabel = `${t('equipment.slotLockedAt')} 60 · PAID`;
-            } else {
-                lockLabel = `${t('equipment.slotLockedAt')} ${getLegendarySlotUnlockLevel(i)}`;
-            }
+            const lvl = type === 'normal' ? getNormalSlotUnlockLevel(i) : getLegendarySlotUnlockLevel(i);
+            slots.push(`<div class="loadout-slot empty locked-slot" title="${t('equipment.slotLockedAt')} ${lvl}">
+                <span class="lock-pill"><img src="icons/small/lock-48.png" class="lock-pill-icon" alt="">LVL ${lvl}</span>
+            </div>`);
         }
-        slots.push(`<div class="loadout-slot empty locked-slot" title="${lockLabel}">
-            <span class="lock-pill">🔒 ${lockLabel}</span>
-        </div>`);
     }
 
     return slots.join('');
@@ -7736,8 +8450,9 @@ window.equipCard = function(cardId) {
     if (owned <= equipped || !canEquipCard(cardId)) return;
     save.equippedCards.push(cardId);
     saveSave();
-    renderLoadout();
-    renderInventory();
+    // Delayed so the tapped button's press-shadow effect has time to paint
+    // before the re-render replaces it (see toggleLoadoutSynergy note).
+    setTimeout(() => { renderLoadout(); renderInventory(); }, 90);
     playSfx('upgrade', 0.75);
     playHaptic('soft');
     showToast(`${INVENTORY_CARDS[cardId].name} equipped.`);
@@ -7751,8 +8466,7 @@ window.unequipCard = function(type, index) {
     if (!target) return;
     save.equippedCards.splice(target.originalIndex, 1);
     saveSave();
-    renderLoadout();
-    renderInventory();
+    setTimeout(() => { renderLoadout(); renderInventory(); }, 90);
     showToast(`${INVENTORY_CARDS[target.cardId].name} removed from loadout.`);
 };
 
@@ -7764,8 +8478,7 @@ window.sellInventoryCard = function(cardId) {
     save.inventory.splice(inventoryIndex, 1);
     save.gold += getCardSellValue(cardId);
     saveSave();
-    renderInventory();
-    renderLoadout();
+    setTimeout(() => { renderInventory(); renderLoadout(); }, 90);
     updateMetaHud();
     playSfx('pickup', 0.8);
     playHaptic('soft');
@@ -7845,7 +8558,7 @@ function renderLevelRoadmap() {
     // at the TOP — so flip i in the y formula.
     const lastIdx = ordered.length - 1;
 
-    const chestSvg = `<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18"/><path d="M9 8c0-2 6-2 6 0"/></svg>`;
+    const chestSvg = `<img src="icons/small/chest-48.png" class="lr-reward-icon" alt="">`;
     const sparkSvg = `<svg viewBox="0 0 24 24"><polygon points="12,3 14,10 21,12 14,14 12,21 10,14 3,12 10,10"/></svg>`;
 
     // Compute per-node coordinates. Node at index 0 (oldest past) sits at the
@@ -8125,11 +8838,11 @@ function createSkinPackMarkup(skinId) {
 
 function getPackRevealFeedback(rarity) {
     const feedback = {
-        blue:   { sfx: 'revealCommon',   intensity: 0.95, haptic: [24],                          shake: 0.25, pulse: 0.20, color: '#2b96ff', burst: 22, hapticName: 'revealCommon', tier: 'common',    fanfare: false, jackpot: false },
-        dark:   { sfx: 'revealRare',     intensity: 0.95, haptic: [40, 30, 40],                  shake: 0.35, pulse: 0.30, color: '#5566ff', burst: 28, hapticName: 'revealRare',   tier: 'rare',      fanfare: false, jackpot: false },
-        purple: { sfx: 'revealEpic',     intensity: 1.05, haptic: [70, 30, 70, 30, 70],          shake: 0.65, pulse: 0.50, color: '#bc13fe', burst: 40, hapticName: 'revealEpic',   tier: 'epic',      fanfare: false, jackpot: false },
-        red:    { sfx: 'revealLegendary',intensity: 1.10, haptic: [180, 60, 180, 60, 240],       shake: 1.10, pulse: 0.75, color: '#ff375f', burst: 56, hapticName: 'revealLegendary', tier: 'legendary', fanfare: true,  jackpot: true  },
-        gold:   { sfx: 'revealLegendary',intensity: 1.30, haptic: [220, 80, 220, 80, 220, 80, 360], shake: 1.50, pulse: 1.00, color: '#ffd14d', burst: 72, hapticName: 'revealLegendary', tier: 'legendary', fanfare: true,  jackpot: true  }
+        blue:   { sfx: 'revealCommon',   intensity: 0.95, haptic: [24],                          shake: 0.25, pulse: 0.20, color: '#7da7c4', burst: 22, hapticName: 'revealCommon', tier: 'common',    fanfare: false, jackpot: false },
+        dark:   { sfx: 'revealRare',     intensity: 0.95, haptic: [40, 30, 40],                  shake: 0.35, pulse: 0.30, color: '#8089c4', burst: 28, hapticName: 'revealRare',   tier: 'rare',      fanfare: false, jackpot: false },
+        purple: { sfx: 'revealEpic',     intensity: 1.05, haptic: [70, 30, 70, 30, 70],          shake: 0.65, pulse: 0.50, color: '#a184c9', burst: 40, hapticName: 'revealEpic',   tier: 'epic',      fanfare: false, jackpot: false },
+        red:    { sfx: 'revealLegendary',intensity: 1.10, haptic: [180, 60, 180, 60, 240],       shake: 1.10, pulse: 0.75, color: '#d0716f', burst: 56, hapticName: 'revealLegendary', tier: 'legendary', fanfare: true,  jackpot: true  },
+        gold:   { sfx: 'revealLegendary',intensity: 1.30, haptic: [220, 80, 220, 80, 220, 80, 360], shake: 1.50, pulse: 1.00, color: '#d6b36a', burst: 72, hapticName: 'revealLegendary', tier: 'legendary', fanfare: true,  jackpot: true  }
     };
     return feedback[rarity] || feedback.blue;
 }
@@ -8166,6 +8879,22 @@ function openPackSequence(packKey) {
     claimButton.disabled = true;
     track.style.transform = 'translateX(0px)';
     track.innerHTML = reel.map((rewardId) => packDef.rewardType === 'skin' ? createSkinPackMarkup(rewardId) : createPackCardMarkup(rewardId)).join('');
+
+    // Reset the hero reveal face + pip row for this open. Today every real
+    // purchase grants exactly one card (PACK_DEFINITIONS has no card-count
+    // field — the reel always resolves a single winnerId), so this is a
+    // single pip; the row is built so a real multi-card grant could reuse
+    // it later without a markup change, but nothing here invents extra cards.
+    const revealFace = document.getElementById('pack-reveal-face');
+    const pipRow = document.getElementById('pack-pip-row');
+    if (revealFace) revealFace.style.display = 'none';
+    viewport.style.display = '';
+    const marker = overlay.querySelector('.pack-marker');
+    if (marker) marker.style.display = '';
+    if (pipRow) {
+        pipRow.style.display = '';
+        pipRow.innerHTML = '<span class="pack-pip active"></span>';
+    }
 
     // tier-driven glow on the stage
     const packContent = document.getElementById('pack-content');
@@ -8231,6 +8960,27 @@ function openPackSequence(packKey) {
                 packContent.classList.add('jackpot');
                 setTimeout(() => packContent.classList.remove('jackpot'), 1700);
             }
+        }
+
+        // Swap the reel strip for the big centered hero-reveal face — the
+        // one real card this purchase granted (see comment above), styled
+        // closer to the mockup's rarity-lit single-item reveal than the
+        // horizontal slot-reel it just finished spinning through.
+        const revealFace = document.getElementById('pack-reveal-face');
+        if (revealFace) {
+            const iconEl = document.getElementById('prf-icon');
+            const badgeEl = document.getElementById('prf-badge');
+            const nameEl = document.getElementById('prf-name');
+            const raysEl = document.getElementById('prf-rays');
+            const frameEl = document.getElementById('prf-frame');
+            if (iconEl) iconEl.innerHTML = getRewardArtSvg(winnerId, packDef.rewardType === 'skin' ? 'skin' : 'chip');
+            if (badgeEl) badgeEl.textContent = getRarityLabel(wonReward.rarity).toUpperCase();
+            if (nameEl) nameEl.textContent = wonReward.name;
+            [revealFace, raysEl, frameEl, badgeEl].forEach((el) => { if (el) el.className = el.className.replace(/\brarity-\S+/g, '').trim() + ` rarity-${wonReward.rarity}`; });
+            viewport.style.display = 'none';
+            const marker = overlay.querySelector('.pack-marker');
+            if (marker) marker.style.display = 'none';
+            revealFace.style.display = '';
         }
 
         // primary reveal sound + haptic
@@ -8302,7 +9052,7 @@ window.openStoredPack = function(packKey) {
     if (index === -1) return;
     save.packs.splice(index, 1);
     saveSave();
-    renderInventory();
+    setTimeout(renderInventory, 90);
     updateMetaHud();
     openPackSequence(packKey);
 };
@@ -8341,11 +9091,11 @@ window.buyUpgrade = function(id) {
     save.stats[id] = level + 1;
     lastUpgradeId = id;
     saveSave();
-    renderHub();
+    setTimeout(renderHub, 90);
     updateMetaHud();
     playSfx('upgrade', 0.8);
     playHaptic(getUpgradeTierInfo(upgrade, level).isMajor ? 'hard' : 'medium');
-    showToast(`${upgrade.name} upgraded.`);
+    showToast(`${upgradeName(upgrade)} upgraded.`);
 };
 
 window.buyShopItem = function(id) {
@@ -8518,6 +9268,9 @@ function createPlayer() {
     const earlyDamageBoost = currentLevel <= 10 ? 1.18 : currentLevel <= 20 ? 1.04 : 1;
     const damageUpgrade = getUpgradeBonus(PLAYER_STATS.dmg, save.stats.dmg, 'dmg');
     const fireRateUpgrade = getUpgradeBonus(PLAYER_STATS.atkSpd, save.stats.atkSpd, 'atkSpd');
+    const heartsUpgrade = getUpgradeBonus(PLAYER_STATS.hearts, save.stats.hearts, 'hearts');
+    const armorPoints = getUpgradeBonus(PLAYER_STATS.armor, save.stats.armor, 'armor');
+    const maxHearts = PLAYER_STATS.hearts.base + Math.floor(heartsUpgrade);
     const baseDamage = (PLAYER_STATS.dmg.base + damageUpgrade) * Math.max(0.18, 1 + inventory.damageMultiplier + milestone.damageMultiplier) * earlyDamageBoost;
     const speed = PLAYER_STATS.speed.base * (1 + inventory.speedMultiplier);
     const magnet = PLAYER_STATS.magnet.base + inventory.magnetFlat + milestone.magnet;
@@ -8530,8 +9283,9 @@ function createPlayer() {
         y: spawn.y,
         r: 20,
         angle: 0,
-        hp: PLAYER_STATS.hearts.base,
-        maxHp: PLAYER_STATS.hearts.base,
+        hp: maxHearts,
+        maxHp: maxHearts,
+        armorPoints,
         invulnerable: 0,
         dmg: baseDamage,
         damageMultiplier: 1,
@@ -8643,13 +9397,13 @@ function getAbilityIconMarkup(id, fallback) {
         bloodlust:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="9" r="5"/><polyline points="9,15 13,22 17,15"/><circle cx="13" cy="9" r="2" fill="currentColor"/></svg>`,
         trigger_fingers:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,18 10,12 14,16 22,6"/><polyline points="17,6 22,6 22,11"/></svg>`,
         scarier_face:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9 C 5 4, 21 4, 21 9 C 21 18, 5 18, 5 9z"/><circle cx="9.5" cy="11" r="1.5" fill="currentColor"/><circle cx="16.5" cy="11" r="1.5" fill="currentColor"/><polyline points="9,18 11,21 13,18 15,21 17,18"/></svg>`,
-        saw_blade:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="6"/><line x1="13" y1="2" x2="13" y2="6"/><line x1="13" y1="20" x2="13" y2="24"/><line x1="2" y1="13" x2="6" y2="13"/><line x1="20" y1="13" x2="24" y2="13"/><line x1="5" y1="5" x2="8" y2="8"/><line x1="21" y1="5" x2="18" y2="8"/><line x1="5" y1="21" x2="8" y2="18"/><line x1="21" y1="21" x2="18" y2="18"/></svg>`,
+        saw_blade:        `<img src="icons/small/blade-48.png" class="ability-icon-img" alt="">`,
         boomerang:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22 Q4 4, 22 4 Q4 22, 4 22z"/><circle cx="9" cy="9" r="1" fill="currentColor"/></svg>`,
         spread_volley:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="22" x2="6" y2="4"/><line x1="13" y1="22" x2="13" y2="3"/><line x1="13" y1="22" x2="20" y2="4"/><polyline points="4,7 6,4 8.5,7"/><polyline points="11,5 13,3 15,5"/><polyline points="18,7 20,4 22,7"/></svg>`,
         crit_bomb:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 17,11 25,12 19,17 21,25 13,21 5,25 7,17 1,12 9,11"/><circle cx="13" cy="14" r="2" fill="currentColor"/></svg>`,
         phantom_shield:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 L22 7 V14 C22 18, 18 22, 13 23 C8 22, 4 18, 4 14 V7 Z"/><polyline points="9,13 12,16 17,10"/></svg>`,
         arc_pulse:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="3"/><path d="M7 7 Q13 4 19 7"/><path d="M19 19 Q13 22 7 19"/><line x1="2" y1="13" x2="6" y2="13"/><line x1="20" y1="13" x2="24" y2="13"/></svg>`,
-        heat_seeker:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="5"/><circle cx="13" cy="13" r="9" stroke-dasharray="3 3"/><line x1="13" y1="13" x2="22" y2="4"/><polyline points="18,4 22,4 22,8"/></svg>`,
+        heat_seeker:      `<img src="icons/small/missile-48.png" class="ability-icon-img" alt="">`,
         glass_shards:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 16,9 13,11 10,9"/><polygon points="4,12 10,11 7,17"/><polygon points="22,12 19,17 16,11"/><polygon points="13,15 17,20 13,23 9,20"/></svg>`,
         combo_multiplier: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,18 8,11 13,15 18,5 22,9"/><polyline points="20,5 22,5 22,7"/><line x1="3" y1="22" x2="22" y2="22"/></svg>`,
         fortune_coin:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="9"/><polyline points="10,10 16,10 13,16 16,16"/><line x1="13" y1="6" x2="13" y2="20"/></svg>`
@@ -9222,6 +9976,7 @@ window.addEventListener('load', () => {
     installSwipeNavigation();
     refreshRailBadges();
     MusicManager.init();
+    startMusicVisualiser();
     setInterval(syncMusicVolume, 500);
     document.addEventListener('pointerdown', () => {
         ensureMusicEngine();

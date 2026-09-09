@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Shadow Dungeon - Striker Edition</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
@@ -12,31 +12,22 @@
 
     <div class="hud-bar" id="main-hud">
         <div class="hud-left">
-            <div class="currency-badge" id="hud-wave" data-i18n="hud.wave">WAVE 0/0</div>
-        </div>
-        <div class="hud-center">
+            <div class="currency-badge"><img src="icons/small/skull-48.png" alt="" class="currency-icon-img"><span id="hud-wave" data-i18n="hud.wave">WAVE 0/0</span></div>
             <div class="currency-badge currency-level" id="hud-level" data-i18n="hud.level">LEVEL 1</div>
         </div>
+        <div class="hud-spacer"></div>
         <div class="hud-right">
-            <div class="currency-badge currency-gold">GOLD <span id="hud-gold">0</span></div>
-            <div class="currency-badge currency-gems">GEMS <span id="hud-gems">0</span></div>
+            <div class="currency-badge currency-gold"><img src="icons/small/coin-48.png" alt="" class="currency-icon-img"><span id="hud-gold">0</span></div>
+            <div class="currency-badge currency-gems"><img src="icons/small/gem-48.png" alt="" class="currency-icon-img"><span id="hud-gems">0</span></div>
             <button class="settings-button" id="settings-button" type="button" onclick="openSettings()" aria-label="Settings">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9 1.65 1.65 0 0 0 4.27 7.18l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
+                <img src="icons/small/gear-48.png" alt="" class="settings-gear-img">
             </button>
         </div>
     </div>
 
     <div id="fight-screen" class="screen active">
-        <!-- Cosmic background art layers (planets + nebula) -->
-        <div class="cosmic-bg" aria-hidden="true">
-            <div class="cosmic-planet cosmic-planet-green"></div>
-            <div class="cosmic-planet cosmic-planet-orange"></div>
-            <div class="cosmic-planet cosmic-planet-blue"></div>
-            <div class="cosmic-nebula"></div>
-        </div>
+        <!-- Flat background fill (glow/planets removed to match the flat pixel-art direction) -->
+        <div class="cosmic-bg" aria-hidden="true"></div>
 
         <!-- Vertical level roadmap centered in screen -->
         <div id="level-roadmap" class="level-roadmap"></div>
@@ -45,14 +36,14 @@
         <aside class="left-rail" id="left-rail">
             <button class="rail-tile rail-skill-teaser" type="button" onclick="showAbilities()">
                 <div class="tile-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L4 7 V17 L12 22 L20 17 V7 Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <img src="icons/small/upgrades-48.png" alt="" class="tile-icon-img">
                 </div>
                 <div class="tile-tag" id="left-skill-tag" data-i18n="rail.newSkill">NEW SKILL</div>
                 <div class="tile-label" id="left-skill-label" data-i18n="rail.skills">Skills</div>
             </button>
             <button class="rail-tile rail-no-ads" type="button" id="left-no-ads" onclick="buyPremiumOffer('no_ads')">
-                <div class="tile-icon ad-no">
-                    <span>AD</span>
+                <div class="tile-icon">
+                    <img src="icons/small/no-ads-48.png" alt="" class="tile-icon-img">
                 </div>
                 <div class="tile-label" id="left-no-ads-label" data-i18n="rail.noAds">No Ads</div>
             </button>
@@ -62,27 +53,27 @@
         <aside class="right-rail" id="right-rail">
             <button class="rail-tile rail-leaderboard" type="button" onclick="openLeaderboardOverlay()">
                 <div class="tile-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V4z"/><path d="M6 4H3v3a3 3 0 0 0 3 3"/><path d="M18 4h3v3a3 3 0 0 1-3 3"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="14" x2="12" y2="20"/></svg>
+                    <img src="icons/small/trophy-48.png" alt="" class="tile-icon-img">
                 </div>
                 <div class="tile-label" data-i18n="rail.leaderboard">Leaderboard</div>
             </button>
             <button class="rail-tile rail-quests" type="button" onclick="openChallengesOverlay()">
                 <div class="tile-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4v-1h6v1"/><polyline points="8,11 11,14 16,9"/></svg>
+                    <img src="icons/small/bolt-48.png" alt="" class="tile-icon-img">
                 </div>
                 <div class="tile-label" data-i18n="rail.quests">Quests</div>
                 <span class="tile-badge" id="quests-badge" style="display:none">!</span>
             </button>
             <button class="rail-tile rail-rewards" type="button" onclick="openDailyOverlay()">
                 <div class="tile-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M3 12h18"/><path d="M12 8v13"/><path d="M12 8c-2-3-5-3-5-1s2 1 5 1zM12 8c2-3 5-3 5-1s-2 1-5 1z"/></svg>
+                    <img src="icons/small/calendar-48.png" alt="" class="tile-icon-img">
                 </div>
                 <div class="tile-label" id="right-rewards-label" data-i18n="rail.dailyLogin">Daily Login</div>
                 <span class="tile-badge" id="rewards-badge" style="display:none">!</span>
             </button>
             <button class="rail-tile rail-test" type="button" onclick="openTestArena()">
                 <div class="tile-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v5l-2 3 2 3v7H9v-7l2-3-2-3z"/><line x1="9" y1="3" x2="15" y2="3"/><line x1="11" y1="14" x2="13" y2="14"/></svg>
+                    <img src="icons/small/gear-48.png" alt="" class="tile-icon-img">
                 </div>
                 <div class="tile-label" data-i18n="rail.test">Test</div>
             </button>
@@ -149,7 +140,7 @@
             <div class="lb-league-header">
                 <div class="lb-league-name">NEON ROOKIE</div>
                 <div class="lb-league-medal">
-                    <svg viewBox="0 0 24 24"><polygon points="6,3 18,3 17,9 12,11 7,9" fill="currentColor"/></svg>
+                    <img src="icons/small/trophy-48.png" alt="" style="width:100%;height:100%;image-rendering:pixelated">
                 </div>
                 <div class="lb-league-timer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><polyline points="12,9 12,13 15,15"/><polyline points="9,2 15,2"/></svg>
@@ -191,27 +182,26 @@
     </div>
 
     <div id="daily-overlay" class="modal-overlay" onclick="closeDailyOverlay(event)">
-        <div class="modal-content lb-style-modal" onclick="event.stopPropagation()">
+        <div class="modal-content lb-style-modal daily-quests-modal" onclick="event.stopPropagation()">
             <button class="lb-style-close" type="button" onclick="closeDailyOverlay()">×</button>
-            <div class="lb-style-header"><h2 data-i18n="daily.title">DAILY LOGIN</h2></div>
+            <div class="lb-style-header"><img src="icons/small/calendar-48.png" alt="" class="lb-style-header-icon"><h2 data-i18n="daily.title">DAILY LOGIN</h2></div>
             <p class="screen-subtitle" id="daily-overlay-status" style="text-align:center; margin-bottom:8px" data-i18n="daily.status">Day 1 ready</p>
             <div id="daily-overlay-grid" class="daily-grid" style="margin-top:14px"></div>
-        </div>
-    </div>
 
-    <div id="challenges-overlay" class="modal-overlay" onclick="closeChallengesOverlay(event)">
-        <div class="modal-content lb-style-modal" onclick="event.stopPropagation()">
-            <button class="lb-style-close" type="button" onclick="closeChallengesOverlay()">×</button>
-            <div class="lb-style-header"><h2 data-i18n="quests.title">QUESTS</h2></div>
+            <div class="lb-style-header" style="margin-top:22px"><img src="icons/small/bolt-48.png" alt="" class="lb-style-header-icon"><h2 data-i18n="quests.title">QUESTS</h2></div>
             <p class="screen-subtitle" style="text-align:center; margin-bottom:8px" data-i18n="quests.sub">Complete them and climb the league.</p>
-            <div id="challenges-list" style="display:flex; flex-direction:column; gap:8px; margin-top:14px"></div>
+            <div id="weekly-pass-banner" class="weekly-pass-banner" style="display:none"></div>
+            <div id="challenges-list" style="display:flex; flex-direction:column; gap:8px; margin-top:12px"></div>
         </div>
     </div>
 
     <div id="hub-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title" data-i18n="hub.title">STRIKER-X</h1>
-            <p class="screen-subtitle" data-i18n="hub.sub">Upgrade rings animate around the ship like the reference layout.</p>
+            <div class="screen-title-row">
+                <img src="icons/small/upgrades-48.png" alt="" class="screen-title-icon">
+                <h1 class="screen-title" data-i18n="hub.title">UPGRADES</h1>
+            </div>
+            <p class="screen-subtitle" data-i18n="hub.sub">Spend gold to boost your ship's stats.</p>
             <div class="striker-hub">
                 <div class="hub-stage">
                     <div class="hub-ring ring-outer"></div>
@@ -229,19 +219,21 @@
     <div id="shop-screen" class="screen">
         <div class="shop-bg-aura"></div>
         <div class="screen-shell">
-            <h1 class="screen-title accent-orange" data-i18n="shop.title">MARKET</h1>
-            <p class="screen-subtitle" data-i18n="shop.sub">Card packs up top, utility below, premium on its own cleaner shelf.</p>
-            <div id="shop-feature-banner-mount"></div>
+            <h1 class="screen-title accent-orange shop-hidden-title" data-i18n="shop.title">MARKET</h1>
+            <p class="screen-subtitle shop-hidden-title" data-i18n="shop.sub">Card packs up top, utility below, premium on its own cleaner shelf.</p>
+            <div id="shop-feature-banner-mount" class="shop-hidden-title"></div>
             <div class="market-columns market-stack">
                 <section class="market-feature">
                     <div class="market-header card-market">
+                        <img src="icons/small/shop-48.png" alt="" class="market-header-icon">
                         <h2 data-i18n="shop.cardShop">Card Shop</h2>
                         <span data-i18n="shop.goldPacks">Gold Packs</span>
                     </div>
                     <div id="shop-gold" class="shop-grid pack-shop-grid"></div>
                 </section>
                 <section class="market-feature">
-                    <div class="market-header premium">
+                    <div class="market-header card-market">
+                        <img src="icons/small/pack-48.png" alt="" class="market-header-icon">
                         <h2 data-i18n="shop.skinPacks">Skin Packs</h2>
                         <span data-i18n="shop.skinPacksTags">Gold, Gems, Premium</span>
                     </div>
@@ -249,7 +241,8 @@
                 </section>
                 <div class="shop-lower-grid">
                     <section>
-                        <div class="market-header premium">
+                        <div class="market-header card-market">
+                            <img src="icons/small/reroll-48.png" alt="" class="market-header-icon">
                             <h2 data-i18n="shop.gemLab">Gem Lab</h2>
                             <span data-i18n="shop.utility">Utility</span>
                         </div>
@@ -257,6 +250,7 @@
                     </section>
                     <section>
                         <div class="market-header premium real-money">
+                            <img src="icons/small/gem-48.png" alt="" class="market-header-icon">
                             <h2 data-i18n="shop.premiumVault">Premium Vault</h2>
                             <span data-i18n="shop.realMoney">Real Money</span>
                         </div>
@@ -269,7 +263,11 @@
 
     <div id="inventory-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title" data-i18n="inventory.title">INVENTORY</h1>
+            <div class="screen-title-row">
+                <img src="icons/small/inventory-48.png" alt="" class="screen-title-icon">
+                <h1 class="screen-title" data-i18n="inventory.title">INVENTORY</h1>
+                <span class="screen-title-counter" id="inventory-counter"></span>
+            </div>
             <p class="screen-subtitle" data-i18n="inventory.sub">Open stored packs here and sell spare cards for gold.</p>
             <div id="inventory-grid" class="shop-grid"></div>
         </div>
@@ -277,12 +275,28 @@
 
     <div id="loadout-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title" data-i18n="equipment.title">EQUIPMENT</h1>
-            <p class="screen-subtitle" id="loadout-subtitle" data-i18n="equipment.sub">Equip account cards. More slots unlock with level progress.</p>
-            <div id="loadout-summary" class="mission-card"></div>
-            <div id="loadout-normal" class="loadout-section"></div>
-            <div id="loadout-legendary" class="loadout-section"></div>
-            <div id="loadout-cards" class="shop-grid"></div>
+            <div class="screen-title-row">
+                <img src="icons/small/equipment-48.png" alt="" class="screen-title-icon">
+                <h1 class="screen-title" data-i18n="equipment.title">EQUIPMENT</h1>
+            </div>
+            <p class="screen-subtitle loadout-hidden-summary" id="loadout-subtitle" data-i18n="equipment.sub">Equip account cards. More slots unlock with level progress.</p>
+            <div id="loadout-summary" class="mission-card loadout-hidden-summary"></div>
+
+            <div class="loadout-tabs" id="loadout-tabs"></div>
+
+            <div id="loadout-tab-loadout" class="loadout-tab-panel">
+                <div id="loadout-featured" class="loadout-section"></div>
+                <div id="loadout-normal" class="loadout-section"></div>
+                <div id="loadout-legendary" class="loadout-section"></div>
+                <div id="loadout-synergy" class="loadout-section"></div>
+                <div id="loadout-actions" class="loadout-actions"></div>
+            </div>
+
+            <div id="loadout-tab-cards" class="loadout-tab-panel" style="display:none">
+                <div id="loadout-picker-banner"></div>
+                <div id="loadout-filters" class="loadout-filters"></div>
+                <div id="loadout-cards" class="loadout-cards-grid"></div>
+            </div>
         </div>
     </div>
 
@@ -304,10 +318,7 @@
         <span class="irl-num" id="in-run-level-num">1</span>
     </div>
     <button class="settings-button in-game-settings-button" id="in-game-settings-button" type="button" onclick="openSettings()" aria-label="Settings">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9 1.65 1.65 0 0 0 4.27 7.18l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
+        <img src="icons/small/gear-48.png" alt="" class="settings-gear-img">
     </button>
 
     <div id="ability-overlay" class="modal-overlay">
@@ -340,7 +351,7 @@
 
             <!-- Bottom CTAs -->
             <div class="ability-pick-actions">
-                <button id="ability-reroll" class="ap-action ap-reroll" type="button" onclick="rerollAbilities()">REROLL <span class="ap-cost">5◆</span></button>
+                <button id="ability-reroll" class="ap-action ap-reroll" type="button" onclick="rerollAbilities()"><img src="icons/small/reroll-48.png" alt="" class="ap-reroll-icon">REROLL <span class="ap-cost">5◆</span></button>
                 <button id="ability-take-all" class="ap-action ap-take" type="button" onclick="confirmAbilityPick()">TAKE</button>
             </div>
         </div>
@@ -374,10 +385,17 @@
                     <div class="rld-detail" id="rld-detail"></div>
                 </div>
             </div>
+            <div class="result-level-progress" id="result-level-progress" style="display:none">
+                <div class="rlp-head">
+                    <span id="rlp-label">LEVEL PROGRESS</span>
+                    <span id="rlp-value">0/0</span>
+                </div>
+                <div class="rlp-track"><div class="rlp-fill" id="rlp-fill" style="width:0%"></div></div>
+            </div>
             <div class="result-actions">
-                <button id="result-home" class="mini-action result-home" type="button" onclick="handleResultHome()" data-i18n="result.home">Home</button>
+                <button id="result-primary" class="inline-button" type="button" onclick="handleResultPrimary()"><img src="icons/small/chest-48.png" class="result-primary-icon" alt=""><span id="result-primary-label">Next</span></button>
                 <button id="result-secondary" class="mini-action result-secondary" type="button" onclick="handleResultSecondary()">Map</button>
-                <button id="result-primary" class="inline-button" type="button" onclick="handleResultPrimary()">Next</button>
+                <button id="result-home" class="mini-action result-home" type="button" onclick="handleResultHome()" data-i18n="result.home">Home</button>
             </div>
         </div>
     </div>
@@ -385,13 +403,11 @@
     <div id="settings-overlay" class="modal-overlay" onclick="closeSettings(event)">
         <div class="modal-content lb-style-modal settings-content" onclick="event.stopPropagation()">
             <button class="lb-style-close" type="button" onclick="closeSettings()">×</button>
-            <div class="lb-style-header"><h2 data-i18n="settings.title">SETTINGS</h2></div>
+            <div class="lb-style-header"><img src="icons/small/gear-48.png" alt="" class="lb-style-header-icon"><h2 data-i18n="settings.title">SETTINGS</h2></div>
             <div class="settings-list-v2">
                 <div class="setting-row-v2 setting-language">
                     <div class="setting-row-head">
-                        <div class="setting-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20"/><path d="M12 2a15 15 0 0 0 0 20"/></svg>
-                        </div>
+                        <div class="setting-icon"><img src="icons/small/calendar-48.png" class="setting-icon-img" alt=""></div>
                         <div class="setting-info">
                             <div class="setting-label" data-i18n="settings.language">Language</div>
                             <div class="setting-copy" data-i18n="settings.languageCopy">Switch the interface between English and German.</div>
@@ -405,9 +421,7 @@
 
                 <div class="setting-row-v2">
                     <div class="setting-row-head">
-                        <div class="setting-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19 6a9 9 0 0 1 0 12"/></svg>
-                        </div>
+                        <div class="setting-icon"><img src="icons/small/bolt-48.png" class="setting-icon-img" alt=""></div>
                         <div class="setting-info">
                             <div class="setting-label" data-i18n="settings.sfx">SFX Volume</div>
                             <div class="setting-copy" data-i18n="settings.sfxCopy">Shots, hits and pack sounds.</div>
@@ -419,9 +433,7 @@
 
                 <div class="setting-row-v2">
                     <div class="setting-row-head">
-                        <div class="setting-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                        </div>
+                        <div class="setting-icon"><img src="icons/small/orb-48.png" class="setting-icon-img" alt=""></div>
                         <div class="setting-info">
                             <div class="setting-label" data-i18n="settings.music">Music Volume</div>
                             <div class="setting-copy" data-i18n="settings.musicCopy">Background music in the lobby and during a run.</div>
@@ -433,9 +445,7 @@
 
                 <div class="setting-toggle-v2">
                     <div class="setting-row-head">
-                        <div class="setting-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
-                        </div>
+                        <div class="setting-icon"><img src="icons/small/heart-48.png" class="setting-icon-img" alt=""></div>
                         <div class="setting-info">
                             <div class="setting-label" data-i18n="settings.haptics">Haptics</div>
                             <div class="setting-copy" data-i18n="settings.hapticsCopy">Vibration on hits and rewards (Android & in-app browsers).</div>
@@ -449,9 +459,7 @@
 
                 <div class="setting-toggle-v2">
                     <div class="setting-row-head">
-                        <div class="setting-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
-                        </div>
+                        <div class="setting-icon"><img src="icons/small/star-48.png" class="setting-icon-img" alt=""></div>
                         <div class="setting-info">
                             <div class="setting-label" data-i18n="settings.dmgPopups">Damage Numbers</div>
                             <div class="setting-copy" data-i18n="settings.dmgPopupsCopy">Show floating damage numbers when you hit enemies.</div>
@@ -465,9 +473,7 @@
 
                 <div class="setting-row-v2 setting-leave-row" id="settings-leave-row" style="display:none">
                     <button class="setting-leave-btn" type="button" onclick="leaveGameToHome()">
-                        <span class="setting-leave-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                        </span>
+                        <span class="setting-leave-icon" aria-hidden="true"><img src="icons/small/skull-48.png" class="setting-icon-img" alt=""></span>
                         <span class="setting-leave-text">
                             <span class="setting-leave-title" data-i18n="settings.leaveTitle">Leave Game</span>
                             <span class="setting-leave-copy" data-i18n="settings.leaveCopy">Quit the run and return to the home screen.</span>
@@ -485,6 +491,7 @@
                 <button class="mini-action" type="button" onclick="closePackOverlay()">Close</button>
             </div>
             <p class="screen-subtitle" id="pack-subtitle">Spin the reel and claim a permanent account card.</p>
+            <div class="pack-pip-row" id="pack-pip-row" style="display:none"></div>
             <div class="pack-stage" id="pack-stage">
                 <div id="pack-rip" class="pack-rip hidden">
                     <div class="pack-rip-left"></div>
@@ -495,6 +502,19 @@
                     <div id="pack-track" class="pack-track"></div>
                 </div>
                 <div id="pack-confetti" class="pack-confetti"></div>
+            </div>
+            <!-- Single-card hero reveal face — shown once the reel settles,
+                 replacing the reel strip. One real card per purchase today
+                 (see game.js finishOpening comment); the pip row is built to
+                 scale to a real multi-card sequence later without changing
+                 this markup, but nothing here fabricates extra grants. -->
+            <div class="pack-reveal-face" id="pack-reveal-face" style="display:none">
+                <div class="prf-badge" id="prf-badge"></div>
+                <div class="prf-frame" id="prf-frame">
+                    <div class="prf-rays" id="prf-rays"></div>
+                    <div class="prf-icon" id="prf-icon"></div>
+                </div>
+                <div class="prf-name" id="prf-name"></div>
             </div>
             <div id="pack-result" class="pack-result">Opening pack...</div>
             <button id="pack-claim-button" class="btn-glossy btn-gold" type="button" onclick="claimPackReward()" disabled>Claim Card</button>
@@ -561,24 +581,24 @@
 
     <nav id="global-nav" class="nav-v2">
         <button class="nav-tab" onclick="showShop()" id="nav-shop" type="button">
-            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l1.5-3h15L21 7"/><path d="M3 7v13h18V7"/><path d="M9 7v4a3 3 0 0 1-3 3"/><path d="M15 7v4a3 3 0 0 0 3 3"/></svg></span>
+            <span class="nav-icon"><img src="icons/small/shop-48.png" alt="" class="nav-icon-img"></span>
             <span class="nav-label" data-i18n="nav.shop">SHOP</span>
         </button>
         <button class="nav-tab" onclick="showLoadout()" id="nav-loadout" type="button">
-            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 14l10-10 10 10-3 1-2 5-5-3-5 3-2-5z"/></svg></span>
+            <span class="nav-icon"><img src="icons/small/equipment-48.png" alt="" class="nav-icon-img"></span>
             <span class="nav-label" data-i18n="nav.equipment">EQUIPMENT</span>
         </button>
         <button class="nav-tab nav-center active" onclick="showFight()" id="nav-fight" type="button">
-            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12c4-3 7-3 9-3s5 0 9 3c-4 3-7 3-9 3s-5 0-9-3z"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/><path d="M12 9V6"/><path d="M12 9c-1 0-1.5-1.5-1.5-3S11 1 12 1s1.5 0 1.5 2S13 6 12 6"/></svg></span>
+            <span class="nav-icon"><img src="icons/small/fight-48.png" alt="" class="nav-icon-img"></span>
             <span class="nav-label" data-i18n="nav.fight">FIGHT</span>
         </button>
         <button class="nav-tab has-notifier" onclick="showHub()" id="nav-hub" type="button">
-            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,12 6,4 4,6"/><polyline points="6,4 8,6"/><polyline points="12,12 12,4 10,6"/><polyline points="12,4 14,6"/><polyline points="18,12 18,4 16,6"/><polyline points="18,4 20,6"/><line x1="3" y1="14" x2="21" y2="14"/><polyline points="6,17 6,20"/><polyline points="12,17 12,20"/><polyline points="18,17 18,20"/></svg></span>
+            <span class="nav-icon"><img src="icons/small/upgrades-48.png" alt="" class="nav-icon-img"></span>
             <span class="nav-label" data-i18n="nav.upgrades">UPGRADES</span>
             <span id="upgrade-nav-dot" class="nav-tab-dot" aria-hidden="true"></span>
         </button>
         <button class="nav-tab" onclick="showInventory()" id="nav-inventory" type="button">
-            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,8 22,16 12,21 2,16 2,8"/><polyline points="2,8 12,13 22,8"/><line x1="12" y1="13" x2="12" y2="21"/></svg></span>
+            <span class="nav-icon"><img src="icons/small/inventory-48.png" alt="" class="nav-icon-img"></span>
             <span class="nav-label" data-i18n="nav.inventory">INVENTORY</span>
         </button>
         <!-- Skills tab kept for back-compat (offscreen — accessible via swipe or detail) -->
@@ -610,5 +630,6 @@
             bg.appendChild(star);
         }
     </script>
+    <div id="crt-overlay" aria-hidden="true"></div>
 </body>
 </html>

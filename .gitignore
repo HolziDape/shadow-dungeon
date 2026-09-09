@@ -2,3 +2,5 @@ CHANGELOG.md
 *.bak
 "*.bak" 
 "*.bak" 
+_shots/
+devserver.py

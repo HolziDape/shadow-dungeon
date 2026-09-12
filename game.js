@@ -6450,10 +6450,19 @@ function damagePlayer(source, amount = 1) {
         addFxText(player.x, player.y - 30, 'PHOENIX!', '#cd764e', 0.45, 20);
     }
 
-    // Trigger HUD heart shake/lost animation
-    window.__heartDamageTime = performance.now();
-    window.__heartLostIdx = Math.max(0, hpBefore - amount); // first heart that got depleted
-    window.__heartLostCount = amount; // how many depleted this hit (bosses can deal 2)
+    // Trigger HUD heart shake animation on the heart(s) that just got
+    // depleted (a boss hit can cost 2 at once — see `amount`).
+    const heartsRow = document.getElementById('irh-hearts');
+    if (heartsRow) {
+        const lostFrom = Math.max(0, hpBefore - amount);
+        [...heartsRow.children].forEach((el, i) => {
+            if (i >= lostFrom && i < lostFrom + amount) {
+                el.classList.remove('irh-heart-hit');
+                void el.offsetWidth; // restart the animation even if still mid-play from a rapid double-hit
+                el.classList.add('irh-heart-hit');
+            }
+        });
+    }
     // Body class for CSS-driven full-screen flash
     document.body.classList.add('hp-flash');
     if (window.__hpFlashTimer) clearTimeout(window.__hpFlashTimer);
@@ -10128,6 +10137,71 @@ function updateMetaHud() {
     if (archiveStatus) {
         archiveStatus.textContent = `${getUnlockedAbilities(save.unlocked).length}/${ABILITIES.length} unlocked${nextMilestone ? ` | next spike Lv ${nextMilestone.level}` : ''}`;
     }
+}
+
+// In-run HUD (hearts, wave/zone, gold/gems, hit rush, ability XP) — real DOM
+// elements now, called once per rendered frame from render.js's
+// drawInGameHud(). Used to be drawn straight onto the canvas with a
+// different font/soft-glow pills; this brings it in line with the rest of
+// the redesign's flat, hard-shadow pixel-art tokens. Heart shake-on-hit is
+// triggered directly from damagePlayer() instead of polled here.
+function updateInRunHud() {
+    if (!player) return;
+
+    const heartsRow = document.getElementById('irh-hearts');
+    if (heartsRow) {
+        const total = Math.max(1, Math.floor(player.maxHp));
+        const full = Math.max(0, Math.floor(player.hp));
+        if (heartsRow.childElementCount !== total) {
+            heartsRow.innerHTML = Array.from({ length: total }, () => `<img src="icons/small/heart-48.png" class="irh-heart" alt="">`).join('');
+        }
+        [...heartsRow.children].forEach((el, i) => el.classList.toggle('irh-heart-empty', i >= full));
+
+        // Extra hearts (Patch Heart) — small gold-tinted hearts after the row.
+        let extraWrap = document.getElementById('irh-hearts-extra');
+        const extraCount = Math.min(8, player.extraHearts || 0);
+        if (extraCount > 0) {
+            if (!extraWrap) {
+                extraWrap = document.createElement('div');
+                extraWrap.id = 'irh-hearts-extra';
+                extraWrap.style.display = 'flex';
+                extraWrap.style.gap = '2px';
+                heartsRow.after(extraWrap);
+            }
+            if (extraWrap.childElementCount !== extraCount) {
+                extraWrap.innerHTML = Array.from({ length: extraCount }, () => `<img src="icons/small/heart-48.png" class="irh-heart-extra" alt="">`).join('');
+            }
+        } else if (extraWrap) {
+            extraWrap.remove();
+        }
+    }
+
+    const waveNode = document.getElementById('irh-wave');
+    if (waveNode) {
+        waveNode.textContent = `${t('hud.waveShort')} ${currentMode === 'endless' ? `${currentWave + 1}/INF` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`;
+    }
+    const zoneNode = document.getElementById('irh-zone');
+    if (zoneNode) zoneNode.textContent = `${t('hud.zone')} ${currentLevel}`;
+    const goldNode = document.getElementById('irh-gold');
+    if (goldNode) goldNode.textContent = save.gold;
+    const gemsNode = document.getElementById('irh-gems');
+    if (gemsNode) gemsNode.textContent = save.gems;
+
+    const hitRush = document.getElementById('irh-hitrush');
+    if (hitRush) {
+        if (killStreak > 2) {
+            hitRush.style.display = '';
+            const hitRushText = document.getElementById('irh-hitrush-text');
+            if (hitRushText) hitRushText.textContent = `${t('hud.hitRush')} x${killStreak}`;
+        } else {
+            hitRush.style.display = 'none';
+        }
+    }
+
+    const xpLabel = document.getElementById('irh-xp-label');
+    if (xpLabel) xpLabel.textContent = `${t('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`;
+    const xpFill = document.getElementById('irh-xp-fill');
+    if (xpFill) xpFill.style.width = `${Math.min(100, Math.max(4, (player.abilityXp / player.nextAbilityXp) * 100))}%`;
 }
 
 window.addEventListener('keydown', (event) => {

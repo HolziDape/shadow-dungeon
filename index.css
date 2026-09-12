@@ -1721,11 +1721,11 @@ body.in-run .in-game-settings-button { display: inline-flex; }
   align-items: baseline;
   justify-content: center;
   gap: 8px;
-  padding: 6px 16px;
+  padding: 6px 16px 5px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(13,12,17,0.92), rgba(4,6,16,0.95));
-  border: 1px solid rgba(214,179,106,0.45);
-  box-shadow: 0 2px 14px rgba(0,0,0,0.5), 0 0 11px rgba(214,179,106,0.35);
+  background: #3a2c1a;
+  border: 2px solid var(--outline);
+  box-shadow: 0 3px 0 #0b0818;
   font-family: var(--font-ui);
   pointer-events: none;
   white-space: nowrap;
@@ -1733,17 +1733,105 @@ body.in-run .in-game-settings-button { display: inline-flex; }
 body.in-run .in-run-level-banner { display: flex; }
 .irl-label {
   font-size: 10px;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   text-transform: uppercase;
-  color: rgba(227,210,164,0.7);
+  color: rgba(255,229,166,0.75);
 }
 .irl-num {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  color: #fff;
-  text-shadow: 0 0 12px rgba(214,179,106,0.6), 0 0 12px rgba(211,163,85,0.35);
+  color: var(--r-gold);
+}
+
+/* ── In-run HUD (hearts, wave/zone, gold/gems, hit rush, ability XP) ──
+   Real DOM + the established pixel-art tokens (hard 2D shadow, flat
+   fill, no blur) — this used to be drawn straight onto the canvas with
+   a different font and soft glow pills, the one part of the redesign
+   that never got converted. */
+.in-run-hud {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  left: 0; right: 0;
+  z-index: 1400;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px;
+  pointer-events: none;
+  font-family: var(--font-ui);
+}
+body.in-run .in-run-hud { display: flex; }
+
+/* Reserves the same vertical band as the centered LEVEL banner + top-right
+   gear button (both position:fixed, so normal flex flow doesn't know to
+   leave room for them) — rows below this one then naturally start clear of
+   both instead of sliding underneath them. */
+.irh-toprow { display: flex; align-items: center; min-height: 34px; }
+.irh-secondrow, .irh-thirdrow { display: flex; justify-content: flex-end; gap: 6px; }
+
+.irh-hearts { display: flex; align-items: center; gap: 3px; }
+.irh-heart { width: 20px; height: 20px; image-rendering: pixelated; transition: opacity .15s; }
+.irh-heart-empty { opacity: 0.22; filter: grayscale(1); }
+.irh-heart-extra { width: 16px; height: 16px; image-rendering: pixelated; filter: hue-rotate(30deg) saturate(1.6); margin-left: 2px; }
+@keyframes irhHeartHit {
+  0%   { transform: translate(0,0) scale(1); }
+  30%  { transform: translate(3px,-2px) scale(1.35); }
+  60%  { transform: translate(-3px,1px) scale(1.15); }
+  100% { transform: translate(0,0) scale(1); }
+}
+.irh-heart.irh-heart-hit { animation: irhHeartHit .5s ease-out; }
+
+.irh-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px 3px;
+  border-radius: 999px;
+  background: #241b4a;
+  border: 2px solid var(--outline);
+  box-shadow: 0 3px 0 #0b0818;
+  font-size: 11px; font-weight: 700;
+  color: #e4dbff;
+  white-space: nowrap;
+}
+.irh-pill-icon { width: 14px; height: 14px; image-rendering: pixelated; flex-shrink: 0; }
+.irh-pill-accent { color: #cdb8ff; }
+.irh-pill-gold { background: #3a2c1a; color: #ffe98f; }
+.irh-pill-gems { background: #2b2159; color: #cdb8ff; }
+
+.irh-hitrush {
+  align-self: center;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px 2px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: #3a2c1a;
+  border: 2px solid var(--outline);
+  box-shadow: 0 3px 0 #0b0818;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  color: var(--r-gold);
+}
+.irh-hitrush-icon { width: 13px; height: 13px; image-rendering: pixelated; }
+
+.irh-xprow { margin-top: 2px; }
+.irh-xp-label {
+  display: block;
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+  margin-bottom: 3px;
+}
+.irh-xp-bar {
+  height: 8px;
+  background: var(--bg-deep);
+  border: 2px solid var(--outline);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.irh-xp-fill { height: 100%; background: var(--r-dark); }
+
+@media (max-width: 380px) {
+  .irh-heart { width: 17px; height: 17px; }
+  .irh-pill { font-size: 10px; padding: 3px 7px 2px; }
 }
 
 .result-leaderboard-delta {

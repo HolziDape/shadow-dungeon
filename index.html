@@ -378,6 +378,43 @@
         <img src="icons/small/gear-48.png" alt="" class="settings-gear-img">
     </button>
 
+    <!-- In-run HUD (hearts, wave/zone, gold/gems, hit rush, ability XP) —
+         real pixel-art DOM elements matching the rest of the redesign,
+         replacing what used to be drawn straight onto the canvas. -->
+    <div id="in-run-hud" class="in-run-hud" aria-hidden="true">
+        <div class="irh-toprow">
+            <div id="irh-hearts" class="irh-hearts"></div>
+        </div>
+        <div class="irh-secondrow">
+            <div class="irh-pill">
+                <img src="icons/small/skull-48.png" alt="" class="irh-pill-icon">
+                <span id="irh-wave">WAVE 0/0</span>
+            </div>
+            <div class="irh-pill irh-pill-accent">
+                <img src="icons/small/star-48.png" alt="" class="irh-pill-icon">
+                <span id="irh-zone">ZONE 1</span>
+            </div>
+        </div>
+        <div class="irh-thirdrow">
+            <div class="irh-pill irh-pill-gold">
+                <img src="icons/small/coin-48.png" alt="" class="irh-pill-icon">
+                <span id="irh-gold">0</span>
+            </div>
+            <div class="irh-pill irh-pill-gems">
+                <img src="icons/small/gem-48.png" alt="" class="irh-pill-icon">
+                <span id="irh-gems">0</span>
+            </div>
+        </div>
+        <div id="irh-hitrush" class="irh-hitrush" style="display:none">
+            <img src="icons/small/bolt-48.png" alt="" class="irh-hitrush-icon">
+            <span id="irh-hitrush-text"></span>
+        </div>
+        <div class="irh-xprow">
+            <span id="irh-xp-label" class="irh-xp-label"></span>
+            <div class="irh-xp-bar"><div id="irh-xp-fill" class="irh-xp-fill"></div></div>
+        </div>
+    </div>
+
     <div id="ability-overlay" class="modal-overlay">
         <div class="modal-content ability-pick-content">
             <div class="ability-pick-header">

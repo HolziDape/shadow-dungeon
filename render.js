@@ -563,6 +563,34 @@ function drawEnemies() {
         const phaseAlpha = enemy.phasing ? 0.35 : blinkAlpha;
         ctx.globalAlpha = phaseAlpha;
 
+        // ── Sprite path: if this enemy type has a loaded image (see
+        // preloadEnemySprites() in game.js — populated once at startup from
+        // ENEMY_TYPES[key].sprite, so dropping in a Claude Design asset later
+        // needs zero changes here), draw that instead of the vector shape
+        // below. Everything BELOW this block (status-indicator overlays:
+        // EMP rings, drone barrel, shield ring, etc.) still applies on top
+        // either way — only the body silhouette itself is swapped out.
+        const hasSprite = enemy.spriteImg && enemy.spriteImg.complete && enemy.spriteImg.naturalWidth > 0;
+        if (hasSprite) {
+            if (enemy.ai === 'sprint') {
+                // Chaser normally self-orients toward the player (see below);
+                // sprites get the same treatment so a directional asset reads
+                // correctly instead of always facing "up".
+                const a = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                ctx.rotate(a - Math.PI / 2);
+            } else if (enemy.ai === 'sniper') {
+                const a = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                ctx.rotate(a);
+            }
+            const size = enemy.r * 2.2;
+            ctx.drawImage(enemy.spriteImg, -size / 2, -size / 2, size, size);
+            if (enemy.hitFlash > 0) {
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.globalAlpha = phaseAlpha * 0.5;
+                ctx.drawImage(enemy.spriteImg, -size / 2, -size / 2, size, size);
+                ctx.globalCompositeOperation = 'source-over';
+            }
+        } else {
         ctx.beginPath();
         if (enemy.isBoss) {
             // Hexagon
@@ -663,6 +691,7 @@ function drawEnemies() {
             ctx.fillStyle = `rgba(255, 255, 255, 0.25)`;
             ctx.fill();
         }
+        } // end vector-shape fallback (hasSprite branch above)
 
         // ── Swarmling: split dividing line ──
         if (enemy.ai === 'swarm' && !enemy.hasSplit) {

@@ -3034,6 +3034,22 @@ function updateActiveAbility(dt) {
     if (typeof updatePassiveIconTimers === 'function') updatePassiveIconTimers(dt);
 }
 
+// Loads a real image for any ENEMY_TYPES entry that has `sprite` set, once,
+// at startup — the loaded Image is stashed directly on the ENEMY_TYPES
+// definition object itself (`.spriteImg`), so createEnemy()'s `{...type}`
+// spread carries it onto every instance automatically (one shared Image per
+// type, not per enemy). Entries with `sprite: null` are untouched and keep
+// rendering as the current procedural vector shape (see drawEnemies() in
+// render.js). Drop in a real asset path later — nothing else needs to change.
+function preloadEnemySprites() {
+    Object.values(ENEMY_TYPES).forEach((def) => {
+        if (!def.sprite) return;
+        const img = new Image();
+        img.src = def.sprite;
+        def.spriteImg = img;
+    });
+}
+
 function createEnemy(type, x, y) {
     // Apply Scarier Face HP reduction
     let hp = type.hp;
@@ -10448,6 +10464,7 @@ window.addEventListener('load', () => {
     showFight();
     installSwipeNavigation();
     refreshRailBadges();
+    preloadEnemySprites();
     MusicManager.init();
     startMusicVisualiser();
     setInterval(syncMusicVolume, 500);

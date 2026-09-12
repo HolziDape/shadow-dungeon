@@ -1440,6 +1440,22 @@ input:focus-visible,
   font-family:var(--font-ui); font-size:16px; font-weight: 800;
   color: var(--line-color, #fff);
 }
+/* Some values (milestone bonus: "+84 G · +5 ◆ · 1x Supply Pack I") are too
+   long to share a row with their label — the label's flex:1/min-width:0
+   let it get squeezed to 0 while the value refused to shrink past its own
+   min-content width, so both wrapped and rendered on top of each other.
+   Stack label above value instead of fighting for the same line. */
+.result-line--stacked {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.result-line--stacked strong {
+  flex: 1 1 100%;
+  text-align: left;
+  line-height: 1.4;
+  margin-top: 4px;
+  padding-left: 45px; /* lines up under the label, past the icon badge */
+}
 
 /* Progress toward the next real ability-milestone unlock (game.js computes
    this from LEVEL_MILESTONES + save.unlocked — no fabricated XP value).

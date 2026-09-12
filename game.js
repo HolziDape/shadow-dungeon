@@ -6533,7 +6533,7 @@ function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, sec
         }
     }
 
-    statsNode.innerHTML = stats.map((entry) => `<div class="result-line">${entry.icon ? `<div class="result-line-icon-badge"><img class="result-line-icon" src="icons/small/${entry.icon}-48.png" alt=""></div>` : ''}<span>${entry.label}</span><strong${entry.color ? ` style="--line-color:${entry.color}"` : ''}>${entry.value}</strong></div>`).join('');
+    statsNode.innerHTML = stats.map((entry) => `<div class="result-line${entry.stacked ? ' result-line--stacked' : ''}">${entry.icon ? `<div class="result-line-icon-badge"><img class="result-line-icon" src="icons/small/${entry.icon}-48.png" alt=""></div>` : ''}<span>${entry.label}</span><strong${entry.color ? ` style="--line-color:${entry.color}"` : ''}>${entry.value}</strong></div>`).join('');
 
     // Level progress toward the next ability-milestone unlock. There is no
     // XP-within-level value in this game (save.unlocked is a flat stage
@@ -6724,7 +6724,7 @@ function victory() {
         { label: t('result.statNextMission'), value: `${t('cta.level')} ${save.unlocked}`, icon: 'trophy', color: 'var(--r-blue)' }
     ];
     if (milestoneBonus) {
-        stats.push({ label: t('result.statMilestone'), value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || t('result.pack')}`, icon: 'chest', color: 'var(--r-gold)' });
+        stats.push({ label: t('result.statMilestone'), value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || t('result.pack')}`, icon: 'chest', color: 'var(--r-gold)', stacked: true });
     }
     const lbAfter = (function() {
         try {

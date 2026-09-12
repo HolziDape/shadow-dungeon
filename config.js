@@ -542,23 +542,29 @@ function getAbilityRankDef(ability, rank) {
 // drawEnemies() automatically switches that type from its procedural vector
 // shape to the loaded image(s), no other code changes needed. null = keep
 // using the current vector shape (every type today, until assets exist).
+// 3-frame idle-animation set from Claude Design, e.g. spr('drone') ->
+// ['icons/enemies/drone-1-64.png', '...-2-64.png', '...-3-64.png'].
+function spr(name) {
+    return [1, 2, 3].map((i) => `icons/enemies/${name}-${i}-64.png`);
+}
+
 const ENEMY_TYPES = {
     // ── Original ──
-    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#6fb7c5', glow: '#6fb7c5', exp: 2, ai: 'strafe',  unlockLevel: 1, sprite: null },
-    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#a184c9', glow: '#a184c9', exp: 3, ai: 'sprint',  unlockLevel: 4, sprite: null },
-    tank:      { hp: 38, spd: 0.95, r: 20, color: '#cf9440', glow: '#cf9440', exp: 5, ai: 'heavy',   unlockLevel: 12, sprite: null },
-    boss:      { hp: 26, spd: 1.08, r: 50, color: '#d0716f', glow: '#d0716f', exp: 14, ai: 'boss',   isBoss: true, unlockLevel: 1, sprite: null },
+    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#6fb7c5', glow: '#6fb7c5', exp: 2, ai: 'strafe',  unlockLevel: 1, sprite: spr('drone') },
+    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#a184c9', glow: '#a184c9', exp: 3, ai: 'sprint',  unlockLevel: 4, sprite: spr('chaser') },
+    tank:      { hp: 38, spd: 0.95, r: 20, color: '#cf9440', glow: '#cf9440', exp: 5, ai: 'heavy',   unlockLevel: 12, sprite: spr('tank') },
+    boss:      { hp: 26, spd: 1.08, r: 50, color: '#d0716f', glow: '#d0716f', exp: 14, ai: 'boss',   isBoss: true, unlockLevel: 1, sprite: spr('boss') },
 
     // ── New enemy types (8-9), gated to later levels ──
-    swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#97c7d6', glow: '#97c7d6', exp: 1, ai: 'swarm',     unlockLevel: 1, sprite: null },
-    brute:     { hp: 22, spd: 0.85, r: 17, color: '#d09c46', glow: '#d09c46', exp: 5, ai: 'brute',     unlockLevel: 8, sprite: null },
-    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#c9709e', glow: '#c9709e', exp: 4, ai: 'sniper',    unlockLevel: 12, sprite: null },
-    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#cd7a4e', glow: '#cd7a4e', exp: 5, ai: 'bomber',    unlockLevel: 15, sprite: null },
-    healer:    { hp: 14, spd: 1.05, r: 14, color: '#74c8a0', glow: '#74c8a0', exp: 6, ai: 'healer',    unlockLevel: 18, sprite: null },
-    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#8db4d2', glow: '#8db4d2', exp: 6, ai: 'shielder',  unlockLevel: 22, shieldHp: 30, sprite: null },
-    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9678cc', glow: '#9678cc', exp: 6, ai: 'wraith',    unlockLevel: 26, sprite: null },
-    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#c96555', glow: '#c96555', exp: 10, ai: 'crusher',   unlockLevel: 30, sprite: null },
-    berserker: { hp: 16, spd: 1.20, r: 13, color: '#bf4a4c', glow: '#bf4a4c', exp: 7, ai: 'berserker', unlockLevel: 35, sprite: null }
+    swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#97c7d6', glow: '#97c7d6', exp: 1, ai: 'swarm',     unlockLevel: 1, sprite: spr('swarmling') },
+    brute:     { hp: 22, spd: 0.85, r: 17, color: '#d09c46', glow: '#d09c46', exp: 5, ai: 'brute',     unlockLevel: 8, sprite: spr('brute') },
+    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#c9709e', glow: '#c9709e', exp: 4, ai: 'sniper',    unlockLevel: 12, sprite: spr('sniper') },
+    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#cd7a4e', glow: '#cd7a4e', exp: 5, ai: 'bomber',    unlockLevel: 15, sprite: spr('bomber') },
+    healer:    { hp: 14, spd: 1.05, r: 14, color: '#74c8a0', glow: '#74c8a0', exp: 6, ai: 'healer',    unlockLevel: 18, sprite: spr('healer') },
+    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#8db4d2', glow: '#8db4d2', exp: 6, ai: 'shielder',  unlockLevel: 22, shieldHp: 30, sprite: spr('shielder') },
+    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9678cc', glow: '#9678cc', exp: 6, ai: 'wraith',    unlockLevel: 26, sprite: spr('wraith') },
+    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#c96555', glow: '#c96555', exp: 10, ai: 'crusher',   unlockLevel: 30, sprite: spr('crusher') },
+    berserker: { hp: 16, spd: 1.20, r: 13, color: '#bf4a4c', glow: '#bf4a4c', exp: 7, ai: 'berserker', unlockLevel: 35, sprite: spr('berserker') }
 };
 
 function getEnemyLevelStats(typeKey, level) {

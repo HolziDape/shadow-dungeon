@@ -16,12 +16,15 @@ FIGHT TRACKS (während einem normalen Run)
 BOSS TRACK (Boss-Kämpfe)
   boss.mp3          — Einzel-Track, loopt automatisch
 
+PACK TRACK (Pack Opening Screen)
+  pack.mp3          — Einzel-Track, loopt automatisch
+
 Alle menu*.mp3 und fight*.mp3 werden beim Start zufällig
 gemischt und automatisch nacheinander abgespielt.
 Fehlende Dateien werden einfach übersprungen.
 
 ──────────────────────────────────────────────────────
-Pixel-Arcade-Redesign: menu/menu2/fight/boss.mp3 sind
+Pixel-Arcade-Redesign: menu/menu2/fight/boss/pack.mp3 sind
 prozedural synthetisierte Chiptune-Loops (Pulse-/Triangle-
 Wellen + Noise-Drums, per Python/numpy gebaut), passend
 zum neuen Pixel-Look statt der alten atmosphärischen Tracks.
@@ -33,6 +36,9 @@ zum neuen Pixel-Look statt der alten atmosphärischen Tracks.
              sample-genau auf Taktlänge getrimmt + 15ms
              Fade an beiden Enden, damit die native Loop
              ohne Klick durchläuft — läuft über .loop=true)
+  pack.mp3   128 BPM, D-Dur,  8 Takte  (I-V-vi-IV x2, helles
+             Pulse-Arpeggio + Shimmer-Chimes alle 2 Takte,
+             passend zum Sunburst/Glow-Reveal-Screen)
 
 Originale (atmosphärische) Tracks liegen unverändert unter
 ../../redesign/music/, falls die alte Stimmung zurück soll.

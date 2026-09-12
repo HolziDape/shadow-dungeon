@@ -1,5 +1,40 @@
-var GLOW_SCALE = 0.4; // global canvas glow damping (redesign)
+// ctx.shadowBlur is one of the most expensive Canvas2D ops on mobile GPUs
+// (especially iOS Safari) — it forces a real blur convolution on every shape
+// drawn with it active, and this file sets it on nearly every entity every
+// frame. 0 hits the browser's documented fast path (no shadow work at all
+// when shadowBlur/shadowOffsetX/shadowOffsetY are all 0, which they are
+// here — offsets are never set). Also more consistent with the flat/hard-
+// shadow, no-glow direction the rest of the redesign already committed to.
+var GLOW_SCALE = 0;
 let _renderNow = 0;
+
+// Real pixel-art icons for the 5 active abilities (replaces the emoji drawn
+// above the player when the ability is ready) — preloaded once here since
+// they're drawn on canvas, not via <img>.
+const ACTIVE_ABILITY_ICONS = {};
+(function preloadActiveAbilityIcons() {
+    if (typeof ACTIVE_ABILITIES === 'undefined') return;
+    ACTIVE_ABILITIES.forEach((def) => {
+        const img = new Image();
+        img.src = `icons/small/${def.icon}`;
+        ACTIVE_ABILITY_ICONS[def.id] = img;
+    });
+})();
+
+// Same for passive abilities (bottom-right HUD row) — replaces the 3-letter
+// text sigil. saw_blade/heat_seeker already had real icons from an earlier
+// pass and use different filenames.
+const PASSIVE_ABILITY_ICONS = {};
+(function preloadPassiveAbilityIcons() {
+    if (typeof ABILITIES === 'undefined') return;
+    const legacyFile = { saw_blade: 'blade-48.png', heat_seeker: 'missile-48.png' };
+    ABILITIES.forEach((a) => {
+        const file = legacyFile[a.id] || `ability-${a.id}-48.png`;
+        const img = new Image();
+        img.src = `icons/small/${file}`;
+        PASSIVE_ABILITY_ICONS[a.id] = img;
+    });
+})();
 
 function render() {
     _renderNow = performance.now();
@@ -873,29 +908,52 @@ function drawPlayer() {
     }
 
     // ── Trail ─────────────────────────────────────────────────────────────────
+    // Emitted from the ship's actual engine positions (matching the sprite art:
+    // twin main engines close together at the rear-center, plus a thruster on
+    // each wingtip) instead of a single stream out of the hull's pivot point.
+    // The two rear-center engines sit only ~3px apart at gameplay scale, so
+    // they're drawn as one combined central stream — separating them wouldn't
+    // read as two lines anyway — while the wing thrusters are far enough out
+    // to draw as their own distinct trails.
     const trail = player.trailPoints || [];
     if (trail.length > 1) {
+        const thrusterHalf = player.r * 1.15; // sprite half-size (size = r*2.3)
+        const THRUSTERS = [
+            { lx: 0,     ly: 0.82, width: 1.15, alpha: 1 },    // rear-center (both main engines)
+            { lx: -0.85, ly: 0.55, width: 0.55, alpha: 0.7 },  // left wingtip
+            { lx: 0.85,  ly: 0.55, width: 0.55, alpha: 0.7 }   // right wingtip
+        ];
         ctx.save();
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         const baseWidth = 4 + rarityVfx * 1.4;
-        for (let i = 0; i < trail.length - 1; i++) {
-            const prev    = trail[Math.max(0, i - 1)];
-            const current = trail[i];
-            const next    = trail[i + 1];
-            const startX = i === 0 ? current.x : (prev.x + current.x) * 0.5;
-            const startY = i === 0 ? current.y : (prev.y + current.y) * 0.5;
-            const endX   = (current.x + next.x) * 0.5;
-            const endY   = (current.y + next.y) * 0.5;
-            const fade   = 1 - (i / Math.max(1, trail.length - 1));
-            ctx.shadowBlur=GLOW_SCALE*(6 + (fade * (6 + rarityVfx * 2)));
-            ctx.shadowColor = style.trail;
-            ctx.strokeStyle = style.trail;
-            ctx.globalAlpha = Math.max(0.02, current.life * 0.55 * fade);
-            ctx.lineWidth   = Math.max(1, baseWidth * current.width * (0.24 + fade * 0.76));
-            ctx.beginPath();
-            ctx.moveTo(startX, startY);
-            ctx.quadraticCurveTo(current.x, current.y, endX, endY);
-            ctx.stroke();
+        for (const th of THRUSTERS) {
+            const ox = th.lx * thrusterHalf, oy = th.ly * thrusterHalf;
+            // Rotate this thruster's local offset into world space per historical
+            // point using that point's own recorded ship angle, so the trail
+            // stays correctly anchored to the hull as it turns over time.
+            const pts = trail.map((p) => {
+                const a = p.angle || 0, cosA = Math.cos(a), sinA = Math.sin(a);
+                return { x: p.x + ox * cosA - oy * sinA, y: p.y + ox * sinA + oy * cosA, life: p.life, width: p.width };
+            });
+            for (let i = 0; i < pts.length - 1; i++) {
+                const prev    = pts[Math.max(0, i - 1)];
+                const current = pts[i];
+                const next    = pts[i + 1];
+                const startX = i === 0 ? current.x : (prev.x + current.x) * 0.5;
+                const startY = i === 0 ? current.y : (prev.y + current.y) * 0.5;
+                const endX   = (current.x + next.x) * 0.5;
+                const endY   = (current.y + next.y) * 0.5;
+                const fade   = 1 - (i / Math.max(1, pts.length - 1));
+                ctx.shadowBlur=GLOW_SCALE*(6 + (fade * (6 + rarityVfx * 2))) * th.width;
+                ctx.shadowColor = style.trail;
+                ctx.strokeStyle = style.trail;
+                ctx.globalAlpha = Math.max(0.02, current.life * 0.55 * fade * th.alpha);
+                ctx.lineWidth   = Math.max(1, baseWidth * th.width * current.width * (0.24 + fade * 0.76));
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.quadraticCurveTo(current.x, current.y, endX, endY);
+                ctx.stroke();
+            }
         }
         ctx.globalAlpha = 1;
         // Optional per-skin trail overlay (e.g. aurora rainbow shimmer)
@@ -939,6 +997,9 @@ function drawPlayer() {
     const _lmy = Math.max(-1, Math.min(1, (_wx * _sinA + _wy * _cosA) / 220));
     ctx.save();
     ctx.translate(player.x, player.y);
+    // Rotates to face movement direction only (player.angle is no longer
+    // touched by aim/shooting, see updateAutoFire) — so the thruster always
+    // points the right way relative to where the ship is actually flying.
     ctx.rotate(_angle);
     // Each skin picked its own scale base (r/34 … r/40) with its own geometry on
     // top, so rendered hulls ranged from 40px to 61px tall while the hitbox is a
@@ -989,12 +1050,21 @@ function drawPlayer() {
         if (curCD <= 0 && def) {
             const pulse = 0.7 + 0.3 * Math.sin(_renderNow * 0.007);
             ctx.globalAlpha = pulse;
-            ctx.fillStyle = col;
             ctx.shadowBlur=GLOW_SCALE*(12);
             ctx.shadowColor = col;
-            ctx.font = 'bold 13px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(def.icon, player.x, player.y - arcR - 10);
+            const iconImg = ACTIVE_ABILITY_ICONS[player.activeAbility];
+            if (iconImg && iconImg.complete && iconImg.naturalWidth) {
+                const s = 20;
+                const smoothing = ctx.imageSmoothingEnabled;
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(iconImg, player.x - s / 2, player.y - arcR - 10 - s, s, s);
+                ctx.imageSmoothingEnabled = smoothing;
+            } else {
+                ctx.fillStyle = col;
+                ctx.font = 'bold 13px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(def.icon, player.x, player.y - arcR - 10);
+            }
         }
 
         // Activate flash ring
@@ -1159,8 +1229,11 @@ function drawHearts(x, y, hp, total = 3) {
     const damageT = (typeof window.__heartDamageTime === 'number')
         ? Math.max(0, 1 - (_renderNow - window.__heartDamageTime) / 600)
         : 0;
-    // Lost-heart index: which heart got depleted? Animate it shaking out
+    // Lost-heart range: which heart(s) got depleted this hit? Animate them
+    // shaking out. A boss hit can cost 2 hearts at once, so this is a range
+    // (start index + count), not a single index.
     const lostHeartIdx = (typeof window.__heartLostIdx === 'number') ? window.__heartLostIdx : -1;
+    const lostHeartCount = (typeof window.__heartLostCount === 'number') ? window.__heartLostCount : 1;
 
     for (let i = 0; i < count; i++) {
         ctx.save();
@@ -1171,8 +1244,8 @@ function drawHearts(x, y, hp, total = 3) {
         let color = i < fullHearts ? '#d0716f' : 'rgba(255,255,255,0.12)';
         let glow = 0;
 
-        // Lost heart: shake + fade out
-        if (i === lostHeartIdx && damageT > 0) {
+        // Lost heart(s): shake + fade out
+        if (i >= lostHeartIdx && i < lostHeartIdx + lostHeartCount && lostHeartIdx >= 0 && damageT > 0) {
             cx += Math.sin(damageT * 22) * 4 * damageT;
             cy += Math.cos(damageT * 18) * 3 * damageT;
             scale = baseScale * (1 + damageT * 0.6); // grow as it "explodes"
@@ -1395,15 +1468,27 @@ function drawPassiveIcons(width, height) {
             ctx.stroke();
         }
 
-        // Icon text
-        ctx.globalAlpha = glowing ? 1 : 0.75;
-        ctx.fillStyle = '#fff';
-        ctx.shadowBlur=GLOW_SCALE*(glowing ? 8 : 0);
-        ctx.shadowColor = '#fff';
-        ctx.font = `bold ${SIZE <= 26 ? 9 : 10}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(icon, x + SIZE / 2, Y + SIZE / 2 - 2);
+        // Icon
+        const iconImg = PASSIVE_ABILITY_ICONS[id];
+        if (iconImg && iconImg.complete && iconImg.naturalWidth) {
+            ctx.globalAlpha = glowing ? 1 : 0.85;
+            ctx.shadowBlur=GLOW_SCALE*(glowing ? 8 : 0);
+            ctx.shadowColor = '#fff';
+            const smoothing = ctx.imageSmoothingEnabled;
+            ctx.imageSmoothingEnabled = false;
+            const pad = 3, iconSize = SIZE - pad * 2;
+            ctx.drawImage(iconImg, x + pad, Y + pad - 1, iconSize, iconSize);
+            ctx.imageSmoothingEnabled = smoothing;
+        } else {
+            ctx.globalAlpha = glowing ? 1 : 0.75;
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur=GLOW_SCALE*(glowing ? 8 : 0);
+            ctx.shadowColor = '#fff';
+            ctx.font = `bold ${SIZE <= 26 ? 9 : 10}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(icon, x + SIZE / 2, Y + SIZE / 2 - 2);
+        }
 
         // Rank dots
         for (let r = 0; r < Math.min(rank, 4); r++) {

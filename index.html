@@ -41,6 +41,12 @@
                 <div class="tile-tag" id="left-skill-tag" data-i18n="rail.newSkill">NEW SKILL</div>
                 <div class="tile-label" id="left-skill-label" data-i18n="rail.skills">Skills</div>
             </button>
+            <button class="rail-tile rail-enemy-index" type="button" onclick="showEnemyIndex()">
+                <div class="tile-icon">
+                    <img src="icons/small/skull-48.png" alt="" class="tile-icon-img">
+                </div>
+                <div class="tile-label" data-i18n="rail.enemyIndex">Enemies</div>
+            </button>
             <button class="rail-tile rail-no-ads" type="button" id="left-no-ads" onclick="buyPremiumOffer('no_ads')">
                 <div class="tile-icon">
                     <img src="icons/small/no-ads-48.png" alt="" class="tile-icon-img">
@@ -346,6 +352,17 @@
             <p class="screen-subtitle" id="ability-archive-status">0/0 unlocked</p>
             <div id="ability-milestones" class="ability-milestones"></div>
             <div id="ability-archive-grid" class="shop-grid ability-archive-grid"></div>
+        </div>
+    </div>
+
+    <div id="enemy-index-screen" class="screen">
+        <div class="screen-shell">
+            <div class="screen-title-row">
+                <img src="icons/small/skull-48.png" alt="" class="screen-title-icon">
+                <h1 class="screen-title" data-i18n="enemyIndex.title">ENEMY INDEX</h1>
+            </div>
+            <p class="screen-subtitle" id="enemy-index-status" data-i18n="enemyIndex.sub">0/0 encountered</p>
+            <div id="enemy-index-grid" class="shop-grid ability-archive-grid enemy-index-grid"></div>
         </div>
     </div>
 

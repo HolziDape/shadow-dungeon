@@ -567,6 +567,26 @@ const ENEMY_TYPES = {
     berserker: { hp: 16, spd: 1.20, r: 13, color: '#bf4a4c', glow: '#bf4a4c', exp: 7, ai: 'berserker', unlockLevel: 35, sprite: spr('berserker') }
 };
 
+// Display name + one-line ability blurb for the Enemy Index (game.js
+// renderEnemyIndex()). Kept separate from ENEMY_TYPES to keep that block
+// readable — every fact here is pulled directly from each type's actual
+// AI branch in updateEnemies(), not invented.
+const ENEMY_INFO = {
+    drone:     { name: 'Drone',     desc: 'Basic ranged shooter — fires a shot at you whenever it has line of sight.' },
+    chaser:    { name: 'Chaser',    desc: 'Sprints at you in bursts, then blinks in right behind you.' },
+    tank:      { name: 'Tank',      desc: "Slow and tough. Pulses an EMP that jams your shooting for 1.5s up close, and buffs nearby tanks." },
+    boss:      { name: 'Boss',      desc: "Every level's finale. Its ring-shaped shockwave attack costs 2 hearts instead of 1." },
+    swarmling: { name: 'Swarmling', desc: 'Cheap and fast in numbers — a split fragment explodes the instant it touches you.' },
+    brute:     { name: 'Brute',     desc: 'Ground-slams a shockwave that also leaves a lingering slow zone behind.' },
+    sniper:    { name: 'Sniper',    desc: 'Keeps its distance (~280px) and fires marked or ricocheting shots.' },
+    bomber:    { name: 'Bomber',    desc: 'Charges straight at you and lobs grenades that split into three.' },
+    healer:    { name: 'Healer',    desc: 'Hangs back healing nearby allies, and can revive one dead enemy per wave.' },
+    shielder:  { name: 'Shielder',  desc: 'A personal shield soaks hits until broken, then it rams you at 3x speed.' },
+    wraith:    { name: 'Wraith',    desc: 'Phases in and out of invulnerability, leaving an exploding decoy behind.' },
+    crusher:   { name: 'Crusher',   desc: 'Very tanky — alternates charging dashes with triple ground-slam waves.' },
+    berserker: { name: 'Berserker', desc: 'Gets faster the lower its HP drops, and faster still with every hit it takes.' }
+};
+
 function getEnemyLevelStats(typeKey, level) {
     const base = ENEMY_TYPES[typeKey];
     const lv = Math.max(1, level);

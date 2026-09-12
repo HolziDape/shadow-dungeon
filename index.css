@@ -4314,6 +4314,15 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   width: 42px; height: 42px;
   margin-bottom: 8px;
 }
+.enemy-index-icon {
+  width: 48px; height: 48px;
+  margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-deep);
+  border: 2px solid var(--outline);
+  border-radius: 12px;
+}
+.enemy-index-icon-img { width: 40px; height: 40px; image-rendering: pixelated; }
 .ability-archive-card .card-title {
   font-family: var(--font-ui);
   font-size: 14px;

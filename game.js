@@ -46,6 +46,7 @@ const I18N = {
         'hud.wave': 'WAVE 0/0',
         'rail.newSkill': 'NEW SKILL',
         'rail.skills': 'Skills',
+        'rail.enemyIndex': 'Enemies',
         'rail.noAds': 'No Ads',
         'rail.leaderboard': 'Leaderboard',
         'rail.quests': 'Quests',
@@ -81,6 +82,9 @@ const I18N = {
         'equipment.empty': 'Empty',
         'equipment.maxNote': 'Max slots: 5 Normal + 2 paid · 2 Legendary + 1 paid. The shop will not sell more than this.',
         'abilities.title': 'ABILITY ARCHIVE',
+        'enemyIndex.title': 'ENEMY INDEX',
+        'enemyIndex.sub': '0/0 encountered',
+        'enemyIndex.locked': 'UNKNOWN',
         'hub.title': 'UPGRADES',
         'hub.sub': "Spend gold to boost your ship's stats.",
         'hub.statUpgrades': 'STAT UPGRADES',
@@ -194,6 +198,7 @@ const I18N = {
         'hud.wave': 'WELLE 0/0',
         'rail.newSkill': 'NEUER SKILL',
         'rail.skills': 'Skills',
+        'rail.enemyIndex': 'Gegner',
         'rail.noAds': 'Keine Werbung',
         'rail.leaderboard': 'Rangliste',
         'rail.quests': 'Aufgaben',
@@ -229,6 +234,9 @@ const I18N = {
         'equipment.empty': 'Leer',
         'equipment.maxNote': 'Maximale Slots: 5 Normal + 2 gekauft · 2 Legendär + 1 gekauft. Der Shop verkauft nicht mehr.',
         'abilities.title': 'FÄHIGKEITS-ARCHIV',
+        'enemyIndex.title': 'GEGNER-INDEX',
+        'enemyIndex.sub': '0/0 begegnet',
+        'enemyIndex.locked': 'UNBEKANNT',
         'hub.title': 'UPGRADES',
         'hub.sub': 'Gib Gold aus, um die Werte deines Schiffs zu verbessern.',
         'hub.statUpgrades': 'STAT-UPGRADES',
@@ -9891,6 +9899,46 @@ function renderAbilityArchive() {
                 showAbilityDetail(ability.id);
             };
         }
+        grid.appendChild(card);
+    });
+}
+
+window.showEnemyIndex = function() {
+    showScreen('enemy-index-screen');
+    renderEnemyIndex();
+    updateMetaHud();
+    playHaptic('soft');
+};
+
+function renderEnemyIndex() {
+    const grid = document.getElementById('enemy-index-grid');
+    const status = document.getElementById('enemy-index-status');
+    if (!grid) return;
+
+    const keys = Object.keys(ENEMY_TYPES).sort((a, b) => (ENEMY_TYPES[a].unlockLevel || 1) - (ENEMY_TYPES[b].unlockLevel || 1));
+    const unlockedCount = keys.filter((k) => (ENEMY_TYPES[k].unlockLevel || 1) <= (save.unlocked || 1)).length;
+    if (status) status.textContent = `${unlockedCount}/${keys.length} encountered`;
+
+    grid.innerHTML = '';
+    keys.forEach((key) => {
+        const type = ENEMY_TYPES[key];
+        const info = ENEMY_INFO[key] || { name: key, desc: '' };
+        const unlockLevel = type.unlockLevel || 1;
+        const unlocked = unlockLevel <= (save.unlocked || 1);
+        const iconSrc = (type.sprite && type.sprite[0]) || null;
+
+        const card = document.createElement('div');
+        card.className = `shop-card ability-archive-card enemy-index-card ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
+        card.innerHTML = `
+            <div class="enemy-index-icon">
+                ${iconSrc ? `<img src="${iconSrc}" alt="" class="enemy-index-icon-img">` : ''}
+            </div>
+            <div class="card-title">${unlocked ? info.name : '???'}</div>
+            <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
+                ${unlocked ? (type.isBoss ? 'BOSS | ' : '') + t('milestone.unlockedAt') + ' ' + unlockLevel : t('enemyIndex.locked')}
+            </div>
+            <div class="card-copy">${unlocked ? info.desc : t('milestone.lockedFrom') + ' ' + unlockLevel}</div>
+        `;
         grid.appendChild(card);
     });
 }

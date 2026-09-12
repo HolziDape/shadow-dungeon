@@ -1,4 +1,11 @@
-var GLOW_SCALE = 0.4; // global canvas glow damping (redesign)
+// ctx.shadowBlur is one of the most expensive Canvas2D ops on mobile GPUs
+// (especially iOS Safari) — it forces a real blur convolution on every shape
+// drawn with it active, and this file sets it on nearly every entity every
+// frame. 0 hits the browser's documented fast path (no shadow work at all
+// when shadowBlur/shadowOffsetX/shadowOffsetY are all 0, which they are
+// here — offsets are never set). Also more consistent with the flat/hard-
+// shadow, no-glow direction the rest of the redesign already committed to.
+var GLOW_SCALE = 0;
 let _renderNow = 0;
 
 // Real pixel-art icons for the 5 active abilities (replaces the emoji drawn

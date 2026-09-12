@@ -972,6 +972,7 @@ let enemies = [];
 let projectiles = [];
 let pickups = [];
 let particles = [];
+const MAX_PARTICLES = 300; // hard cap — chaotic multi-kill moments were spawning 500+ at once on mobile
 let hazards = [];
 let fxTexts = [];
 let lightningBolts = [];
@@ -2137,7 +2138,11 @@ window.rerollAbilities = function() {
 };
 
 window.addP = function(x, y, color, count = 5, speed = 100, life = 0.5, radius = 4) {
-    const scaledCount = Math.max(1, Math.round(count * 3));
+    // Was a flat x3 with no cap — chaotic moments (multiple kills, chain
+    // procs) could spawn 500+ simultaneous particles, a real mobile cost.
+    // x1.5 keeps the "juicier" feel without tripling every single burst,
+    // and MAX_PARTICLES stops it from ever running away entirely.
+    const scaledCount = Math.min(Math.max(1, Math.round(count * 1.5)), Math.max(0, MAX_PARTICLES - particles.length));
     const scaledLife = life * 1.18;
     const scaledSpeed = speed * 1.08;
     const scaledRadius = radius * 1.22;
@@ -4300,6 +4305,7 @@ function triggerChainLightning(origin, damage) {
 }
 
 function updateEnemies(dt) {
+    buildEnemyGrid();
     enemies.forEach((enemy) => {
         if (!enemy.alive) return;
 
@@ -4807,17 +4813,44 @@ function formatCompactNumber(value) {
     return `${Math.round(value)}`;
 }
 
+// Uniform spatial grid so resolveEnemyClumping() only checks nearby enemies
+// instead of every other enemy alive (was a straight O(n^2) scan, called
+// once per enemy per frame — the main horde/endless-mode cost). Rebuilt once
+// per updateEnemies(dt) call; 90px cells comfortably cover collision range
+// for everything except the boss, which is rare/singular so an occasional
+// missed cross-cell overlap there is a non-issue.
+const ENEMY_GRID_CELL = 90;
+let enemyGrid = new Map();
+function buildEnemyGrid() {
+    enemyGrid.clear();
+    enemies.forEach((e) => {
+        if (!e.alive) return;
+        const key = `${Math.floor(e.x / ENEMY_GRID_CELL)},${Math.floor(e.y / ENEMY_GRID_CELL)}`;
+        let bucket = enemyGrid.get(key);
+        if (!bucket) { bucket = []; enemyGrid.set(key, bucket); }
+        bucket.push(e);
+    });
+}
+
 function resolveEnemyClumping(enemy) {
-    for (const other of enemies) {
-        if (other === enemy || !other.alive) continue;
-        const odx = enemy.x - other.x;
-        const ody = enemy.y - other.y;
-        const odist = Math.max(0.001, Math.hypot(odx, ody));
-        const minDist = enemy.r + other.r;
-        if (odist < minDist) {
-            const push = (minDist - odist) * 0.45;
-            enemy.x += (odx / odist) * push;
-            enemy.y += (ody / odist) * push;
+    const cx = Math.floor(enemy.x / ENEMY_GRID_CELL);
+    const cy = Math.floor(enemy.y / ENEMY_GRID_CELL);
+    for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (let gy = cy - 1; gy <= cy + 1; gy++) {
+            const bucket = enemyGrid.get(`${gx},${gy}`);
+            if (!bucket) continue;
+            for (const other of bucket) {
+                if (other === enemy || !other.alive) continue;
+                const odx = enemy.x - other.x;
+                const ody = enemy.y - other.y;
+                const odist = Math.max(0.001, Math.hypot(odx, ody));
+                const minDist = enemy.r + other.r;
+                if (odist < minDist) {
+                    const push = (minDist - odist) * 0.45;
+                    enemy.x += (odx / odist) * push;
+                    enemy.y += (ody / odist) * push;
+                }
+            }
         }
     }
 }

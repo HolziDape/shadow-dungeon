@@ -51,6 +51,7 @@ const I18N = {
         'rail.quests': 'Quests',
         'rail.dailyLogin': 'Daily Login',
         'rail.test': 'Test',
+        'rail.quickTest': 'Quick Test',
         'cta.endless': 'ENDLESS',
         'cta.level': 'LEVEL',
         'nav.shop': 'SHOP',
@@ -82,6 +83,8 @@ const I18N = {
         'abilities.title': 'ABILITY ARCHIVE',
         'hub.title': 'UPGRADES',
         'hub.sub': "Spend gold to boost your ship's stats.",
+        'hub.statUpgrades': 'STAT UPGRADES',
+        'hub.nextMilestone': 'Next milestone',
         'settings.title': 'SETTINGS',
         'settings.language': 'Language',
         'settings.languageCopy': 'Switch the interface between English and German.',
@@ -104,7 +107,7 @@ const I18N = {
         'toast.saveFailed': 'Progress can not be saved — storage is full or blocked.',
         'settings.haptics': 'Haptics',
         'settings.hapticsCopy': 'Vibration on hits and rewards (Android & in-app browsers).',
-        'daily.title': 'DAILY LOGIN',
+        'daily.title': 'DAILY REWARDS',
         'daily.status': 'Day 1 ready',
         'daily.statusReady': 'Day {n} ready',
         'daily.statusClaimed': 'Day {n} claimed',
@@ -114,7 +117,7 @@ const I18N = {
         'daily.done': 'Done',
         'daily.now': 'Now',
         'daily.later': 'Later',
-        'quests.title': 'QUESTS',
+        'quests.title': 'CHALLENGES',
         'quests.sub': 'Complete them and climb the league.',
         'leaderboard.subline': 'Reach <strong>Top 3</strong> and win great prizes!',
         'runSummary.title': 'SKILLS USED',
@@ -131,6 +134,11 @@ const I18N = {
         'test.abilitiesHelp': 'ABILITIES — click = rank +1 (max 4)',
         'test.activeBuffs': 'ACTIVE BUFFS',
         'test.none': 'None',
+        'quickTest.title': 'QUICK TEST',
+        'quickTest.fly': '▶ FLY (NO ENEMIES)',
+        'quickTest.victory': '🏆 Victory Screen',
+        'quickTest.defeat': '💀 Defeat Screen',
+        'quickTest.abilityPick': '🎲 Ability Pick',
         'roadmap.reward': 'Reward',
         'roadmap.locked': 'locked',
         'roadmap.ready': 'ready',
@@ -164,6 +172,7 @@ const I18N = {
         'result.statMilestone': 'Milestone Bonus',
         'result.statMission': 'Mission',
         'result.statBestReach': 'Best Reach',
+        'result.statConsolation': 'Consolation Gold',
         'result.statGoldBank': 'Gold Bank',
         'result.statSkillsUsed': 'Skills Used',
         'result.statWaves': 'Waves Survived',
@@ -190,6 +199,7 @@ const I18N = {
         'rail.quests': 'Aufgaben',
         'rail.dailyLogin': 'Täglicher Login',
         'rail.test': 'Test',
+        'rail.quickTest': 'Schnelltest',
         'cta.endless': 'ENDLOS',
         'cta.level': 'EBENE',
         'nav.shop': 'SHOP',
@@ -221,6 +231,8 @@ const I18N = {
         'abilities.title': 'FÄHIGKEITS-ARCHIV',
         'hub.title': 'UPGRADES',
         'hub.sub': 'Gib Gold aus, um die Werte deines Schiffs zu verbessern.',
+        'hub.statUpgrades': 'STAT-UPGRADES',
+        'hub.nextMilestone': 'Nächster Meilenstein',
         'settings.title': 'EINSTELLUNGEN',
         'settings.language': 'Sprache',
         'settings.languageCopy': 'Wechsle die Oberfläche zwischen Englisch und Deutsch.',
@@ -241,7 +253,7 @@ const I18N = {
         'settings.musicCopy': 'Hintergrundmusik in Lobby und Spiel.',
         'settings.haptics': 'Haptik',
         'settings.hapticsCopy': 'Vibration bei Treffern und Belohnungen (Android & In-App).',
-        'daily.title': 'TÄGLICHER LOGIN',
+        'daily.title': 'TÄGLICHE BELOHNUNGEN',
         'daily.status': 'Tag 1 bereit',
         'daily.statusReady': 'Tag {n} bereit',
         'daily.statusClaimed': 'Tag {n} abgeholt',
@@ -251,7 +263,7 @@ const I18N = {
         'daily.done': 'Fertig',
         'daily.now': 'Jetzt',
         'daily.later': 'Später',
-        'quests.title': 'AUFGABEN',
+        'quests.title': 'HERAUSFORDERUNGEN',
         'quests.sub': 'Erledige sie und steige in der Liga auf.',
         'leaderboard.subline': 'Erreiche <strong>Top 3</strong> und gewinne tolle Preise!',
         'runSummary.title': 'GENUTZTE SKILLS',
@@ -268,6 +280,11 @@ const I18N = {
         'test.abilitiesHelp': 'SKILLS — Klick = Rang +1 (max 4)',
         'test.activeBuffs': 'AKTIVE BUFFS',
         'test.none': 'Keine',
+        'quickTest.title': 'SCHNELLTEST',
+        'quickTest.fly': '▶ FLIEGEN (OHNE GEGNER)',
+        'quickTest.victory': '🏆 Sieg-Screen',
+        'quickTest.defeat': '💀 Niederlage-Screen',
+        'quickTest.abilityPick': '🎲 Skill-Auswahl',
         'roadmap.reward': 'Belohnung',
         'roadmap.locked': 'gesperrt',
         'roadmap.ready': 'bereit',
@@ -301,6 +318,7 @@ const I18N = {
         'result.statMilestone': 'Meilenstein-Bonus',
         'result.statMission': 'Mission',
         'result.statBestReach': 'Beste Welle',
+        'result.statConsolation': 'Trostpreis',
         'result.statGoldBank': 'Gold-Konto',
         'result.statSkillsUsed': 'Genutzte Skills',
         'result.statWaves': 'Überlebte Wellen',
@@ -967,8 +985,12 @@ let currentLevelWaves = [];
 // Each entry: { type, remaining, batch, interval, timer }.
 // processWaveSpawnQueue() trickles enemies in instead of dropping them all at once.
 let waveSpawnQueue = [];
+// The mission-level equivalent used to scale THIS sub-wave's enemy stats.
+// Set by spawnWave()/spawnEndlessWave() before building the spawn queue —
+// see getWaveEffectiveLevel() for how it ramps within a single level's waves.
+let currentWaveEffectiveLevel = 1;
 let touchState = { active: false, x: 0, y: 0, lastX: 0, lastY: 0, dragVX: 0, dragVY: 0,
-    lastTapTime: 0, movedDuringTouch: false };
+    dragAccumX: 0, dragAccumY: 0, lastTapTime: 0, movedDuringTouch: false };
 let activeAbilityChoices = [];
 let lastUpgradeId = '';
 let nextEnemyId = 1;
@@ -987,7 +1009,7 @@ let musicNodesStarted = false;
 
 // ── MP3 Music Manager ──────────────────────────────────────────────────────
 // Supports multiple menu tracks: menu.mp3, menu2.mp3, menu3.mp3 ... (up to 9)
-// fight.mp3 and boss.mp3 are single tracks.
+// fight.mp3, boss.mp3 and pack.mp3 are single tracks.
 // Falls back to procedural music if files are missing.
 const MusicManager = (() => {
     // Both menu and fight support multiple tracks: menu.mp3/menu2.mp3/... and fight.mp3/fight2.mp3/...
@@ -995,8 +1017,8 @@ const MusicManager = (() => {
     const fightTracks = [];
     let menuIndex = 0;
     let fightIndex = 0;
-    const tracks = { boss: null };
-    const loaded = { boss: false };
+    const tracks = { boss: null, pack: null };
+    const loaded = { boss: false, pack: false };
     let current = null;
     let currentKey = null;
     let pendingPlay = null; // queued play call while tracks still loading
@@ -1158,6 +1180,14 @@ const MusicManager = (() => {
         tracks.boss = boss;
         boss.load();
 
+        // Pack opening: single looping track
+        const pack = loadAudio('music/pack.mp3', true);
+        pack.addEventListener('canplaythrough', () => { loaded.pack = true; });
+        pack.addEventListener('loadedmetadata', () => { loaded.pack = true; });
+        pack.addEventListener('error', () => { loaded.pack = false; tracks.pack = null; });
+        tracks.pack = pack;
+        pack.load();
+
         // Shuffle after 1s so all loadedmetadata events have fired
         setTimeout(() => { shuffle(menuTracks); shuffle(fightTracks); }, 1000);
     }
@@ -1229,6 +1259,7 @@ const MusicManager = (() => {
     }
 
     function play(key) {
+        return; // ALL MUSIC TEMPORARILY DISABLED — redo in progress
         if (currentKey === key && key !== 'menu' && key !== 'fight') return;
 
         const pool = getPool(key);
@@ -1294,7 +1325,7 @@ const MusicManager = (() => {
     // Hard safety net: silence every track that isn't the active one. Called
     // when a mood switch happens so a stuck track can never linger underneath.
     function silenceOthers(keep) {
-        [...menuTracks, ...fightTracks, tracks.boss].filter(Boolean).forEach(t => {
+        [...menuTracks, ...fightTracks, tracks.boss, tracks.pack].filter(Boolean).forEach(t => {
             if (t === keep) return;
             if (fadeTimers.has(t)) return; // mid-crossfade, let it finish cleanly
             if (!t.paused) { t.pause(); t.currentTime = 0; t.volume = 0; }
@@ -1308,7 +1339,7 @@ const MusicManager = (() => {
     }
 
     function isActive() {
-        return currentKey !== null && (menuTracks.length > 0 || fightTracks.length > 0 || tracks.boss !== null);
+        return currentKey !== null && (menuTracks.length > 0 || fightTracks.length > 0 || tracks.boss !== null || tracks.pack !== null);
     }
 
     return { init, play, stop, syncVolume, hasTrack, isActive, getLevel, connectCurrent: () => { if (current) connectTrack(current); } };
@@ -1327,7 +1358,7 @@ function startMusicVisualiser() {
     if (musicVizFrame !== null) return;
     const idleAt = t => 0.16 + Math.sin(t / 1400) * 0.10; // gentle breathing
     const root = document.documentElement;
-    const CONSUMERS = '.ring-outer,.ring-mid,.ring-inner,.skin-visual,' +
+    const CONSUMERS = '.skin-visual,' +
         '.pack-card-v2.tier-royal_omega_crate,.pack-card-v2.tier-legend_skin_pack,' +
         '.pack-card-reel.rarity-gold,.pack-card-reel.rarity-red,.peek-tile.r-gold';
     let lastWritten = -1;
@@ -1410,11 +1441,18 @@ function getNextMilestone(level = save.unlocked) {
     return LEVEL_MILESTONES.find((milestone) => milestone.level > level) || null;
 }
 
+// Fixed play-field size, the same on every device — it used to scale with
+// the viewport (bigger screen = bigger map), which made the map feel
+// inconsistent between phone/desktop. These are the values the old formula
+// already clamped down to as its minimum on typical phone screens.
+const ARENA_WIDTH = 760;
+const ARENA_HEIGHT = 1040;
+
 function configureArena() {
     const safeTop = window.GH > window.GW ? 150 : 118;
     arena.top = safeTop;
-    arena.width = Math.max(760, Math.round(window.GW * 1.42));
-    arena.height = Math.max(1040, Math.round(window.GH * 1.5));
+    arena.width = ARENA_WIDTH;
+    arena.height = ARENA_HEIGHT;
 }
 
 function getArenaSpawnPoint() {
@@ -1569,30 +1607,10 @@ function getEconomyMultiplier() {
     return 1 + getUpgradeBonus(PLAYER_STATS.economy, save.stats.economy, 'economy');
 }
 
-// The cycle maths that produces `nextIsMajor` doesn't know about `max`, so on a
-// short tree it promised a "Big spike" one level past the end — the Panzerung
-// card said "Next: Big spike" on its final purchase. Gate it on the next level
-// actually existing, and call out the last step explicitly.
 // Upgrade names/copy come from the i18n dictionary now; config.js only holds
 // the id. Falls back to the config string if a key is ever missing.
 function upgradeName(u) { const k = t('upgrade.' + u.id); return k === 'upgrade.' + u.id ? u.name : k; }
 function upgradeCopy(u) { const k = t('upgrade.' + u.id + 'Copy'); return k === 'upgrade.' + u.id + 'Copy' ? u.desc : k; }
-
-function getUpgradeStatusLabel(upgrade, level, meta) {
-    if (level >= upgrade.max) return 'Maxed';
-    if (level + 1 >= upgrade.max) return 'Final level';
-    return meta.tier.nextIsMajor ? 'Next: Big spike' : 'Build-up active';
-}
-
-function getUpgradeCardMeta(upgrade, level) {
-    const tier = getUpgradeTierInfo(upgrade, level);
-    return {
-        tier,
-        phaseLabel: tier.isMajor ? 'Core Boost' : `Step ${Math.min(tier.step, tier.cycleSize)}/${tier.cycleSize}`,
-        surgeLabel: `Surge ${tier.surge}`,
-        buttonLabel: tier.isMajor ? 'BIG UPGRADE' : 'UPGRADE'
-    };
-}
 
 function renderDailyLoginPanel() {
     const title = document.getElementById('daily-login-title');
@@ -1919,6 +1937,7 @@ function playSfx(kind, intensity = 1) {
 
 // Layered "rip the pack open" sound — low body + paper tear + sparkle tail
 function playPackRip() {
+    return; // PACK-OPENING SFX TEMPORARILY DISABLED — redo in progress
     playSfx('packRipLow', 1.0);
     setTimeout(() => playSfx('packRipHi', 0.95), 30);
     setTimeout(() => playSfx('packReveal', 0.85), 240);
@@ -1926,6 +1945,7 @@ function playPackRip() {
 
 // Casino-style build-up: rising sweep + filter open over `seconds`
 function playBuildUp(seconds = 2.4) {
+    return null; // PACK-OPENING SFX TEMPORARILY DISABLED — redo in progress
     if (!audioContext) {
         ensureMusicEngine();
         if (!audioContext) return null;
@@ -1984,6 +2004,7 @@ function createNoiseSource(ctx, seconds) {
 
 // Fanfare burst on jackpot — three layered tones with detune
 function playJackpotFanfare() {
+    return; // PACK-OPENING SFX TEMPORARILY DISABLED — redo in progress
     if (!audioContext) {
         ensureMusicEngine();
         if (!audioContext) return;
@@ -2306,26 +2327,47 @@ function loadSave() {
     syncSettingsUi();
 }
 
+// Today's reward is no longer auto-granted on launch — the Daily overlay
+// shows a real CLAIM button (window.claimDailyReward) matching the
+// reference layout. This just makes sure save.daily exists and refreshes
+// the (legacy-hidden) inline panel; it no longer mutates streak/cycleDay.
 function grantDailyLoginBonus() {
+    save.daily = Object.assign({ streak: 0, cycleDay: 0, lastClaimKey: '' }, save.daily || {});
+    renderDailyLoginPanel();
+}
+
+// What today's claim WOULD do if the player taps CLAIM — computed fresh
+// each render, only committed to save.daily by claimDailyReward().
+function getDailyPendingInfo() {
     const now = new Date();
     const todayKey = getTodayKey(now);
     const yesterdayKey = getYesterdayKey(now);
     save.daily = Object.assign({ streak: 0, cycleDay: 0, lastClaimKey: '' }, save.daily || {});
-
-    if (save.daily.lastClaimKey !== todayKey) {
-        const continued = save.daily.lastClaimKey === yesterdayKey;
-        save.daily.streak = continued ? (save.daily.streak || 0) + 1 : 1;
-        save.daily.cycleDay = continued ? ((save.daily.cycleDay || 0) % DAILY_LOGIN_REWARDS.length) + 1 : 1;
-        save.daily.lastClaimKey = todayKey;
-        save.lastLogin = todayKey;
-        applyDailyReward(DAILY_LOGIN_REWARDS[(save.daily.cycleDay || 1) - 1]);
-        saveSave();
-        showToast(`Daily login: ${DAILY_LOGIN_REWARDS[(save.daily.cycleDay || 1) - 1].label}`);
-        playHaptic('success');
-    }
-
-    renderDailyLoginPanel();
+    const claimed = save.daily.lastClaimKey === todayKey;
+    const continued = save.daily.lastClaimKey === yesterdayKey;
+    const displayDay = claimed
+        ? Math.max(1, save.daily.cycleDay || 1)
+        : (continued ? ((save.daily.cycleDay || 0) % DAILY_LOGIN_REWARDS.length) + 1 : 1);
+    const pendingStreak = claimed ? (save.daily.streak || 0) : (continued ? (save.daily.streak || 0) + 1 : 1);
+    return { todayKey, claimed, displayDay, pendingStreak };
 }
+
+window.claimDailyReward = function() {
+    const info = getDailyPendingInfo();
+    if (info.claimed) return;
+    save.daily.cycleDay = info.displayDay;
+    save.daily.streak = info.pendingStreak;
+    save.daily.lastClaimKey = info.todayKey;
+    save.lastLogin = info.todayKey;
+    applyDailyReward(DAILY_LOGIN_REWARDS[info.displayDay - 1]);
+    saveSave();
+    updateMetaHud();
+    showToast(`Daily login: ${DAILY_LOGIN_REWARDS[info.displayDay - 1].label}`);
+    playSfx && playSfx('upgrade', 0.9);
+    playHaptic('success');
+    setTimeout(renderDailyLoginPanel, 90);
+    setTimeout(() => { if (document.getElementById('daily-overlay')?.classList.contains('active')) openDailyOverlay(); }, 90);
+};
 
 let _saveFailedWarned = false;
 function saveSave() {
@@ -2785,6 +2827,8 @@ function handlePointerDown(event) {
     touchState.lastY = event.clientY;
     touchState.dragVX = 0;
     touchState.dragVY = 0;
+    touchState.dragAccumX = 0;
+    touchState.dragAccumY = 0;
     touchState.movedDuringTouch = false;
 }
 
@@ -3052,6 +3096,18 @@ function createEnemy(type, x, y) {
 // Bosses still fire on their first batch immediately so the boss bar pops up
 // the moment the boss wave starts.
 // ─────────────────────────────────────────────────────────────────────────────
+// Within one mission level, earlier sub-waves should feel like a warm-up and
+// the last (boss) sub-wave should land exactly at the mission's own level —
+// so the overall per-level difficulty numbers everywhere else (gold reward,
+// getEnemyLevelStats tuning) still mean what they always meant. Ease-in
+// exponent >1 backloads the ramp: wave 1 stays close to level 1, later waves
+// accelerate toward the mission level instead of climbing evenly.
+function getWaveEffectiveLevel(missionLevel, waveIndex, totalWaves) {
+    if (totalWaves <= 1) return missionLevel;
+    const t = (waveIndex + 1) / totalWaves;
+    return Math.max(1, Math.round(1 + (missionLevel - 1) * Math.pow(t, 1.8)));
+}
+
 function buildSpawnQueue(waveEntries, options = {}) {
     const fillMultiplier = options.fillMultiplier || 1;
     return waveEntries.map((entry) => {
@@ -3074,7 +3130,7 @@ function processWaveSpawnQueue(dt) {
         slot.timer -= dt;
         if (slot.timer <= 0) {
             const batch = Math.min(slot.batch, slot.remaining);
-            const scaledType = getEnemyLevelStats(slot.type, currentLevel);
+            const scaledType = getEnemyLevelStats(slot.type, currentWaveEffectiveLevel);
             for (let i = 0; i < batch; i++) {
                 const spawn = getArenaSpawnEdgePoint();
                 enemies.push(createEnemy(scaledType, spawn.x, spawn.y));
@@ -3090,6 +3146,7 @@ function spawnWave(index) {
     if (index >= currentLevelWaves.length) return;
     currentWave = index;
     const wave = currentLevelWaves[index];
+    currentWaveEffectiveLevel = getWaveEffectiveLevel(currentLevel, index, currentLevelWaves.length);
     // Switch to boss music when the boss wave spawns
     const hasBoss = wave.some(e => e.t === 'boss');
     if (hasBoss) setTimeout(() => MusicManager.play('boss'), 200);
@@ -3108,6 +3165,9 @@ function spawnEndlessWave(index) {
     const floorLevel = Math.max(1, Math.min(25, Math.floor((save.unlocked || 1) / 2)));
     const scaledLevel = Math.max(1, floorLevel + Math.floor(index / 2));
     currentLevel = scaledLevel;
+    // Endless already ramps its own difficulty wave-by-wave via scaledLevel —
+    // no additional per-wave-within-a-level ramp on top of that.
+    currentWaveEffectiveLevel = scaledLevel;
     const waveSet = getLevelWaves(scaledLevel);
     const templateWave = waveSet[index % waveSet.length] || waveSet[0] || [{ t: 'drone', n: 8 }];
     const fillMultiplier = 1 + Math.min(0.45, index * 0.02);
@@ -3199,6 +3259,13 @@ function updateLightningBolts(dt) {
     lightningBolts.length = w;
 }
 
+// Shortest-path angle interpolation (handles the -PI/PI wraparound) so the
+// ship eases toward a new facing instead of snapping straight to it.
+function lerpAngle(current, target, t) {
+    let diff = ((target - current + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    return current + diff * Math.min(1, t);
+}
+
 function updatePlayerMovement(dt) {
     const prevX = player.x;
     const prevY = player.y;
@@ -3210,16 +3277,33 @@ function updatePlayerMovement(dt) {
     if (keys.KeyA || keys.ArrowLeft) vx -= 1;
     if (keys.KeyD || keys.ArrowRight) vx += 1;
 
+    let targetAngle = null;
+
     if (touchState.active) {
         player.x += touchState.dragVX;
         player.y += touchState.dragVY;
 
-        if (Math.abs(touchState.dragVX) > 0.1 || Math.abs(touchState.dragVY) > 0.1) {
-            player.angle = Math.atan2(touchState.dragVY, touchState.dragVX) + Math.PI / 2;
+        // Raw per-frame dragVX/dragVY decays fast (see below) and, at slow
+        // drag speeds, pointermove events land sparsely and often land
+        // almost axis-aligned by pixel-rounding chance — so using that
+        // instantaneous vector directly made the angle flicker between
+        // near-cardinal readings instead of tracking the real diagonal
+        // intent. dragAccumX/Y instead tracks the raw, non-decayed total
+        // drag since the finger/mouse went down, which stays a stable,
+        // representative direction even between sparse slow-drag events.
+        touchState.dragAccumX = (touchState.dragAccumX || 0) + touchState.dragVX;
+        touchState.dragAccumY = (touchState.dragAccumY || 0) + touchState.dragVY;
+        if (Math.abs(touchState.dragAccumX) > 0.6 || Math.abs(touchState.dragAccumY) > 0.6) {
+            targetAngle = Math.atan2(touchState.dragAccumY, touchState.dragAccumX) + Math.PI / 2;
+            touchState.dragAccumX *= 0.5;
+            touchState.dragAccumY *= 0.5;
         }
 
         touchState.dragVX *= 0.18;
         touchState.dragVY *= 0.18;
+    } else {
+        touchState.dragAccumX = 0;
+        touchState.dragAccumY = 0;
     }
 
     const magnitude = Math.hypot(vx, vy);
@@ -3229,7 +3313,11 @@ function updatePlayerMovement(dt) {
         const slowMult = player.slowOverride > 0 ? player.slowOverride : 1;
         player.x += nx * player.spd * slowMult * dt;
         player.y += ny * player.spd * slowMult * dt;
-        player.angle = Math.atan2(ny, nx) + Math.PI / 2;
+        targetAngle = Math.atan2(ny, nx) + Math.PI / 2;
+    }
+
+    if (targetAngle !== null) {
+        player.angle = lerpAngle(player.angle || 0, targetAngle, dt * 30);
     }
     // Decay slowzone override (set each frame by updateHazards if player is inside)
     player.slowOverride = 0;
@@ -3251,28 +3339,34 @@ function updatePlayerTrail(prevX, prevY, dt) {
     if (!player) return;
     const moved = Math.hypot(player.x - prevX, player.y - prevY);
     const trail = player.trailPoints || (player.trailPoints = []);
-    const maxLength = 92;
+    // Long enough to hold ~1s of travel even at boosted speed (base 230px/s,
+    // some margin for speed upgrades/abilities) — the life-based fade below
+    // is what actually times the 1s duration; this is just its distance cap.
+    const maxLength = 320;
 
+    const shipAngle = player.angle || 0;
     player.trailBudget = (player.trailBudget || 0) + moved;
-    if (moved > 0.5 && (trail.length === 0 || player.trailBudget >= 4.5)) {
+    if (moved > 0.5 && (trail.length === 0 || player.trailBudget >= 14)) {
         trail.unshift({
             x: player.x,
             y: player.y,
+            angle: shipAngle,
             life: 1,
             width: Math.min(1.18, 0.62 + (moved / 22))
         });
         player.trailBudget = 0;
     } else if (trail.length === 0) {
-        trail.unshift({ x: player.x, y: player.y, life: 1, width: 0.62 });
+        trail.unshift({ x: player.x, y: player.y, angle: shipAngle, life: 1, width: 0.62 });
     } else {
         trail[0].x = player.x;
         trail[0].y = player.y;
+        trail[0].angle = shipAngle;
         trail[0].width = Math.min(1.18, 0.62 + (moved / 22));
     }
 
     let total = 0;
     for (let i = 0; i < trail.length; i++) {
-        trail[i].life = Math.max(0, trail[i].life - dt * 1.35);
+        trail[i].life = Math.max(0, trail[i].life - dt); // life 1 -> 0 over ~1s
         if (i > 0) {
             total += Math.hypot(trail[i - 1].x - trail[i].x, trail[i - 1].y - trail[i].y);
             if (total > maxLength) {
@@ -3283,7 +3377,7 @@ function updatePlayerTrail(prevX, prevY, dt) {
     }
 
     let tw = 0;
-    for (let i = 0; i < trail.length && tw < 16; i++) {
+    for (let i = 0; i < trail.length && tw < 70; i++) {
         if (trail[i].life > 0.08) trail[tw++] = trail[i];
     }
     trail.length = tw;
@@ -3302,7 +3396,11 @@ function updateAutoFire(dt) {
     const nearest = findNearestEnemy(player.range);
     if (!nearest) return;
 
-    player.angle = Math.atan2(nearest.y - player.y, nearest.x - player.x) + Math.PI / 2;
+    // player.angle drives the ship's visual facing (set purely by movement
+    // input in updatePlayerMovement) — it must NOT be overwritten here with
+    // the aim direction, or the ship visually spins to face whatever it's
+    // shooting at instead of where it's actually flying. Shot aiming below
+    // uses its own independent baseAngle, unaffected by this.
     if (player.shootTimer > 0) return;
 
     // ── Frenzy / Trigger Fingers fire-rate modifier ──
@@ -3330,17 +3428,26 @@ function updateAutoFire(dt) {
     const spreadStep = baseSpreadStep + (player.multiSpread || 0);
     const start = -spreadStep * (player.multishot - 1) / 2;
 
+    // Main gun fires from the ship's actual nose cannon (visible barrel nub
+    // in the sprite art), not the hull's center — the muzzle rotates with
+    // the hull's facing (player.angle) while the shot itself still travels
+    // toward the aim target (baseAngle), like a turret mounted at the nose.
+    const shipAngle = player.angle || 0;
+    const noseOffset = player.r * 1.15 * 0.9;
+    const cannonX = player.x + Math.sin(shipAngle) * noseOffset;
+    const cannonY = player.y - Math.cos(shipAngle) * noseOffset;
+
     const fireOne = (offsetAngle, opts = {}) => {
         let shotDmg = baseBulletDmg;
         const isLucky = !opts.skipLucky && player.luckyEvery > 0 && player.shotCounter % player.luckyEvery === 0;
         if (isLucky) {
             shotDmg *= (player.luckyMult || 5);
-            addFxText(player.x, player.y - 28, 'LUCKY!', '#d6b36a', 0.5, 20);
+            addFxText(cannonX, cannonY - 16, 'LUCKY!', '#d6b36a', 0.5, 20);
         }
-        addP(player.x, player.y - 12, isLucky ? '#d6b36a' : '#6fb7c5', isLucky ? 8 : 5, 140, 0.18, 2);
+        addP(cannonX, cannonY, isLucky ? '#d6b36a' : '#6fb7c5', isLucky ? 8 : 5, 140, 0.18, 2);
         spawnProjectile({
-            x: player.x,
-            y: player.y,
+            x: cannonX,
+            y: cannonY,
             angle: baseAngle + offsetAngle,
             speed: 760,
             life: 1.1,
@@ -4628,7 +4735,7 @@ function updateEnemies(dt) {
         enemy.x = Math.max(WALL + enemy.r, Math.min(arena.width - WALL - enemy.r, enemy.x));
         enemy.y = Math.max(arena.top + enemy.r, Math.min(arena.height - WALL - enemy.r, enemy.y));
         if (distance < enemy.r + player.r) {
-            damagePlayer(enemy.isBoss ? 'boss' : 'enemy');
+            damagePlayer(enemy.isBoss ? 'boss' : 'enemy', enemy.isBoss ? 2 : 1);
         }
     });
 }
@@ -4676,7 +4783,7 @@ function updateBossBehavior(enemy, dt, nx, ny, px, py) {
         spawnAngles.forEach((offset) => {
             const sx = enemy.x + Math.cos(enemy.aiClock + offset) * 80;
             const sy = enemy.y + Math.sin(enemy.aiClock + offset) * 80;
-            enemies.push(createEnemy(getEnemyLevelStats('chaser', currentLevel), sx, sy));
+            enemies.push(createEnemy(getEnemyLevelStats('chaser', currentWaveEffectiveLevel), sx, sy));
         });
         addP(enemy.x, enemy.y, '#a184c9', 14, 140, 0.45, 3);
     }
@@ -4831,7 +4938,7 @@ function updateHazards(dt) {
             const distance = Math.hypot(player.x - hazard.x, player.y - hazard.y);
             if (!hazard.hit && Math.abs(distance - hazard.radius) < 14) {
                 hazard.hit = true;
-                damagePlayer('boss');
+                damagePlayer('boss', 2);
             }
         }
         // ── Singularity: traveling black-hole shot ──
@@ -5193,6 +5300,7 @@ function checkWaveProgress() {
     // Don't advance while there are still enemies queued to spawn for this wave.
     if (waveSpawnQueue && waveSpawnQueue.length > 0) return;
     if (enemies.some((enemy) => enemy.alive)) return;
+    if (_testArenaActive && _testSuppressAutoSpawn) return; // Quick Test "fly, no enemies" — never auto-refill a wave
     if (currentMode === 'endless') {
         spawnEndlessWave(currentWave + 1);
         return;
@@ -5596,7 +5704,7 @@ function showActiveAbilityPicker() {
         const card = document.createElement('div');
         card.className = 'ability-card ability-card--epic';
         card.innerHTML = `
-            <div class="ability-card__icon" style="color:${def.color}">${def.icon}</div>
+            <div class="ability-card__icon" style="color:${def.color}"><img src="icons/small/${def.icon}" class="ability-card__icon-img" alt=""></div>
             <div class="ability-card__name">${def.name}</div>
             <div class="ability-card__desc">${def.levels[0].desc}</div>
         `;
@@ -5678,7 +5786,13 @@ function drawAbilityChoices() {
         wrap.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
         const innerSvgHtml = (wrap.querySelector('svg, img') && wrap.querySelector('svg, img').outerHTML) || `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>`;
 
-        const card = document.createElement('div');
+        // A real <button>, not a styled <div> — the nav bar / shop buttons
+        // use plain <button> + CSS :active and press reliably on phones;
+        // the div+onclick+manual-pointer-class version of this card didn't,
+        // even with touch-action set. Match the proven pattern exactly
+        // instead of re-inventing the press effect in JS.
+        const card = document.createElement('button');
+        card.type = 'button';
         card.className = `pick-diamond tier-${tier} ${isEvolve ? 'evolve' : ''} ${idx === _abilityPickFocusIdx ? 'selected' : ''}`.trim();
         card.dataset.idx = String(idx);
         card.dataset.id = ability.id;
@@ -5687,9 +5801,11 @@ function drawAbilityChoices() {
             <div class="diamond-frame">
                 <div class="diamond-icon">${innerSvgHtml}</div>
             </div>
-            <div class="pd-label">${nextDef.name}</div>
-            <div class="pd-desc">${nextDef.desc || ''}</div>
-            <div class="pd-rank" title="Rank ${rank + 1}"></div>
+            <div class="pd-copy">
+                <div class="pd-rarity">${tier}</div>
+                <div class="pd-label">${nextDef.name}</div>
+                <div class="pd-desc">${nextDef.desc || ''}</div>
+            </div>
         `;
         card.onclick = () => {
             _abilityPickFocusIdx = idx;
@@ -5699,6 +5815,15 @@ function drawAbilityChoices() {
             playSfx('tap', 0.7);
             playHaptic('tap');
         };
+        // The pickIn entrance animation uses fill-mode:both, so it keeps
+        // "owning" the transform property forever after it finishes —
+        // :active's !important transform apparently isn't a reliable enough
+        // override against that on iOS Safari (brightness/filter came through
+        // fine, translateY never did). Drop the animation entirely once it's
+        // done so the button goes back to being a plain element with no
+        // competing transform source at all.
+        card.addEventListener('animationend', () => { card.style.animation = 'none'; }, { once: true });
+        setTimeout(() => { card.style.animation = 'none'; }, 350); // belt-and-suspenders if animationend never fires
         cards.appendChild(card);
     });
 
@@ -5706,6 +5831,9 @@ function drawAbilityChoices() {
     _abilityPickFocusIdx = 0;
     updateAbilityPickFeature();
     updateMetaHud();
+
+    const waveEl = document.getElementById('ability-pick-wave');
+    if (waveEl) waveEl.textContent = `${currentWave + 1}`;
 }
 
 // Update the featured info card + tree based on current focus
@@ -5750,14 +5878,26 @@ function updateAbilityPickFeature() {
     treeEl.innerHTML = html;
 }
 
-// "TAKE" button at the bottom — applies the focused ability
+// "TAKE" button at the bottom — applies the focused ability.
+// `#ability-overlay` is `display:none` the instant `.active` is removed, so
+// doing that synchronously in this click handler wiped the button off the
+// page before the browser ever painted its :active press-down frame — same
+// bug/fix as toggleNeonTrail(). Apply the ability immediately (invisible
+// state change), defer only the overlay close by one frame's worth+ so the
+// press effect gets to render first.
 window.confirmAbilityPick = function() {
     const ability = activeAbilityChoices[_abilityPickFocusIdx];
     if (!ability) return;
     applyAbility(ability.id);
-    abilityPicking = false;
-    const overlay = document.getElementById('ability-overlay');
-    if (overlay) overlay.classList.remove('active');
+    setTimeout(() => {
+        abilityPicking = false;
+        const overlay = document.getElementById('ability-overlay');
+        if (overlay) overlay.classList.remove('active');
+        if (_quickTestAbilityPickActive) {
+            _quickTestAbilityPickActive = false;
+            document.getElementById('quick-test-overlay')?.classList.add('active');
+        }
+    }, 90);
 };
 
 function applyAbility(id) {
@@ -6146,7 +6286,7 @@ function getArmorDeflectChance(points) {
     return Math.min(0.35, 1 - (1 / (1 + points * 0.032)));
 }
 
-function damagePlayer(source) {
+function damagePlayer(source, amount = 1) {
     if (player.invulnerable > 0) return;
 
     // ── Phantom Shield — block the hit entirely ──
@@ -6183,9 +6323,10 @@ function damagePlayer(source) {
     }
 
     // ── Deflector (meta armor upgrade) — chance to shrug the hit off ──
-    // Damage in this game is binary (always exactly one heart), so flat damage
-    // reduction has nothing to reduce. Armor is therefore a deflect chance with
-    // diminishing returns, hard-capped at 35% so it can never trivialise a run.
+    // Damage is per-hit hearts (normally 1, bosses can deal 2 — see `amount`),
+    // not a continuous value, so flat damage reduction has nothing to reduce.
+    // Armor is therefore a deflect chance with diminishing returns, hard-capped
+    // at 35% so it can never trivialise a run.
     if (player.armorPoints > 0 && Math.random() < getArmorDeflectChance(player.armorPoints)) {
         player.invulnerable = 0.6;
         addP(player.x, player.y, '#8db4d2', 18, 150, 0.3, 4);
@@ -6218,15 +6359,15 @@ function damagePlayer(source) {
     }
 
     const hpBefore = player.hp;
-    player.hp -= 1;
+    player.hp -= amount;
     player.invulnerable = 0.9;
 
     // STRONGER heart-loss feedback: red full-screen flash, harder shake, particle burst,
-    // HUD-heart shake animation flag, big -1 text, body class for CSS pulse.
+    // HUD-heart shake animation flag, big -N text, body class for CSS pulse.
     addP(player.x, player.y, source === 'boss' ? '#d0716f' : '#ffffff', 28, 220, 0.45, 4);
     addP(player.x, player.y, '#d0716f', 12, 320, 0.35, 5); // extra red splash
-    addFxText(player.x, player.y - 20, '-1', '#d0716f', 0.7, 30);
-    screenShake = Math.min(3.6, screenShake + (source === 'boss' ? 1.4 : 0.95));
+    addFxText(player.x, player.y - 20, `-${amount}`, '#d0716f', 0.7, 30);
+    screenShake = Math.min(3.6, screenShake + (source === 'boss' ? 1.4 : 0.95) * amount);
     powerPulse = Math.min(2.6, powerPulse + 0.4);
     playSfx('hit', source === 'boss' ? 1.25 : 1.1);
     playSfx('death', 0.4); // small ominous low note layered on every -1
@@ -6241,7 +6382,8 @@ function damagePlayer(source) {
 
     // Trigger HUD heart shake/lost animation
     window.__heartDamageTime = performance.now();
-    window.__heartLostIdx = hpBefore - 1; // the heart that just got depleted
+    window.__heartLostIdx = Math.max(0, hpBefore - amount); // first heart that got depleted
+    window.__heartLostCount = amount; // how many depleted this hit (bosses can deal 2)
     // Body class for CSS-driven full-screen flash
     document.body.classList.add('hp-flash');
     if (window.__hpFlashTimer) clearTimeout(window.__hpFlashTimer);
@@ -6348,13 +6490,17 @@ function showResultOverlay({ loss = false, title, copy, stats, primaryLabel, sec
     titleNode.textContent = title;
     copyNode.textContent = copy;
 
-    let starsHtml = '';
-    if (!loss && stars >= 0) {
-        const lit = Math.max(0, Math.min(3, stars));
-        starsHtml = `<div class="result-stars">${[0,1,2].map((i) => `<img class="result-star ${i < lit ? 'lit' : ''}" style="--star-delay:${(i*0.15+0.2).toFixed(2)}s" src="icons/small/star-48.png" alt="">`).join('')}</div>`;
+    const starsSlot = document.getElementById('result-stars-slot');
+    if (starsSlot) {
+        if (!loss && stars >= 0) {
+            const lit = Math.max(0, Math.min(3, stars));
+            starsSlot.innerHTML = `<div class="result-stars">${[0,1,2].map((i) => `<img class="result-star ${i < lit ? 'lit' : ''}" style="--star-delay:${(i*0.15+0.2).toFixed(2)}s" src="icons/small/star-48.png" alt="">`).join('')}</div>`;
+        } else {
+            starsSlot.innerHTML = '';
+        }
     }
 
-    statsNode.innerHTML = starsHtml + stats.map((entry) => `<div class="result-line">${entry.icon ? `<img class="result-line-icon" src="icons/small/${entry.icon}-48.png" alt="">` : ''}<span>${entry.label}</span><strong${entry.color ? ` style="--line-color:${entry.color}"` : ''}>${entry.value}</strong></div>`).join('');
+    statsNode.innerHTML = stats.map((entry) => `<div class="result-line">${entry.icon ? `<div class="result-line-icon-badge"><img class="result-line-icon" src="icons/small/${entry.icon}-48.png" alt=""></div>` : ''}<span>${entry.label}</span><strong${entry.color ? ` style="--line-color:${entry.color}"` : ''}>${entry.value}</strong></div>`).join('');
 
     // Level progress toward the next ability-milestone unlock. There is no
     // XP-within-level value in this game (save.unlocked is a flat stage
@@ -6459,13 +6605,25 @@ function gameOver() {
         });
         return;
     }
+    // Mission mode used to pay out NOTHING on death beyond whatever gold was
+    // picked up mid-run — dying on a level you can't clear yet felt wasted
+    // rather than like progress toward affording the upgrade that gets you
+    // through it. Half a normal clear's reward, scaled by how much of the
+    // level you actually got through (0 waves in = 0 gold, so instant-quitting
+    // isn't a way to farm this).
+    const wavesProgress = Math.min(1, currentWave / Math.max(1, currentLevelWaves.length));
+    const consolationGold = Math.round(getLevelGoldReward(currentLevel) * getEconomyMultiplier() * wavesProgress * 0.5);
+    if (consolationGold > 0) {
+        save.gold += consolationGold;
+        saveSave();
+    }
+
     const failStats = [
         { label: t('result.statMission'), value: `${t('cta.level')} ${currentLevel}`, icon: 'trophy', color: 'var(--r-dark)' },
         { label: t('result.statBestReach'), value: `${t('hud.waveShort')} ${Math.min(currentWave + 1, Math.max(1, currentLevelWaves.length))}/${Math.max(1, currentLevelWaves.length)}`, icon: 'skull', color: 'var(--r-red)' },
+        ...(consolationGold > 0 ? [{ label: t('result.statConsolation'), value: `+${formatCompactNumber(consolationGold)}`, icon: 'coin', color: 'var(--r-gold)' }] : []),
         { label: t('result.statGoldBank'), value: formatCompactNumber(save.gold), icon: 'coin', color: 'var(--r-gold)' }
     ];
-    const failSkills = formatRunSkillsList(save.lastRunSkills);
-    if (failSkills) failStats.push({ label: t('result.statSkillsUsed'), value: failSkills, icon: 'upgrades', color: 'var(--r-blue)' });
     showResultOverlay({
         loss: true,
         title: t('result.failTitle'),
@@ -6535,10 +6693,6 @@ function victory() {
     if (milestoneBonus) {
         stats.push({ label: t('result.statMilestone'), value: `+${formatCompactNumber(milestoneBonus.gold)} G · +${milestoneBonus.gems} ◆ · 1× ${PACK_DEFINITIONS[milestoneBonus.packKey]?.name || t('result.pack')}`, icon: 'chest', color: 'var(--r-gold)' });
     }
-    const skillsSummary = formatRunSkillsList(save.lastRunSkills);
-    if (skillsSummary) {
-        stats.push({ label: t('result.statSkillsUsed'), value: skillsSummary, icon: 'bolt', color: 'var(--r-blue)' });
-    }
     const lbAfter = (function() {
         try {
             if (typeof getLeaderboardBots !== 'function') return null;
@@ -6564,20 +6718,6 @@ function victory() {
     });
 }
 
-// Build a one-line skills summary like "Damage Core (R1) · Twin Volley (R2)"
-function formatRunSkillsList(ranks) {
-    if (!ranks) return '';
-    const entries = Object.entries(ranks).filter(([, r]) => r > 0);
-    if (!entries.length) return '';
-    const parts = entries.slice(0, 4).map(([id, rank]) => {
-        const localised = (typeof tSkill === 'function') ? tSkill(id) : null;
-        const ab = ABILITIES.find((a) => a.id === id);
-        const name = (localised && localised.name) || (ab ? ab.name : id);
-        return `${name} (R${rank})`;
-    });
-    if (entries.length > 4) parts.push(`+${entries.length - 4} more`);
-    return parts.join(' · ');
-}
 
 window.openRunSummary = function() {
     const overlay = document.getElementById('run-summary-overlay');
@@ -6629,7 +6769,10 @@ function updateHubVisualization(focusId) {
     // This used to be a fixed [150, 110, 75] for exactly three upgrades — the
     // two new defensive paths would have got radius `undefined` and rendered
     // nothing. Derived from UPGRADES.length so it stays correct if more are added.
-    const R_OUTER = 150, R_INNER = 62;
+    // Compact 170x170 stage (matches Upgrades.dc.html) — inner radius stays
+    // clear of the 62px ship icon at the center, outer radius stays inside
+    // the panel.
+    const R_OUTER = 78, R_INNER = 36;
     const arcCount = Math.max(1, UPGRADES.length);
     const radii = UPGRADES.map((_, i) =>
         arcCount === 1 ? R_OUTER : R_OUTER - ((R_OUTER - R_INNER) * (i / (arcCount - 1))));
@@ -6637,13 +6780,13 @@ function updateHubVisualization(focusId) {
     // each driven by stroke-dasharray (so it actually GROWS as level rises,
     // it doesn't just rotate around).
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '-160 -160 320 320');
+    svg.setAttribute('viewBox', '-85 -85 170 170');
     svg.setAttribute('class', 'hub-progress-svg');
     svg.style.position = 'absolute';
     svg.style.inset = '50% auto auto 50%';
     svg.style.transform = 'translate(-50%, -50%)';
-    svg.style.width = '320px';
-    svg.style.height = '320px';
+    svg.style.width = '170px';
+    svg.style.height = '170px';
     svg.style.pointerEvents = 'none';
 
     UPGRADES.forEach((upgrade, index) => {
@@ -6657,21 +6800,26 @@ function updateHubVisualization(focusId) {
         track.setAttribute('r', String(r));
         track.setAttribute('fill', 'none');
         track.setAttribute('stroke', 'rgba(255,255,255,0.07)');
-        track.setAttribute('stroke-width', '4');
+        track.setAttribute('stroke-width', '3');
         svg.appendChild(track);
-        // active arc — starts at top (12 o'clock), grows clockwise
-        const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        arc.setAttribute('cx', '0'); arc.setAttribute('cy', '0');
-        arc.setAttribute('r', String(r));
-        arc.setAttribute('fill', 'none');
-        arc.setAttribute('stroke', upgrade.color);
-        arc.setAttribute('stroke-width', String(5 + Math.round(ratio * 5)));
-        arc.setAttribute('stroke-linecap', 'round');
-        arc.setAttribute('stroke-dasharray', `${(circ * ratio).toFixed(1)} ${circ.toFixed(1)}`);
-        arc.setAttribute('stroke-dashoffset', '0');
-        arc.setAttribute('transform', 'rotate(-90)');
-        arc.style.transition = 'stroke-dasharray .35s ease, stroke-width .25s ease';
-        svg.appendChild(arc);
+        // active arc — starts at top (12 o'clock), grows clockwise. Skipped
+        // entirely at ratio 0: a round-linecap stroke with a 0-length dash
+        // still paints a visible dot, which showed up as a little tick mark
+        // stacked above the rings for every still-unpurchased stat.
+        if (ratio > 0) {
+            const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            arc.setAttribute('cx', '0'); arc.setAttribute('cy', '0');
+            arc.setAttribute('r', String(r));
+            arc.setAttribute('fill', 'none');
+            arc.setAttribute('stroke', upgrade.color);
+            arc.setAttribute('stroke-width', String(2 + Math.round(ratio * 2)));
+            arc.setAttribute('stroke-linecap', 'round');
+            arc.setAttribute('stroke-dasharray', `${(circ * ratio).toFixed(1)} ${circ.toFixed(1)}`);
+            arc.setAttribute('stroke-dashoffset', '0');
+            arc.setAttribute('transform', 'rotate(-90)');
+            arc.style.transition = 'stroke-dasharray .35s ease, stroke-width .25s ease';
+            svg.appendChild(arc);
+        }
     });
 
     holder.appendChild(svg);
@@ -6680,9 +6828,12 @@ function updateHubVisualization(focusId) {
     const level = save.stats[focused.id] || 0;
     const current = getUpgradePreviewValue(focused.id, level);
     const next = getUpgradePreviewValue(focused.id, Math.min(focused.max, level + 1));
+    const label = `<span class="hub-readout-label">${upgradeName(focused).toUpperCase()}</span>`;
+    const currentSpan = `<span class="hub-readout-current">${current}</span>`;
+    const arrow = `<span class="hub-readout-arrow">&gt;</span>`;
 
     if (current !== next) {
-        readout.textContent = `${upgradeName(focused)}: ${current} > ${next}`;
+        readout.innerHTML = `${label}${currentSpan}${arrow}<span class="hub-readout-next">${next}</span>`;
     } else {
         // Stats that land on whole numbers (hearts) don't move every level, so
         // "5 HP > 5 HP" made the purchase look pointless. Show how many levels
@@ -6690,12 +6841,13 @@ function updateHubVisualization(focusId) {
         let steps = 0;
         for (let l = level + 1; l <= focused.max; l++) {
             steps++;
-            if (getUpgradePreviewValue(focused.id, l) !== current) {
-                readout.textContent = `${upgradeName(focused)}: ${current} > ${getUpgradePreviewValue(focused.id, l)} in ${steps} Lv`;
+            const steppedNext = getUpgradePreviewValue(focused.id, l);
+            if (steppedNext !== current) {
+                readout.innerHTML = `${label}${currentSpan}${arrow}<span class="hub-readout-next">${steppedNext} in ${steps} Lv</span>`;
                 return;
             }
         }
-        readout.textContent = `${upgradeName(focused)}: ${current} (max)`;
+        readout.innerHTML = `${label}${currentSpan}<span class="hub-readout-next">(max)</span>`;
     }
 }
 
@@ -6715,24 +6867,46 @@ function renderHub() {
     if (!grid) return;
     grid.innerHTML = '';
 
+    const shipIconHolder = document.getElementById('hub-ship-icon');
+    if (shipIconHolder) {
+        const shipIconFile = getSkinIconFile(save.equippedSkin) || 'skin-stock';
+        shipIconHolder.innerHTML = `<img src="icons/small/${shipIconFile}-48.png" alt="">`;
+    }
+
+    const statCount = document.getElementById('hub-stat-count');
+    if (statCount) statCount.textContent = `${UPGRADES.length} STATS`;
+
     UPGRADES.forEach((upgrade) => {
         const level = save.stats[upgrade.id] || 0;
         const cost = getUpgradeCost(upgrade, level);
-        const meta = getUpgradeCardMeta(upgrade, level);
+        const maxed = level >= upgrade.max;
+        const tier = getUpgradeTierInfo(upgrade, level);
+        const pipTotal = tier.cycleSize;
+        const pipDone = maxed ? pipTotal : Math.min(pipTotal, tier.step);
+        const pips = Array.from({ length: pipTotal }, (_, i) =>
+            `<div class="hub-pip" style="${i < pipDone ? `background:${upgrade.color}` : ''}"></div>`
+        ).join('');
+        const tag = maxed ? 'MAXED' : (tier.isMajor ? 'MAJOR STEP' : `${tier.step}/${pipTotal}`);
+
         const card = document.createElement('div');
-        card.className = `shop-card ${lastUpgradeId === upgrade.id ? 'upgraded' : ''}`.trim();
+        card.className = `hub-stat-card ${lastUpgradeId === upgrade.id ? 'upgraded' : ''}`.trim();
         card.innerHTML = `
-            <div class="upgrade-card-topline">
-                <div class="card-icon" style="border-color:${upgrade.color}66;"><img src="icons/small/${upgrade.icon}" alt="" class="upgrade-stat-icon"></div>
-                <div class="upgrade-tag ${meta.tier.isMajor ? 'major' : 'minor'}">${meta.phaseLabel}</div>
+            <div class="hub-stat-icon" style="border-color:${upgrade.color};"><img src="icons/small/${upgrade.icon}" alt=""></div>
+            <div class="hub-stat-body">
+                <div class="hub-stat-topline">
+                    <span class="hub-stat-name">${upgradeName(upgrade)}</span>
+                    <span class="hub-stat-tag" style="color:${maxed ? '#8d84c4' : upgrade.color}">${tag}</span>
+                </div>
+                <div class="hub-stat-desc">${upgradeCopy(upgrade)}</div>
+                <div class="hub-stat-metarow">
+                    <div class="hub-stat-pips">${pips}</div>
+                    <span class="hub-stat-meta" style="color:${upgrade.color}">Lvl ${level}</span>
+                </div>
             </div>
-            <div class="card-title">${upgradeName(upgrade)}</div>
-            <div class="card-meta">${meta.surgeLabel} | ${getUpgradeStatusLabel(upgrade, level, meta)}</div>
-            <div class="card-copy">${upgradeCopy(upgrade)}</div>
-            <div class="upgrade-card-footer">
-                <div class="upgrade-surge">${meta.tier.isMajor ? 'Major step' : `Cycle ${Math.min(meta.tier.step, meta.tier.cycleSize)}/${meta.tier.cycleSize}`}</div>
-                <button class="inline-button" type="button" ${level >= upgrade.max ? 'disabled' : ''}>${level >= upgrade.max ? 'MAXED' : `${meta.buttonLabel} ${cost} GOLD`}</button>
-            </div>
+            <button class="hub-stat-cta ${maxed ? 'maxed' : ''}" type="button" ${maxed ? 'disabled' : ''}>
+                ${maxed ? '' : `<img src="icons/small/coin-48.png" alt="" class="hub-stat-cta-icon">`}
+                <span>${maxed ? 'MAXED' : `+ ${cost} GOLD`}</span>
+            </button>
         `;
         card.onmouseenter = () => updateHubVisualization(upgrade.id);
         card.onclick = () => buyUpgrade(upgrade.id);
@@ -6741,6 +6915,28 @@ function renderHub() {
 
     updateHubVisualization();
     updateUpgradeNotifier();
+    renderHubMilestone();
+}
+
+function renderHubMilestone() {
+    const banner = document.getElementById('hub-milestone-banner');
+    if (!banner) return;
+    const current = save.unlocked || 1;
+    const next = getNextMilestone(current);
+    if (!next) { banner.style.display = 'none'; return; }
+
+    const prevLevel = [...LEVEL_MILESTONES].reverse().find((m) => m.level <= current)?.level || 0;
+    const span = Math.max(1, next.level - prevLevel);
+    const pct = Math.max(0, Math.min(100, ((current - prevLevel) / span) * 100));
+    const remaining = Math.max(0, next.level - current);
+
+    const valueEl = document.getElementById('hub-milestone-value');
+    const fillEl = document.getElementById('hub-milestone-fill');
+    const captionEl = document.getElementById('hub-milestone-caption');
+    if (valueEl) valueEl.textContent = `${current} / ${next.level}`;
+    if (fillEl) fillEl.style.width = `${pct}%`;
+    if (captionEl) captionEl.textContent = `${remaining} more level${remaining === 1 ? '' : 's'} until "${next.title}".`;
+    banner.style.display = '';
 }
 
 function renderShop() {
@@ -7489,44 +7685,54 @@ window.closePackPeek = function(event) {
 };
 
 // ─────────────────────────── DAILY OVERLAY (popup) ────────────
-// Reward icon mapping (small SVG glyph)
+// Reward icon mapping — real pixel-art icons from the shared icon set,
+// same ones used everywhere else (Shop, Inventory), not hand-drawn SVGs.
 function _rewardIconFor(reward) {
-    if (reward.gold || /gold/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#d6b36a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="9,9 15,9 12,15 15,15"/></svg>';
-    if (reward.gems || /gems/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#a184c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,11 12,22 2,11"/><polyline points="2,11 22,11"/></svg>';
-    if (reward.packKey || /pack/i.test(reward.label || '')) return '<svg viewBox="0 0 24 24" fill="none" stroke="#bf8bba" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,3 22,9 22,17 12,23 2,17 2,9"/></svg>';
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>';
+    if (reward.packKey || /pack/i.test(reward.label || '')) {
+        const file = getPackIconFile(reward.packKey) || 'pack';
+        return `<img src="icons/small/${file}-48.png" alt="">`;
+    }
+    if (reward.gold || /gold/i.test(reward.label || '')) return '<img src="icons/small/coin-48.png" alt="">';
+    if (reward.gems || /gems/i.test(reward.label || '')) return '<img src="icons/small/gem-48.png" alt="">';
+    return '<img src="icons/small/coin-48.png" alt="">';
 }
 
 window.openDailyOverlay = function() {
     const overlay = document.getElementById('daily-overlay');
     const grid = document.getElementById('daily-overlay-grid');
     const status = document.getElementById('daily-overlay-status');
+    const dayCounter = document.getElementById('daily-day-counter');
     if (!overlay || !grid) return;
-    const cycleDay = Math.max(1, save.daily?.cycleDay || 1);
-    const claimedToday = save.daily?.lastClaimKey === getTodayKey();
-    const streak = save.daily?.streak || 0;
+    const info = getDailyPendingInfo();
+    const displayDay = info.displayDay;
 
+    if (dayCounter) dayCounter.textContent = `Day ${displayDay}/${DAILY_LOGIN_REWARDS.length}`;
     if (status) {
-        status.innerHTML = claimedToday
-            ? `<span style="color:#6ec496">✓ Tag ${cycleDay} eingesammelt</span> · komm morgen wieder · Streak <strong style="color:#d6b36a">${streak}</strong>`
-            : `<span style="color:#93c1d8">Tag ${cycleDay} bereit</span> · Streak <strong style="color:#d6b36a">${streak}</strong>`;
+        status.innerHTML = info.claimed
+            ? `<span style="color:#6ec496">✓ Day ${displayDay} claimed</span> · come back tomorrow · Streak <strong style="color:#d6b36a">${info.pendingStreak}</strong>`
+            : `<span style="color:#93c1d8">Day ${displayDay} ready</span> · Streak <strong style="color:#d6b36a">${info.pendingStreak}</strong>`;
     }
 
-    grid.innerHTML = DAILY_LOGIN_REWARDS.map((reward, index) => {
+    const cards = DAILY_LOGIN_REWARDS.map((reward, index) => {
         const day = index + 1;
-        const stateClass = day < cycleDay ? 'past' : day === cycleDay ? (claimedToday ? 'past' : 'today') : 'future';
-        const statusText = day < cycleDay ? '✓' : day === cycleDay ? (claimedToday ? '✓' : 'JETZT') : `+${day - cycleDay}d`;
-        const isToday = day === cycleDay && !claimedToday;
+        const isToday = day === displayDay;
+        const claimableToday = isToday && !info.claimed;
+        const stateClass = day < displayDay || (isToday && info.claimed) ? 'past' : isToday ? 'today' : 'future';
+        const tag = claimableToday ? 'button' : 'div';
+        const attrs = claimableToday ? 'type="button" onclick="claimDailyReward()"' : '';
         return `
-            <div class="lb-daily-card state-${stateClass} ${isToday ? 'highlight' : ''}">
-                <div class="lb-daily-day">Tag ${day}</div>
+            <${tag} class="lb-daily-card state-${stateClass}" ${attrs}>
+                ${stateClass === 'past' ? '<span class="lb-daily-ribbon ribbon-done">DONE</span>' : ''}
+                ${stateClass === 'today' ? '<span class="lb-daily-ribbon ribbon-today">TODAY</span>' : ''}
+                <div class="lb-daily-day">Day ${day}</div>
                 <div class="lb-daily-icon">${_rewardIconFor(reward)}</div>
                 <div class="lb-daily-reward">${reward.label}</div>
-                <div class="lb-daily-status">${statusText}</div>
-            </div>
+                ${claimableToday ? '<div class="lb-daily-claim-label">CLAIM</div>' : ''}
+            </${tag}>
         `;
     }).join('');
-    renderChallengesInto(overlay);
+    grid.innerHTML = cards;
+
     overlay.classList.add('active');
     playSfx('peekOpen', 0.85);
     playHaptic('peek');
@@ -7541,7 +7747,7 @@ window.closeDailyOverlay = function(event) {
 const DAILY_CHALLENGES = [
     { id: 'kill100', title: 'Eliminate 100 enemies',         goal: 100, reward: { gold: 120, label: '120 Gold' },   tier: 'common' },
     { id: 'wave5',   title: 'Reach wave 5 in Endless',       goal: 5,   reward: { gems: 12, label: '12 Gems' },     tier: 'rare' },
-    { id: 'evolve',  title: 'Evolve an ability twice in a run', goal: 2, reward: { packKey: 'strike', label: '1 Pack II' }, tier: 'epic' },
+    { id: 'evolve',  title: 'Evolve an ability twice in a run', goal: 2, reward: { packKey: 'strike_pack_ii', label: '1 Pack II' }, tier: 'epic' },
     { id: 'noHit',   title: 'Clear a mission without damage', goal: 1,  reward: { gems: 20, label: '20 Gems' },     tier: 'epic' },
     { id: 'kills500',title: 'Eliminate 500 enemies (weekly)', goal: 500, reward: { gold: 800, label: '800 Gold' },  tier: 'legendary', weekly: true }
 ];
@@ -7552,6 +7758,64 @@ function getChallengeProgress(c) {
     return { value: v, pct: Math.min(1, v / c.goal) };
 }
 
+// Non-weekly challenge progress/claim state resets once a real UTC day
+// boundary passes — this is what makes the "Resets in H:MM:SS" countdown
+// mean something instead of being purely decorative. The weekly challenge
+// is untouched here (no weekly reset implemented yet).
+function rolloverDailyChallengesIfNeeded() {
+    const todayKey = getTodayKey();
+    if (save.dailyChallengeResetKey === todayKey) return;
+    save.dailyChallengeResetKey = todayKey;
+    const progress = save.challengeProgress || {};
+    const claimed = save.challengeClaimed || {};
+    DAILY_CHALLENGES.filter((c) => !c.weekly).forEach((c) => { delete progress[c.id]; delete claimed[c.id]; });
+    save.challengeProgress = progress;
+    save.challengeClaimed = claimed;
+    saveSave();
+}
+
+window.claimChallenge = function(id) {
+    const c = DAILY_CHALLENGES.find((x) => x.id === id);
+    if (!c) return;
+    const p = getChallengeProgress(c);
+    save.challengeClaimed = save.challengeClaimed || {};
+    if (p.value < c.goal || save.challengeClaimed[id]) return;
+    save.challengeClaimed[id] = true;
+    if (c.reward.gold) save.gold += c.reward.gold;
+    if (c.reward.gems) save.gems += c.reward.gems;
+    if (c.reward.packKey) save.packs.push(c.reward.packKey);
+    saveSave();
+    updateMetaHud();
+    showToast(`${c.reward.label} claimed.`);
+    playSfx && playSfx('upgrade', 0.9);
+    playHaptic('success');
+    setTimeout(() => { const ov = document.getElementById('quests-overlay'); if (ov) renderChallengesInto(ov); }, 90);
+};
+
+// Live "Resets in H:MM:SS" countdown to the next UTC day boundary (the same
+// boundary getTodayKey()/rolloverDailyChallengesIfNeeded() use), ticking
+// while the overlay is open.
+let _challengesResetIntervalId = null;
+function updateChallengesResetTimerText() {
+    const el = document.getElementById('challenges-reset-timer');
+    if (!el) return;
+    const now = new Date();
+    const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+    const ms = Math.max(0, next - now);
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    el.textContent = `Resets ${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+function startChallengesResetTimer() {
+    stopChallengesResetTimer();
+    updateChallengesResetTimerText();
+    _challengesResetIntervalId = setInterval(updateChallengesResetTimerText, 1000);
+}
+function stopChallengesResetTimer() {
+    if (_challengesResetIntervalId) { clearInterval(_challengesResetIntervalId); _challengesResetIntervalId = null; }
+}
+
 // Renders the weekly-pass banner + the regular (non-weekly) challenge cards
 // into the merged Daily/Quests overlay. Shared by openDailyOverlay() so both
 // rail entry points (Daily, Quests) land on the same combined screen.
@@ -7559,13 +7823,14 @@ function renderChallengesInto(overlay) {
     const list = overlay.querySelector('#challenges-list');
     const weeklyBanner = overlay.querySelector('#weekly-pass-banner');
     if (!list) return;
+    rolloverDailyChallengesIfNeeded();
 
     const weeklyDef = DAILY_CHALLENGES.find((c) => c.weekly);
     if (weeklyBanner && weeklyDef) {
         const wp = getChallengeProgress(weeklyDef);
         weeklyBanner.style.display = '';
         weeklyBanner.innerHTML = `
-            <img src="icons/small/pack-48.png" alt="" class="weekly-pass-icon">
+            <div class="weekly-pass-icon">${_rewardIconFor(weeklyDef.reward)}</div>
             <div class="weekly-pass-body">
                 <span class="weekly-pass-label">WEEKLY PASS · ${wp.value} / ${weeklyDef.goal} KILLS</span>
                 <div class="weekly-pass-bar"><div class="weekly-pass-fill" style="width:${(wp.pct * 100).toFixed(0)}%"></div></div>
@@ -7577,10 +7842,13 @@ function renderChallengesInto(overlay) {
 
     list.innerHTML = DAILY_CHALLENGES.filter((c) => !c.weekly).map((c) => {
         const p = getChallengeProgress(c);
-        const done = p.value >= c.goal;
+        const claimed = !!(save.challengeClaimed || {})[c.id];
+        const claimable = p.value >= c.goal && !claimed;
         const tierClass = `tier-${c.tier}`;
+        const btnLabel = claimed ? 'DONE' : claimable ? 'CLAIM' : 'GO';
+        const btnAction = claimable ? `claimChallenge('${c.id}')` : claimed ? '' : 'closeDailyOverlay()';
         return `
-            <div class="lb-quest-card ${tierClass} ${done ? 'done' : ''}">
+            <div class="lb-quest-card ${tierClass} ${claimed ? 'done' : ''}">
                 <div class="lb-quest-icon">${_rewardIconFor(c.reward)}</div>
                 <div class="lb-quest-body">
                     <div class="lb-quest-head">
@@ -7592,20 +7860,29 @@ function renderChallengesInto(overlay) {
                         <span class="lb-quest-pct">${p.value}/${c.goal}</span>
                     </div>
                 </div>
-                <div class="lb-quest-reward">${c.reward.label}</div>
-                <button class="lb-quest-claim ${done ? '' : 'locked'}" type="button" ${done ? '' : 'disabled'}>${done ? 'CLAIM' : 'LOCKED'}</button>
+                <div class="lb-quest-side">
+                    <div class="lb-quest-reward">${_rewardIconFor(c.reward)}<span>${c.reward.label}</span></div>
+                    <button class="lb-quest-claim ${claimed ? 'done' : claimable ? 'claimable' : 'go'}" type="button" ${claimed ? 'disabled' : ''} onclick="${btnAction}">${btnLabel}</button>
+                </div>
             </div>
         `;
     }).join('');
 }
 
-// Quests now lives on the same merged screen as Daily Login — both rail
-// buttons open the one combined overlay.
 window.openChallengesOverlay = function() {
-    window.openDailyOverlay();
+    const overlay = document.getElementById('quests-overlay');
+    if (!overlay) return;
+    renderChallengesInto(overlay);
+    startChallengesResetTimer();
+    overlay.classList.add('active');
+    playSfx('peekOpen', 0.85);
+    playHaptic('peek');
 };
 window.closeChallengesOverlay = function(event) {
-    window.closeDailyOverlay(event);
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('quests-overlay');
+    if (overlay) overlay.classList.remove('active');
+    stopChallengesResetTimer();
 };
 
 // ─────────────────────────── LEADERBOARD ──────────────────────
@@ -7866,19 +8143,19 @@ function renderInventory() {
 
     if (save.premium?.neonTrail) {
         grid.appendChild(createInventorySection('Trail Toggle', 'Turn the premium neon trail on or off whenever you want.'));
-        const trailBox = document.createElement('div');
-        trailBox.className = `shop-card ${save.premium.neonTrailEnabled === false ? '' : 'rarity-purple'}`.trim();
         const enabled = save.premium.neonTrailEnabled !== false;
-        trailBox.innerHTML = `
-            <div class="inventory-card-icon-box inventory-trail-icon">
-                <img src="icons/small/neon-trail-48.png" alt="">
-            </div>
-            <div class="card-title">Neon Trail</div>
-            <div class="card-meta">PREMIUM VFX</div>
-            <div class="card-copy">Extra trail effect behind your ship.</div>
-            <button class="inline-button" type="button">${enabled ? 'DISABLE' : 'ENABLE'}</button>
-        `;
-        trailBox.querySelector('button').onclick = () => toggleNeonTrail();
+        // Same tile component the skins below use, so this reads as one of
+        // the selectable cosmetics instead of a different-looking card.
+        const trailBox = renderInventoryTile({
+            rarity: 'purple',
+            iconHtml: `<img src="icons/small/neon-trail-48.png" alt="">`,
+            count: 1,
+            name: 'Neon Trail',
+            meta: enabled ? 'ENABLED' : 'DISABLED',
+            ctaLabel: enabled ? 'DISABLE' : 'ENABLE',
+            ctaState: enabled ? 'disable' : 'equip',
+            onCta: () => toggleNeonTrail()
+        });
         grid.appendChild(trailBox);
     }
 
@@ -7910,7 +8187,8 @@ function renderInventory() {
             meta: equipped ? 'EQUIPPED' : 'OWNED',
             ctaLabel: equipped ? 'EQUIPPED' : 'EQUIP SKIN',
             ctaState: equipped ? 'equipped' : 'equip',
-            onCta: () => equipSkin(skinId)
+            onCta: () => equipSkin(skinId),
+            onCardClick: () => showSkinPreview(skinId)
         });
         grid.appendChild(box);
     });
@@ -8049,11 +8327,54 @@ window.equipSkin = function(skinId) {
     showToast(`${SKIN_DEFINITIONS[skinId].name} equipped.`);
 };
 
+// Big detailed preview art (icons/skin-<id>-preview.png) — a more elaborate
+// illustration than the small inventory icon, with rarity-scaled effects
+// baked into the art itself (e.g. sparkle particles on the gold skin).
+// Skins with a glow + particle animation layer (the 4 non-blue tiers) —
+// the other 2 (stock, ember_blade) only have the plain base ship image.
+const SKIN_EFFECT_TIERS = ['violet_drift', 'solar_flare', 'crimson_afterburn', 'aurora_zero'];
+
+window.showSkinPreview = function(skinId) {
+    const skin = SKIN_DEFINITIONS[skinId];
+    const overlay = document.getElementById('skin-preview-overlay');
+    if (!skin || !overlay) return;
+    const fileBase = skinId.replace(/_/g, '-');
+    const hasEffects = SKIN_EFFECT_TIERS.includes(skinId);
+    const glowImg = document.getElementById('skin-preview-glow');
+    const particlesImg = document.getElementById('skin-preview-particles');
+    document.getElementById('skin-preview-img').src = `icons/skin-${fileBase}.png`;
+    glowImg.style.display = hasEffects ? '' : 'none';
+    particlesImg.style.display = hasEffects ? '' : 'none';
+    if (hasEffects) {
+        glowImg.src = `icons/skin-${fileBase}-glow.png`;
+        particlesImg.src = `icons/skin-${fileBase}-particles.png`;
+    }
+    const rarityEl = document.getElementById('skin-preview-rarity');
+    rarityEl.textContent = getRarityLabel(skin.rarity);
+    rarityEl.className = `skin-preview-rarity tier-${skin.rarity}`;
+    document.getElementById('skin-preview-name').textContent = skin.name;
+    document.getElementById('skin-preview-desc').textContent = skin.desc || '';
+
+    const equipped = save.equippedSkin === skinId;
+    const btn = document.getElementById('skin-preview-equip');
+    btn.textContent = equipped ? 'EQUIPPED' : 'EQUIP SKIN';
+    btn.disabled = equipped;
+    btn.onclick = equipped ? null : () => { equipSkin(skinId); closeSkinPreview(); };
+
+    overlay.classList.add('active');
+    playSfx('peekOpen', 0.85);
+    playHaptic('peek');
+};
+window.closeSkinPreview = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    document.getElementById('skin-preview-overlay')?.classList.remove('active');
+};
+
 window.toggleNeonTrail = function() {
     if (!save.premium?.neonTrail) return;
     save.premium.neonTrailEnabled = save.premium.neonTrailEnabled === false;
     saveSave();
-    renderInventory();
+    setTimeout(renderInventory, 90);
     playSfx('upgrade', 0.75);
     playHaptic('soft');
     showToast(save.premium.neonTrailEnabled === false ? 'Neon Trail disabled.' : 'Neon Trail enabled.');
@@ -8335,9 +8656,9 @@ function renderLoadoutCardTile({ id, card, count, freeCopies, state, onEquip }) 
 
 // Same flat tile language, reused for Inventory's Owned Skins / Cards
 // sections in place of the older glossy .flip-card component.
-function renderInventoryTile({ rarity, iconHtml, count, name, meta, desc, ctaLabel, ctaState, onCta }) {
+function renderInventoryTile({ rarity, iconHtml, count, name, meta, desc, ctaLabel, ctaState, onCta, onCardClick }) {
     const wrap = document.createElement('div');
-    wrap.className = `loadout-card-tile rarity-${rarity || 'blue'}`;
+    wrap.className = `loadout-card-tile rarity-${rarity || 'blue'}${onCardClick ? ' loadout-card-tile-clickable' : ''}`;
     const disabled = ctaState === 'equipped' || ctaState === 'noslot';
     wrap.innerHTML = `
         <div class="loadout-card-icon">
@@ -8351,6 +8672,12 @@ function renderInventoryTile({ rarity, iconHtml, count, name, meta, desc, ctaLab
     `;
     if (!disabled && onCta) {
         wrap.querySelector('.loadout-card-cta').addEventListener('click', onCta);
+    }
+    if (onCardClick) {
+        wrap.addEventListener('click', (e) => {
+            if (e.target.closest('.loadout-card-cta')) return;
+            onCardClick();
+        });
     }
     return wrap;
 }
@@ -8848,6 +9175,7 @@ function getPackRevealFeedback(rarity) {
 }
 
 function openPackSequence(packKey) {
+    MusicManager.play('pack');
     const packDef = PACK_DEFINITIONS[packKey];
     const winnerId = choosePackReward(packKey);
     const rewardPool = packDef.rewardType === 'skin' ? SKIN_DEFINITIONS : INVENTORY_CARDS;
@@ -8888,6 +9216,8 @@ function openPackSequence(packKey) {
     const revealFace = document.getElementById('pack-reveal-face');
     const pipRow = document.getElementById('pack-pip-row');
     if (revealFace) revealFace.style.display = 'none';
+    const stageRaysReset = document.getElementById('pack-stage-rays');
+    if (stageRaysReset) { stageRaysReset.style.top = ''; stageRaysReset.style.left = ''; } // back to the CSS default (centered on the reel)
     viewport.style.display = '';
     const marker = overlay.querySelector('.pack-marker');
     if (marker) marker.style.display = '';
@@ -8938,6 +9268,7 @@ function openPackSequence(packKey) {
 
     const finishOpening = () => {
         const wonReward = packDef.rewardType === 'skin' ? SKIN_DEFINITIONS[winnerId] : INVENTORY_CARDS[winnerId];
+        const isNewUnlock = packDef.rewardType === 'skin' ? !save.skins.includes(winnerId) : !save.inventory.includes(winnerId);
         if (packDef.rewardType === 'skin') {
             if (!save.skins.includes(winnerId)) save.skins.push(winnerId);
             if (!save.equippedSkin) save.equippedSkin = winnerId;
@@ -8973,18 +9304,34 @@ function openPackSequence(packKey) {
             const nameEl = document.getElementById('prf-name');
             const raysEl = document.getElementById('prf-rays');
             const frameEl = document.getElementById('prf-frame');
+            const descEl = document.getElementById('prf-desc');
+            const tagsEl = document.getElementById('prf-tags');
             if (iconEl) iconEl.innerHTML = getRewardArtSvg(winnerId, packDef.rewardType === 'skin' ? 'skin' : 'chip');
             if (badgeEl) badgeEl.textContent = getRarityLabel(wonReward.rarity).toUpperCase();
             if (nameEl) nameEl.textContent = wonReward.name;
+            if (descEl) descEl.textContent = wonReward.desc || '';
+            if (tagsEl) tagsEl.innerHTML = isNewUnlock ? `<span class="prf-tag prf-tag-new">★ NEW</span>` : '';
             [revealFace, raysEl, frameEl, badgeEl].forEach((el) => { if (el) el.className = el.className.replace(/\brarity-\S+/g, '').trim() + ` rarity-${wonReward.rarity}`; });
             viewport.style.display = 'none';
             const marker = overlay.querySelector('.pack-marker');
             if (marker) marker.style.display = 'none';
             revealFace.style.display = '';
+            // The rays default to centering on the whole modal (fine during
+            // the reel spin), but the reveal card itself sits lower — offset
+            // by the header/subtitle above it — so re-center the sunburst on
+            // the card's actual position once it's showing.
+            const stageRaysEl = document.getElementById('pack-stage-rays');
+            if (stageRaysEl && packContent) {
+                requestAnimationFrame(() => {
+                    const cardRect = revealFace.getBoundingClientRect();
+                    const stageRect = packContent.getBoundingClientRect();
+                    stageRaysEl.style.top = `${cardRect.top - stageRect.top + cardRect.height / 2}px`;
+                    stageRaysEl.style.left = `${cardRect.left - stageRect.left + cardRect.width / 2}px`;
+                });
+            }
         }
 
         // primary reveal sound + haptic
-        playSfx(feedback.sfx, feedback.intensity);
         playHaptic(feedback.hapticName);
 
         // jackpot fanfare + confetti for legendary tier
@@ -9022,7 +9369,6 @@ function openPackSequence(packKey) {
             const speed = deltaOffset / deltaTime;
             const intensity = Math.max(0.55, Math.min(1.18, speed / 850));
             for (let i = lastIndex + 1; i <= currentIndex; i++) {
-                playSfx('caseTick', intensity);
                 playHaptic('packTick');
             }
             lastIndex = currentIndex;
@@ -9077,6 +9423,7 @@ window.closePackOverlay = function() {
     window.cancelAnimationFrame(packAnimationFrame);
     packTickTimer = null;
     packAnimationFrame = null;
+    MusicManager.play('menu');
 };
 
 window.buyUpgrade = function(id) {
@@ -9367,46 +9714,46 @@ function getAbilityEvolutionText(id, rank) {
 
 function getAbilityIconMarkup(id, fallback) {
     const svgs = {
-        damage_boost: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 18 L13 5 L18 18"/><line x1="9.5" y1="14" x2="16.5" y2="14"/><line x1="13" y1="5" x2="13" y2="2"/><polyline points="10.5,4 13,2 15.5,4"/></svg>`,
-        rapid_fire: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="13" x2="20" y2="13"/><line x1="4" y1="18" x2="20" y2="18"/><polyline points="17,5.5 21,8 17,10.5" stroke-linejoin="round"/><polyline points="17,10.5 21,13 17,15.5" stroke-linejoin="round"/><polyline points="17,15.5 21,18 17,20.5" stroke-linejoin="round"/></svg>`,
-        multi: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="21" x2="13" y2="6"/><line x1="7" y1="21" x2="9" y2="6"/><line x1="19" y1="21" x2="17" y2="6"/><polyline points="11,8 13,6 15,8"/><polyline points="5.5,8.5 7.5,6.5 9.5,8.5"/><polyline points="16.5,8.5 18.5,6.5 20.5,8.5"/></svg>`,
-        pierce: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="3" y1="13" x2="23" y2="13"/><polyline points="18,9 23,13 18,17" stroke-linejoin="round"/><circle cx="8" cy="13" r="2.5"/><circle cx="15" cy="13" r="2.5"/></svg>`,
-        chain_lightning: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,2 9,13 13.5,13 10,24"/><line x1="4" y1="7" x2="8.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="22" y1="7" x2="17.5" y2="11.5" stroke-width="1.2" stroke-dasharray="2 2"/><line x1="4" y1="19" x2="9.5" y2="16.5" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="4" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="22" cy="7" r="1.8" fill="currentColor" stroke="none"/><circle cx="4" cy="19" r="1.8" fill="currentColor" stroke="none"/></svg>`,
-        tornado_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4,7 Q13,3.5 22,7" stroke-width="1.8"/><path d="M6.5,12 Q13,9.5 19.5,12" stroke-width="1.6"/><path d="M9,17 Q13,15 17,17" stroke-width="1.4"/><line x1="13" y1="17" x2="13" y2="22" stroke-width="1.6"/><path d="M11,22 Q13,24.5 15,22" stroke-width="1.3"/></svg>`,
-        echo_shot: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3" stroke-width="1.8"/><circle cx="13" cy="13" r="6.5" stroke-width="1.2" stroke-dasharray="3 2"/><circle cx="13" cy="13" r="10" stroke-width="1" stroke-dasharray="2 3"/><line x1="13" y1="3" x2="13" y2="6.5" stroke-width="1.5"/><line x1="13" y1="19.5" x2="13" y2="23" stroke-width="1.5"/></svg>`,
-        ion_round: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="13" cy="13" rx="3.5" ry="10" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="2" fill="currentColor" stroke="none"/></svg>`,
-        shock_nova: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="5" stroke-width="1.8"/><line x1="13" y1="2" x2="13" y2="7" stroke-width="1.6"/><line x1="13" y1="19" x2="13" y2="24" stroke-width="1.6"/><line x1="2" y1="13" x2="7" y2="13" stroke-width="1.6"/><line x1="19" y1="13" x2="24" y2="13" stroke-width="1.6"/><line x1="5" y1="5" x2="8.2" y2="8.2" stroke-width="1.4"/><line x1="21" y1="5" x2="17.8" y2="8.2" stroke-width="1.4"/><line x1="5" y1="21" x2="8.2" y2="17.8" stroke-width="1.4"/><line x1="21" y1="21" x2="17.8" y2="17.8" stroke-width="1.4"/></svg>`,
-        heal_heart: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,21 C13,21 4,15 4,9 C4,6.2 6.2,4 9,4 C10.8,4 12.3,5 13,6.2 C13.7,5 15.2,4 17,4 C19.8,4 22,6.2 22,9 C22,15 13,21 13,21Z"/><line x1="13" y1="9" x2="13" y2="15"/><line x1="10" y1="12" x2="16" y2="12"/></svg>`,
-        orbiter: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="2.5" stroke-width="1.8"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(60 13 13)"/><ellipse cx="13" cy="13" rx="10" ry="4.5" stroke-width="1.3" stroke-dasharray="3 2" transform="rotate(120 13 13)"/></svg>`,
-        phoenix_drive: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,2 L15.5,9 L23,9 L17,14 L19.5,22 L13,17.5 L6.5,22 L9,14 L3,9 L10.5,9 Z"/></svg>`,
-        singularity: `<svg viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="13" cy="13" r="3.5" stroke-width="1.8"/><circle cx="13" cy="13" r="7" stroke-width="1.2" stroke-dasharray="2 2"/><circle cx="13" cy="13" r="10.5" stroke-width="1" stroke-dasharray="1 3"/><line x1="4" y1="4" x2="9" y2="9" stroke-width="1.3"/><line x1="22" y1="4" x2="17" y2="9" stroke-width="1.3"/><line x1="4" y1="22" x2="9" y2="17" stroke-width="1.3"/><line x1="22" y1="22" x2="17" y2="17" stroke-width="1.3"/></svg>`,
+        damage_boost:     `<img src="icons/small/ability-damage_boost-48.png" class="ability-icon-img" alt="">`,
+        rapid_fire:       `<img src="icons/small/ability-rapid_fire-48.png" class="ability-icon-img" alt="">`,
+        multi:            `<img src="icons/small/ability-multi-48.png" class="ability-icon-img" alt="">`,
+        pierce:           `<img src="icons/small/ability-pierce-48.png" class="ability-icon-img" alt="">`,
+        chain_lightning:  `<img src="icons/small/ability-chain_lightning-48.png" class="ability-icon-img" alt="">`,
+        tornado_shot:     `<img src="icons/small/ability-tornado_shot-48.png" class="ability-icon-img" alt="">`,
+        echo_shot:        `<img src="icons/small/ability-echo_shot-48.png" class="ability-icon-img" alt="">`,
+        ion_round:        `<img src="icons/small/ability-ion_round-48.png" class="ability-icon-img" alt="">`,
+        shock_nova:       `<img src="icons/small/ability-shock_nova-48.png" class="ability-icon-img" alt="">`,
+        heal_heart:       `<img src="icons/small/ability-heal_heart-48.png" class="ability-icon-img" alt="">`,
+        orbiter:          `<img src="icons/small/ability-orbiter-48.png" class="ability-icon-img" alt="">`,
+        phoenix_drive:    `<img src="icons/small/ability-phoenix_drive-48.png" class="ability-icon-img" alt="">`,
+        singularity:      `<img src="icons/small/ability-singularity-48.png" class="ability-icon-img" alt="">`,
         // ── 25+ NEW ABILITY ICONS ─────────────────────────────────
-        cluster_bomb:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="13" cy="14" rx="5.5" ry="6.5"/><line x1="13" y1="2" x2="13" y2="7"/><line x1="13" y1="11" x2="13" y2="14"/><line x1="11" y1="13" x2="15" y2="13"/><circle cx="6" cy="22" r="1.5"/><circle cx="20" cy="22" r="1.5"/></svg>`,
-        ricochet:         `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,5 11,12 3,19 11,15 19,22 23,17 19,11 23,5"/><circle cx="3" cy="5" r="1" fill="currentColor"/><circle cx="23" cy="17" r="1" fill="currentColor"/></svg>`,
-        vampire:          `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13,21 C13,21 4,15 4,9 C4,6.2 6.2,4 9,4 C10.8,4 12.3,5 13,6.2 C13.7,5 15.2,4 17,4 C19.8,4 22,6.2 22,9 C22,15 13,21 13,21Z"/><polyline points="10,9 11,12 13,11"/><polyline points="13,11 15,14 16,9"/></svg>`,
-        frost_shot:       `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="3" x2="13" y2="23"/><line x1="3" y1="13" x2="23" y2="13"/><line x1="6" y1="6" x2="20" y2="20"/><line x1="20" y1="6" x2="6" y2="20"/><circle cx="13" cy="13" r="2"/></svg>`,
-        poison_dart:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,22 13,4 22,22"/><line x1="13" y1="11" x2="13" y2="18"/><circle cx="13" cy="14" r="1" fill="currentColor"/><circle cx="9" cy="20" r="1" fill="currentColor"/><circle cx="17" cy="20" r="1" fill="currentColor"/></svg>`,
+        cluster_bomb:     `<img src="icons/small/ability-cluster_bomb-48.png" class="ability-icon-img" alt="">`,
+        ricochet:         `<img src="icons/small/ability-ricochet-48.png" class="ability-icon-img" alt="">`,
+        vampire:          `<img src="icons/small/ability-vampire-48.png" class="ability-icon-img" alt="">`,
+        frost_shot:       `<img src="icons/small/ability-frost_shot-48.png" class="ability-icon-img" alt="">`,
+        poison_dart:      `<img src="icons/small/ability-poison_dart-48.png" class="ability-icon-img" alt="">`,
         bullet_storm:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 8 Q13 3 23 8" stroke-width="2"/><path d="M3 13 Q13 8 23 13" stroke-width="1.6"/><path d="M3 18 Q13 13 23 18" stroke-width="1.4"/><path d="M3 23 Q13 18 23 23" stroke-width="1.2"/></svg>`,
         lucky_seven:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,5 20,5 12,22"/><circle cx="13" cy="13" r="11" stroke-width="1" stroke-dasharray="2 2"/></svg>`,
-        crit_chance:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="9"/><circle cx="13" cy="13" r="5"/><circle cx="13" cy="13" r="1.5" fill="currentColor"/><line x1="13" y1="2" x2="13" y2="6"/><line x1="13" y1="20" x2="13" y2="24"/><line x1="2" y1="13" x2="6" y2="13"/><line x1="20" y1="13" x2="24" y2="13"/></svg>`,
-        glass_cannon:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="6,4 20,4 18,22 8,22"/><line x1="9" y1="9" x2="11" y2="20"/><line x1="13" y1="6" x2="13" y2="22"/><line x1="17" y1="9" x2="15" y2="20"/></svg>`,
-        lich_bullets:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="9" r="5"/><circle cx="13" cy="9" r="2" fill="currentColor"/><polyline points="13,14 8,22"/><polyline points="13,14 13,22"/><polyline points="13,14 18,22"/></svg>`,
-        platinum_rounds:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="9"/><polygon points="13,7 16,11 13,15 10,11"/><line x1="13" y1="15" x2="13" y2="19"/></svg>`,
-        blank_burst:      `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="4"/><circle cx="13" cy="13" r="8" stroke-dasharray="2 3"/><line x1="5" y1="5" x2="21" y2="21"/></svg>`,
-        strong_spirit:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 22s-9-6-9-13a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 13-9 13z"/><ellipse cx="13" cy="6" rx="6" ry="2.5" stroke-dasharray="2 2"/></svg>`,
+        crit_chance:      `<img src="icons/small/ability-crit_chance-48.png" class="ability-icon-img" alt="">`,
+        glass_cannon:     `<img src="icons/small/ability-glass_cannon-48.png" class="ability-icon-img" alt="">`,
+        lich_bullets:     `<img src="icons/small/ability-lich_bullets-48.png" class="ability-icon-img" alt="">`,
+        platinum_rounds:  `<img src="icons/small/ability-platinum_rounds-48.png" class="ability-icon-img" alt="">`,
+        blank_burst:      `<img src="icons/small/ability-blank_burst-48.png" class="ability-icon-img" alt="">`,
+        strong_spirit:    `<img src="icons/small/ability-strong_spirit-48.png" class="ability-icon-img" alt="">`,
         bloodlust:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="9" r="5"/><polyline points="9,15 13,22 17,15"/><circle cx="13" cy="9" r="2" fill="currentColor"/></svg>`,
-        trigger_fingers:  `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,18 10,12 14,16 22,6"/><polyline points="17,6 22,6 22,11"/></svg>`,
-        scarier_face:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9 C 5 4, 21 4, 21 9 C 21 18, 5 18, 5 9z"/><circle cx="9.5" cy="11" r="1.5" fill="currentColor"/><circle cx="16.5" cy="11" r="1.5" fill="currentColor"/><polyline points="9,18 11,21 13,18 15,21 17,18"/></svg>`,
+        trigger_fingers:  `<img src="icons/small/ability-trigger_fingers-48.png" class="ability-icon-img" alt="">`,
+        scarier_face:     `<img src="icons/small/ability-scarier_face-48.png" class="ability-icon-img" alt="">`,
         saw_blade:        `<img src="icons/small/blade-48.png" class="ability-icon-img" alt="">`,
-        boomerang:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22 Q4 4, 22 4 Q4 22, 4 22z"/><circle cx="9" cy="9" r="1" fill="currentColor"/></svg>`,
-        spread_volley:    `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="13" y1="22" x2="6" y2="4"/><line x1="13" y1="22" x2="13" y2="3"/><line x1="13" y1="22" x2="20" y2="4"/><polyline points="4,7 6,4 8.5,7"/><polyline points="11,5 13,3 15,5"/><polyline points="18,7 20,4 22,7"/></svg>`,
-        crit_bomb:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 17,11 25,12 19,17 21,25 13,21 5,25 7,17 1,12 9,11"/><circle cx="13" cy="14" r="2" fill="currentColor"/></svg>`,
-        phantom_shield:   `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 L22 7 V14 C22 18, 18 22, 13 23 C8 22, 4 18, 4 14 V7 Z"/><polyline points="9,13 12,16 17,10"/></svg>`,
-        arc_pulse:        `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="3"/><path d="M7 7 Q13 4 19 7"/><path d="M19 19 Q13 22 7 19"/><line x1="2" y1="13" x2="6" y2="13"/><line x1="20" y1="13" x2="24" y2="13"/></svg>`,
+        boomerang:        `<img src="icons/small/ability-boomerang-48.png" class="ability-icon-img" alt="">`,
+        spread_volley:    `<img src="icons/small/ability-spread_volley-48.png" class="ability-icon-img" alt="">`,
+        crit_bomb:        `<img src="icons/small/ability-crit_bomb-48.png" class="ability-icon-img" alt="">`,
+        phantom_shield:   `<img src="icons/small/ability-phantom_shield-48.png" class="ability-icon-img" alt="">`,
+        arc_pulse:        `<img src="icons/small/ability-arc_pulse-48.png" class="ability-icon-img" alt="">`,
         heat_seeker:      `<img src="icons/small/missile-48.png" class="ability-icon-img" alt="">`,
-        glass_shards:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13,3 16,9 13,11 10,9"/><polygon points="4,12 10,11 7,17"/><polygon points="22,12 19,17 16,11"/><polygon points="13,15 17,20 13,23 9,20"/></svg>`,
-        combo_multiplier: `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,18 8,11 13,15 18,5 22,9"/><polyline points="20,5 22,5 22,7"/><line x1="3" y1="22" x2="22" y2="22"/></svg>`,
-        fortune_coin:     `<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="13" r="9"/><polyline points="10,10 16,10 13,16 16,16"/><line x1="13" y1="6" x2="13" y2="20"/></svg>`
+        glass_shards:     `<img src="icons/small/ability-glass_shards-48.png" class="ability-icon-img" alt="">`,
+        combo_multiplier: `<img src="icons/small/ability-combo_multiplier-48.png" class="ability-icon-img" alt="">`,
+        fortune_coin:     `<img src="icons/small/ability-fortune_coin-48.png" class="ability-icon-img" alt="">`
     };
     const wrap = svgs[id];
     if (wrap) return `<div class="ability-icon ability-${id}">${wrap}</div>`;
@@ -9664,7 +10011,9 @@ function updateMetaHud() {
     if (endlessButton) endlessButton.textContent = currentMode === 'endless' ? 'Endless Ready' : 'Endless';
     if (rerollButton) {
         const availableRerolls = save.rerollTokens + runRerollCredits;
-        rerollButton.textContent = availableRerolls > 0 ? `Reroll ${availableRerolls}` : 'Reroll 5 Gems';
+        const rerollLabel = document.getElementById('ability-reroll-label');
+        const rerollText = availableRerolls > 0 ? `REROLL ${availableRerolls}` : 'REROLL 5 GEMS';
+        if (rerollLabel) rerollLabel.textContent = rerollText; else rerollButton.textContent = rerollText;
     }
     if (archiveStatus) {
         archiveStatus.textContent = `${getUnlockedAbilities(save.unlocked).length}/${ABILITIES.length} unlocked${nextMilestone ? ` | next spike Lv ${nextMilestone.level}` : ''}`;
@@ -9686,6 +10035,8 @@ window.addEventListener('keyup', (event) => {
 let _testArenaActive = false;
 let _testGodMode = false;
 let _testOneShotMode = false;
+let _testSuppressAutoSpawn = false;
+let _quickTestAbilityPickActive = false;
 let _testAbilityQueue = {};
 
 window.openTestArena = function() {
@@ -9702,8 +10053,22 @@ window.closeTestArena = function(event) {
     if (overlay) overlay.classList.remove('active');
 };
 
-window.testStartArena = function() {
+// Minimal sibling to Test Arena — just previews screens/reactions (fly with
+// no enemies, victory/defeat screens) without the full ability/enemy grid.
+window.openQuickTest = function() {
+    const overlay = document.getElementById('quick-test-overlay');
+    if (overlay) overlay.classList.add('active');
+};
+
+window.closeQuickTest = function(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById('quick-test-overlay');
+    if (overlay) overlay.classList.remove('active');
+};
+
+window.testStartArena = function(suppressAutoSpawn = false) {
     _testArenaActive = true;
+    _testSuppressAutoSpawn = !!suppressAutoSpawn;
     currentMode = 'endless';
     currentLevel = 1;
     currentLevelWaves = [];
@@ -9714,6 +10079,7 @@ window.testStartArena = function() {
     currentWave = 0;
     endlessWaveRewardGold = 0;
     enemies = [];
+    waveSpawnQueue = [];
     projectiles = [];
     pickups = [];
     particles = [];
@@ -9743,10 +10109,13 @@ window.testStartArena = function() {
 
     const overlay = document.getElementById('test-overlay');
     if (overlay) overlay.classList.remove('active');
+    const quickOverlay = document.getElementById('quick-test-overlay');
+    if (quickOverlay) quickOverlay.classList.remove('active');
 };
 
 window.testStopArena = function() {
     _testArenaActive = false;
+    _testSuppressAutoSpawn = false;
     gameRunning = false;
     document.body.classList.remove('in-run');
     showScreen('fight-screen');
@@ -9812,6 +10181,77 @@ window.testSpawnEnemies = function(type, count) {
         enemies.push(createEnemy(scaledType, spawn.x, spawn.y));
     }
     showToast(`+${count} ${type}`);
+};
+
+// Preview the real win/lose result screens without touching the player's
+// actual save (no gold/gems/unlocks are granted) — work standalone, with no
+// arena/run needed first, so they're a genuine one-tap preview. Test Arena
+// always runs in endless mode, so these mirror victory()/gameOver()'s stat
+// formatting and real reward formulas rather than calling those functions
+// directly.
+// Both the result overlay and the quick-test panel are full-screen modals at
+// the same z-index with an opaque backdrop — if quick-test stayed open behind
+// it, it would completely hide the preview. Close it first, reopen on dismiss.
+function _reopenQuickTestAfterPreview() {
+    hideResultOverlay();
+    const overlay = document.getElementById('quick-test-overlay');
+    if (overlay) overlay.classList.add('active');
+}
+
+window.testShowVictory = function() {
+    document.getElementById('quick-test-overlay')?.classList.remove('active');
+    const level = Math.max(1, currentLevel || 1);
+    const goldReward = Math.round(getLevelGoldReward(level) * getEconomyMultiplier());
+    const gemReward = 1 + Math.floor(level / 6);
+    showResultOverlay({
+        title: t('result.winTitle', { n: level }),
+        copy: t('result.winCopy'),
+        stars: 3,
+        stats: [
+            { label: t('result.statGold'), value: `+${formatCompactNumber(goldReward)}`, icon: 'coin', color: 'var(--r-gold)' },
+            { label: t('result.statGems'), value: `+${gemReward}`, icon: 'gem', color: 'var(--r-dark)' },
+            { label: t('result.statNextMission'), value: `${t('cta.level')} ${save.unlocked}`, icon: 'trophy', color: 'var(--r-blue)' }
+        ],
+        primaryLabel: t('result.nextFight'),
+        secondaryLabel: t('result.skills'),
+        homeLabel: t('result.home'),
+        onPrimary: () => _reopenQuickTestAfterPreview(),
+        onSecondary: () => { hideResultOverlay(); openRunSummary(); },
+        onHome: () => _reopenQuickTestAfterPreview()
+    });
+};
+
+window.testShowDefeat = function() {
+    document.getElementById('quick-test-overlay')?.classList.remove('active');
+    const endlessGold = endlessWaveRewardGold;
+    const endlessGems = Math.floor(currentWave / 12);
+    showResultOverlay({
+        loss: true,
+        title: t('result.endlessOver'),
+        copy: t('result.endlessCopy'),
+        stats: [
+            { label: t('result.statWaves'), value: `${currentWave + 1}`, icon: 'skull', color: 'var(--r-red)' },
+            { label: t('result.statScaled'), value: `${currentLevel}`, icon: 'bolt', color: 'var(--r-blue)' },
+            { label: t('result.statGold'), value: `+${formatCompactNumber(endlessGold)}`, icon: 'coin', color: 'var(--r-gold)' },
+            { label: t('result.statGems'), value: `+${endlessGems}`, icon: 'gem', color: 'var(--r-dark)' }
+        ],
+        primaryLabel: t('result.runEndless'),
+        secondaryLabel: t('result.skills'),
+        homeLabel: t('result.home'),
+        onPrimary: () => _reopenQuickTestAfterPreview(),
+        onSecondary: () => { hideResultOverlay(); openRunSummary(); },
+        onHome: () => _reopenQuickTestAfterPreview()
+    });
+};
+
+// Preview the real level-up ability draft (same openAbilityDraft() used mid-run)
+// — needs an active test player since picking an ability writes to
+// player.abilityRanks, so it's gated the same way testSpawnEnemies is.
+window.testShowAbilityPick = function() {
+    if (!_testArenaActive) { showToast('Start arena first!'); return; }
+    document.getElementById('quick-test-overlay')?.classList.remove('active');
+    _quickTestAbilityPickActive = true;
+    openAbilityDraft();
 };
 
 window.testGodMode = function(enabled) {

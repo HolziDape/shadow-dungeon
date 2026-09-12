@@ -47,6 +47,12 @@
                 </div>
                 <div class="tile-label" id="left-no-ads-label" data-i18n="rail.noAds">No Ads</div>
             </button>
+            <button class="rail-tile rail-test" type="button" onclick="openQuickTest()">
+                <div class="tile-icon">
+                    <img src="icons/small/fight-48.png" alt="" class="tile-icon-img">
+                </div>
+                <div class="tile-label" data-i18n="rail.quickTest">Quick Test</div>
+            </button>
         </aside>
 
         <!-- RIGHT side rail (settings is in HUD, here: leaderboard, quests, rewards) -->
@@ -184,35 +190,69 @@
     <div id="daily-overlay" class="modal-overlay" onclick="closeDailyOverlay(event)">
         <div class="modal-content lb-style-modal daily-quests-modal" onclick="event.stopPropagation()">
             <button class="lb-style-close" type="button" onclick="closeDailyOverlay()">×</button>
-            <div class="lb-style-header"><img src="icons/small/calendar-48.png" alt="" class="lb-style-header-icon"><h2 data-i18n="daily.title">DAILY LOGIN</h2></div>
+            <div class="lb-style-header">
+                <img src="icons/small/calendar-48.png" alt="" class="lb-style-header-icon">
+                <h2 data-i18n="daily.title">DAILY REWARDS</h2>
+                <span class="screen-title-counter" id="daily-day-counter">Day 1/7</span>
+            </div>
             <p class="screen-subtitle" id="daily-overlay-status" style="text-align:center; margin-bottom:8px" data-i18n="daily.status">Day 1 ready</p>
             <div id="daily-overlay-grid" class="daily-grid" style="margin-top:14px"></div>
+        </div>
+    </div>
 
-            <div class="lb-style-header" style="margin-top:22px"><img src="icons/small/bolt-48.png" alt="" class="lb-style-header-icon"><h2 data-i18n="quests.title">QUESTS</h2></div>
+    <div id="quests-overlay" class="modal-overlay" onclick="closeChallengesOverlay(event)">
+        <div class="modal-content lb-style-modal daily-quests-modal" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeChallengesOverlay()">×</button>
+            <div class="lb-style-header">
+                <img src="icons/small/bolt-48.png" alt="" class="lb-style-header-icon">
+                <h2 data-i18n="quests.title">CHALLENGES</h2>
+                <span class="screen-title-counter" id="challenges-reset-timer">Resets --:--:--</span>
+            </div>
             <p class="screen-subtitle" style="text-align:center; margin-bottom:8px" data-i18n="quests.sub">Complete them and climb the league.</p>
-            <div id="weekly-pass-banner" class="weekly-pass-banner" style="display:none"></div>
             <div id="challenges-list" style="display:flex; flex-direction:column; gap:8px; margin-top:12px"></div>
+            <div id="weekly-pass-banner" class="weekly-pass-banner" style="display:none"></div>
         </div>
     </div>
 
     <div id="hub-screen" class="screen">
         <div class="screen-shell">
-            <div class="screen-title-row">
-                <img src="icons/small/upgrades-48.png" alt="" class="screen-title-icon">
-                <h1 class="screen-title" data-i18n="hub.title">UPGRADES</h1>
-            </div>
-            <p class="screen-subtitle" data-i18n="hub.sub">Spend gold to boost your ship's stats.</p>
-            <div class="striker-hub">
-                <div class="hub-stage">
-                    <div class="hub-ring ring-outer"></div>
-                    <div class="hub-ring ring-mid"></div>
-                    <div class="hub-ring ring-inner"></div>
-                    <div id="hub-ring-progress"></div>
-                    <div class="hub-ship">▲</div>
-                    <div id="hub-stats-readout" class="hub-readout">Damage 1.0 > 1.0</div>
+            <div class="hub-title-row">
+                <div class="hub-title-icon-box">
+                    <img src="icons/small/upgrades-48.png" alt="" class="hub-title-icon">
                 </div>
-                <div id="hub-grid" class="upgrade-row"></div>
+                <div class="hub-title-col">
+                    <h1 class="screen-title hub-title" data-i18n="hub.title">UPGRADES</h1>
+                    <p class="screen-subtitle hub-subtitle" data-i18n="hub.sub">Spend gold to boost your ship's stats.</p>
+                </div>
             </div>
+
+            <div class="hub-stage-panel">
+                <div class="hub-stage">
+                    <div id="hub-ring-progress"></div>
+                    <div id="hub-ship-icon" class="hub-ship-icon"></div>
+                </div>
+                <div id="hub-stats-readout" class="hub-readout"></div>
+            </div>
+
+            <div id="hub-milestone-banner" class="hub-milestone" style="display:none">
+                <div class="hub-milestone-icon"><img src="icons/small/trophy-48.png" alt=""></div>
+                <div class="hub-milestone-body">
+                    <div class="hub-milestone-topline">
+                        <span data-i18n="hub.nextMilestone">Next milestone</span>
+                        <span id="hub-milestone-value" class="hub-milestone-value"></span>
+                    </div>
+                    <div class="hub-milestone-bar"><div id="hub-milestone-fill" class="hub-milestone-fill"></div></div>
+                    <span id="hub-milestone-caption" class="hub-milestone-caption"></span>
+                </div>
+            </div>
+
+            <div class="hub-section-divider">
+                <span class="hub-section-label" data-i18n="hub.statUpgrades">STAT UPGRADES</span>
+                <div class="hub-section-line"></div>
+                <span id="hub-stat-count" class="hub-section-count"></span>
+            </div>
+
+            <div id="hub-grid" class="upgrade-row"></div>
         </div>
     </div>
 
@@ -324,20 +364,11 @@
     <div id="ability-overlay" class="modal-overlay">
         <div class="modal-content ability-pick-content">
             <div class="ability-pick-header">
-                <div class="ability-pick-arrows-l" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><polyline points="6,8 12,14 18,8"/></svg>
-                    <svg viewBox="0 0 24 24"><polyline points="6,8 12,14 18,8"/></svg>
-                    <svg viewBox="0 0 24 24"><polyline points="6,8 12,14 18,8"/></svg>
-                </div>
-                <h2 class="ability-pick-title">CHOOSE <span>UPGRADE</span></h2>
-                <div class="ability-pick-arrows-r" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><polyline points="6,8 12,14 18,8"/></svg>
-                    <svg viewBox="0 0 24 24"><polyline points="6,8 12,14 18,8"/></svg>
-                    <svg viewBox="0 0 24 24"><polyline points="6,8 12,14 18,8"/></svg>
-                </div>
+                <h2 class="ability-pick-title">LEVEL UP</h2>
+                <div class="ability-pick-subtitle">CHOOSE ONE UPGRADE</div>
             </div>
 
-            <!-- Featured slot: shows the currently FOCUSED ability + its tree -->
+            <!-- Featured slot: kept for its skill-tree logic, hidden in the new card layout -->
             <div class="ability-pick-feature" id="ability-pick-feature">
                 <div class="feature-info">
                     <div class="feature-title" id="feature-title">Tap a card</div>
@@ -346,20 +377,22 @@
                 <div class="feature-tree" id="feature-tree"></div>
             </div>
 
-            <!-- Three diamond pick cards -->
+            <!-- Three pick cards -->
             <div id="ability-cards" class="ability-list ability-pick-list"></div>
 
             <!-- Bottom CTAs -->
             <div class="ability-pick-actions">
-                <button id="ability-reroll" class="ap-action ap-reroll" type="button" onclick="rerollAbilities()"><img src="icons/small/reroll-48.png" alt="" class="ap-reroll-icon">REROLL <span class="ap-cost">5◆</span></button>
+                <button id="ability-reroll" class="ap-action ap-reroll" type="button" onclick="rerollAbilities()"><img src="icons/small/reroll-48.png" alt="" class="ap-reroll-icon"><span id="ability-reroll-label" class="ap-reroll-label">REROLL 5 GEMS</span></button>
                 <button id="ability-take-all" class="ap-action ap-take" type="button" onclick="confirmAbilityPick()">TAKE</button>
             </div>
+            <div class="ability-pick-footer" id="ability-pick-footer">WAVE <span id="ability-pick-wave">1</span> PAUSED</div>
         </div>
     </div>
 
     <div id="result-overlay" class="modal-overlay">
         <div class="modal-content result-content">
             <div class="result-badge" id="result-badge">Victory</div>
+            <div id="result-stars-slot"></div>
             <h2 class="result-title" id="result-title">Mission Clear</h2>
             <p class="result-copy" id="result-copy">Rewards granted.</p>
             <div class="result-stats" id="result-stats"></div>
@@ -491,6 +524,7 @@
                 <button class="mini-action" type="button" onclick="closePackOverlay()">Close</button>
             </div>
             <p class="screen-subtitle" id="pack-subtitle">Spin the reel and claim a permanent account card.</p>
+            <div class="pack-stage-rays" id="pack-stage-rays" aria-hidden="true"></div>
             <div class="pack-pip-row" id="pack-pip-row" style="display:none"></div>
             <div class="pack-stage" id="pack-stage">
                 <div id="pack-rip" class="pack-rip hidden">
@@ -515,6 +549,8 @@
                     <div class="prf-icon" id="prf-icon"></div>
                 </div>
                 <div class="prf-name" id="prf-name"></div>
+                <div class="prf-desc" id="prf-desc"></div>
+                <div class="prf-tags" id="prf-tags"></div>
             </div>
             <div id="pack-result" class="pack-result">Opening pack...</div>
             <button id="pack-claim-button" class="btn-glossy btn-gold" type="button" onclick="claimPackReward()" disabled>Claim Card</button>
@@ -540,6 +576,23 @@
         <div class="modal-content ability-detail-content" id="ability-detail-content" onclick="event.stopPropagation()">
             <button class="ability-detail-close" type="button" onclick="closeAbilityDetail()">×</button>
             <div class="ability-detail-card" id="ability-detail-card"></div>
+        </div>
+    </div>
+
+    <div id="skin-preview-overlay" class="modal-overlay" onclick="closeSkinPreview(event)">
+        <div class="modal-content lb-style-modal skin-preview-content" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeSkinPreview()">×</button>
+            <div class="skin-preview-art">
+                <img class="skin-layer skin-layer-glow" id="skin-preview-glow" src="" alt="">
+                <img class="skin-layer skin-layer-particles" id="skin-preview-particles" src="" alt="">
+                <img class="skin-layer skin-layer-base" id="skin-preview-img" src="" alt="">
+            </div>
+            <div class="skin-preview-body">
+                <span class="skin-preview-rarity" id="skin-preview-rarity"></span>
+                <h2 class="skin-preview-name" id="skin-preview-name"></h2>
+                <p class="skin-preview-desc" id="skin-preview-desc"></p>
+                <button class="inline-button" id="skin-preview-equip" type="button"></button>
+            </div>
         </div>
     </div>
 
@@ -576,6 +629,27 @@
 
             <h3 class="test-section-title" data-i18n="test.activeBuffs">ACTIVE BUFFS</h3>
             <div id="test-active-buffs" class="test-active-buffs" data-i18n="test.none">None</div>
+        </div>
+    </div>
+
+    <!-- ══ QUICK TEST OVERLAY — minimal, just previews screens/reactions ══ -->
+    <div id="quick-test-overlay" class="modal-overlay" onclick="closeQuickTest(event)">
+        <div class="modal-content test-arena-content quick-test-content" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeQuickTest()">×</button>
+            <div class="lb-style-header"><h2 data-i18n="quickTest.title">QUICK TEST</h2></div>
+            <div class="test-controls">
+                <div class="test-row">
+                    <button class="test-btn test-green" onclick="testStartArena(true)" data-i18n="quickTest.fly">▶ FLY (NO ENEMIES)</button>
+                    <button class="test-btn test-red" onclick="testStopArena()" data-i18n="test.stop">■ STOP</button>
+                </div>
+                <div class="test-row">
+                    <button class="test-btn test-sm" onclick="testShowVictory()" data-i18n="quickTest.victory">🏆 Victory Screen</button>
+                    <button class="test-btn test-sm" onclick="testShowDefeat()" data-i18n="quickTest.defeat">💀 Defeat Screen</button>
+                </div>
+                <div class="test-row">
+                    <button class="test-btn test-sm" onclick="testShowAbilityPick()" data-i18n="quickTest.abilityPick">🎲 Ability Pick</button>
+                </div>
+            </div>
         </div>
     </div>
 

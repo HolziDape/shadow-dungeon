@@ -43,8 +43,14 @@ const UPGRADES = [
     // ticks up every ~9 levels means 36 of 42 purchases visibly do nothing —
     // a badly shaped path for a discrete stat. Six levels, each worth exactly
     // one heart (3 -> 9), with steeply rising costs instead.
-    { id: 'hearts',  name: 'Panzerung',  icon: 'heart-48.png',  color: '#c8626a', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [350, 1100, 3000, 7500, 18000, 42000], tailGrowth: 1.15, tailFlat: 58, majorCostMultiplier: 1.70, max: 6, desc: 'Ein zusaetzliches Herz pro Stufe.' },
-    { id: 'armor',   name: 'Deflektor',  icon: 'stat-armor-48.png', color: '#8db4d2', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [18, 27, 40, 60, 90, 138, 206], tailGrowth: 1.15,  tailFlat: 54, majorCostMultiplier: 1.66, max: 42, desc: 'Chance, einen Treffer komplett abzuwehren.' }
+    // First-purchase cost deliberately gated to roughly what a player has
+    // accumulated by the time they first reach mission level 10 (sum of
+    // getLevelGoldReward(1..9) is ~1935 gold) — moved down from a level-15
+    // gate now that levels 6+ carry a real difficulty wall (see the
+    // wallMult ramp in getEnemyLevelStats): the 6-9 window has no
+    // defensive upgrade available at all otherwise, only offense/income.
+    { id: 'hearts',  name: 'Panzerung',  icon: 'heart-48.png',  color: '#c8626a', cycleRange: [5, 7], cycleOffset: 1, seedCosts: [2000, 6300, 17100, 42900, 103000, 240000], tailGrowth: 1.15, tailFlat: 330, majorCostMultiplier: 1.70, max: 6, desc: 'Ein zusaetzliches Herz pro Stufe.' },
+    { id: 'armor',   name: 'Deflektor',  icon: 'stat-armor-48.png', color: '#8db4d2', cycleRange: [5, 7], cycleOffset: 0, seedCosts: [2000, 3000, 4450, 6650, 10000, 15300, 22900], tailGrowth: 1.15,  tailFlat: 6000, majorCostMultiplier: 1.66, max: 42, desc: 'Chance, einen Treffer komplett abzuwehren.' }
 ];
 
 const DAILY_LOGIN_REWARDS = [
@@ -68,7 +74,7 @@ const DAILY_LOGIN_REWARDS = [
 // ─────────────────────────────────────────────────────────────────────────────
 const ACTIVE_ABILITIES = [
     {
-        id: 'dash', name: 'Dash', icon: '⚡', color: '#97c7d6',
+        id: 'dash', name: 'Dash', icon: 'ability-dash-48.png', color: '#97c7d6',
         desc: 'Blitz-Dash in Schussrichtung. Kurze Unverwundbarkeit.',
         cooldowns: [4, 3, 2.5],
         levels: [
@@ -78,7 +84,7 @@ const ACTIVE_ABILITIES = [
         ]
     },
     {
-        id: 'death_bloom', name: 'Death Bloom', icon: '💥', color: '#c96555',
+        id: 'death_bloom', name: 'Death Bloom', icon: 'ability-death_bloom-48.png', color: '#c96555',
         desc: 'Explosion um dich herum. Knockback auf alle Gegner.',
         cooldowns: [8, 7, 5],
         levels: [
@@ -88,7 +94,7 @@ const ACTIVE_ABILITIES = [
         ]
     },
     {
-        id: 'shield', name: 'Pulse Shield', icon: '🛡', color: '#8db4d2',
+        id: 'shield', name: 'Pulse Shield', icon: 'ability-shield-48.png', color: '#8db4d2',
         desc: 'Kurze Schadensimmunität. Höhere Level reflektieren Kugeln.',
         cooldowns: [12, 10, 8],
         levels: [
@@ -98,7 +104,7 @@ const ACTIVE_ABILITIES = [
         ]
     },
     {
-        id: 'freeze', name: 'Time Freeze', icon: '❄', color: '#aaf0ff',
+        id: 'freeze', name: 'Time Freeze', icon: 'ability-freeze-48.png', color: '#aaf0ff',
         desc: 'Verlangsamt alle Gegner. Höhere Level frieren ein.',
         cooldowns: [14, 12, 10],
         levels: [
@@ -108,7 +114,7 @@ const ACTIVE_ABILITIES = [
         ]
     },
     {
-        id: 'drone_strike', name: 'Drone Strike', icon: '🎯', color: '#e0c584',
+        id: 'drone_strike', name: 'Drone Strike', icon: 'ability-drone_strike-48.png', color: '#e0c584',
         desc: 'Schickt Targeting-Drohnen auf Gegner.',
         cooldowns: [16, 13, 10],
         levels: [
@@ -568,6 +574,21 @@ function getEnemyLevelStats(typeKey, level) {
     } else {
         scale = 120 * Math.pow(1.08, lv - 50);
     }
+
+    // "Wall" past the tutorial-soft opening: levels 1-5 stay exactly as
+    // forgiving as before (wallMult 1x), then a real difficulty step ramps
+    // in from level 6 so clearing 6/7+ actually costs a couple of
+    // grind-gold-then-retry attempts instead of a straight walk-through.
+    // Ramps 1x -> 2.3x across lv 6-10, then HOLDS at 2.3x — the existing
+    // exponential shape for lv 10+ still applies on top, just permanently
+    // steeper from here on.
+    const WALL_START = 5, WALL_END = 10, WALL_FACTOR = 2.3;
+    let wallMult = 1;
+    if (lv > WALL_START) {
+        const t = Math.min(1, (lv - WALL_START) / (WALL_END - WALL_START));
+        wallMult = 1 + t * (WALL_FACTOR - 1);
+    }
+    scale *= wallMult;
 
     const bossMult = base.isBoss ? 1.25 : 1;
     return {

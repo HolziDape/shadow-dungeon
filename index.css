@@ -1766,10 +1766,13 @@ body.in-run .in-run-hud { display: flex; }
 
 /* Reserves the same vertical band as the centered LEVEL banner + top-right
    gear button (both position:fixed, so normal flex flow doesn't know to
-   leave room for them) — rows below this one then naturally start clear of
+   leave room for them) — the row below then naturally starts clear of
    both instead of sliding underneath them. */
 .irh-toprow { display: flex; align-items: center; min-height: 34px; }
-.irh-secondrow, .irh-thirdrow { display: flex; justify-content: flex-end; gap: 6px; }
+/* Wave + gold + gems share ONE row (was three separate stacked rows,
+   plus a since-removed ZONE pill that was just re-showing the same
+   number as the LEVEL banner) — the whole HUD is 2 rows now instead of 5. */
+.irh-secondrow { display: flex; justify-content: flex-end; gap: 6px; }
 
 .irh-hearts { display: flex; align-items: center; gap: 3px; }
 .irh-heart { width: 20px; height: 20px; image-rendering: pixelated; transition: opacity .15s; }
@@ -1795,33 +1798,27 @@ body.in-run .in-run-hud { display: flex; }
   white-space: nowrap;
 }
 .irh-pill-icon { width: 14px; height: 14px; image-rendering: pixelated; flex-shrink: 0; }
-.irh-pill-accent { color: #cdb8ff; }
 .irh-pill-gold { background: #3a2c1a; color: #ffe98f; }
 .irh-pill-gems { background: #2b2159; color: #cdb8ff; }
 
-.irh-hitrush {
-  align-self: center;
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px 2px;
-  margin-top: 2px;
-  border-radius: 999px;
-  background: #3a2c1a;
-  border: 2px solid var(--outline);
-  box-shadow: 0 3px 0 #0b0818;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-  color: var(--r-gold);
-}
-.irh-hitrush-icon { width: 13px; height: 13px; image-rendering: pixelated; }
-
-.irh-xprow { margin-top: 2px; }
-.irh-xp-label {
-  display: block;
-  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
-  color: rgba(255,255,255,0.65);
+/* Ability-XP row: one compact line (label left, hit-rush right when active)
+   sitting directly on top of a thin bar — replaces what used to be its own
+   label line + a whole separate hit-rush pill row. */
+.irh-xprow { margin-top: 4px; }
+.irh-xp-labels {
+  display: flex; align-items: baseline; justify-content: space-between;
   margin-bottom: 3px;
 }
+.irh-xp-label {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+}
+.irh-hitrush-text {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--r-gold);
+}
 .irh-xp-bar {
-  height: 8px;
+  height: 7px;
   background: var(--bg-deep);
   border: 2px solid var(--outline);
   border-radius: 999px;

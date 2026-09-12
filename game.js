@@ -154,7 +154,6 @@ const I18N = {
         'pack.subtitle': 'Spin the reel and claim a permanent account card.',
         'hud.levelShort': 'LEVEL',
         'hud.waveShort': 'WAVE',
-        'hud.zone': 'ZONE',
         'hud.hitRush': 'HIT RUSH',
         'hud.abilityXp': 'Ability XP',
         'result.victory': 'VICTORY',
@@ -304,7 +303,6 @@ const I18N = {
         'pack.subtitle': 'Lass die Walze drehen und sichere dir eine permanente Account-Karte.',
         'hud.levelShort': 'LEVEL',
         'hud.waveShort': 'WELLE',
-        'hud.zone': 'ZONE',
         'hud.hitRush': 'KILLRAUSCH',
         'hud.abilityXp': 'Skill-XP',
         'result.victory': 'SIEG',
@@ -10180,21 +10178,18 @@ function updateInRunHud() {
     if (waveNode) {
         waveNode.textContent = `${t('hud.waveShort')} ${currentMode === 'endless' ? `${currentWave + 1}/INF` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`;
     }
-    const zoneNode = document.getElementById('irh-zone');
-    if (zoneNode) zoneNode.textContent = `${t('hud.zone')} ${currentLevel}`;
     const goldNode = document.getElementById('irh-gold');
     if (goldNode) goldNode.textContent = save.gold;
     const gemsNode = document.getElementById('irh-gems');
     if (gemsNode) gemsNode.textContent = save.gems;
 
-    const hitRush = document.getElementById('irh-hitrush');
-    if (hitRush) {
+    const hitRushText = document.getElementById('irh-hitrush-text');
+    if (hitRushText) {
         if (killStreak > 2) {
-            hitRush.style.display = '';
-            const hitRushText = document.getElementById('irh-hitrush-text');
-            if (hitRushText) hitRushText.textContent = `${t('hud.hitRush')} x${killStreak}`;
+            hitRushText.style.display = '';
+            hitRushText.textContent = `${t('hud.hitRush')} x${killStreak}`;
         } else {
-            hitRush.style.display = 'none';
+            hitRushText.style.display = 'none';
         }
     }
 

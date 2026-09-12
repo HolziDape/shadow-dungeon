@@ -535,11 +535,13 @@ function getAbilityRankDef(ability, rank) {
 // `unlockLevel` is used by getLevelWaves() to gate enemies into later levels.
 // ─────────────────────────────────────────────────────────────────────────────
 // `sprite` is an extension point for real art (Claude Design pixel-art enemy
-// assets): set it to an icon path (e.g. 'icons/enemies/drone.png') and
-// preloadEnemySprites() (game.js) will load it once at startup — render.js's
+// assets): set it to a single icon path ('icons/enemies/drone.png') for a
+// static sprite, or an array of paths (['...idle-1.png', '...idle-2.png'])
+// for a looping animation cycled at ENEMY_ANIM_FPS (game.js). Either way,
+// preloadEnemySprites() (game.js) loads it once at startup and render.js's
 // drawEnemies() automatically switches that type from its procedural vector
-// shape to the loaded image, no other code changes needed. null = keep using
-// the current vector shape (every type today, until assets exist).
+// shape to the loaded image(s), no other code changes needed. null = keep
+// using the current vector shape (every type today, until assets exist).
 const ENEMY_TYPES = {
     // ── Original ──
     drone:     { hp: 5,  spd: 1.55, r: 13, color: '#6fb7c5', glow: '#6fb7c5', exp: 2, ai: 'strafe',  unlockLevel: 1, sprite: null },

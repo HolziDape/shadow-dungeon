@@ -563,14 +563,20 @@ function drawEnemies() {
         const phaseAlpha = enemy.phasing ? 0.35 : blinkAlpha;
         ctx.globalAlpha = phaseAlpha;
 
-        // ── Sprite path: if this enemy type has a loaded image (see
+        // ── Sprite path: if this enemy type has loaded image frame(s) (see
         // preloadEnemySprites() in game.js — populated once at startup from
         // ENEMY_TYPES[key].sprite, so dropping in a Claude Design asset later
         // needs zero changes here), draw that instead of the vector shape
         // below. Everything BELOW this block (status-indicator overlays:
         // EMP rings, drone barrel, shield ring, etc.) still applies on top
         // either way — only the body silhouette itself is swapped out.
-        const hasSprite = enemy.spriteImg && enemy.spriteImg.complete && enemy.spriteImg.naturalWidth > 0;
+        // Multiple frames cycle at ENEMY_ANIM_FPS using each enemy's own
+        // animTimer (randomized phase per instance, see createEnemy), so a
+        // drawImage-based animation costs the same as a static one — it's
+        // just picking a different (equally cheap) source image per frame.
+        const frames = enemy.spriteFrames;
+        const frame = frames && frames.length ? frames[Math.floor(enemy.animTimer * ENEMY_ANIM_FPS) % frames.length] : null;
+        const hasSprite = frame && frame.complete && frame.naturalWidth > 0;
         if (hasSprite) {
             if (enemy.ai === 'sprint') {
                 // Chaser normally self-orients toward the player (see below);
@@ -583,11 +589,11 @@ function drawEnemies() {
                 ctx.rotate(a);
             }
             const size = enemy.r * 2.2;
-            ctx.drawImage(enemy.spriteImg, -size / 2, -size / 2, size, size);
+            ctx.drawImage(frame, -size / 2, -size / 2, size, size);
             if (enemy.hitFlash > 0) {
                 ctx.globalCompositeOperation = 'lighter';
                 ctx.globalAlpha = phaseAlpha * 0.5;
-                ctx.drawImage(enemy.spriteImg, -size / 2, -size / 2, size, size);
+                ctx.drawImage(frame, -size / 2, -size / 2, size, size);
                 ctx.globalCompositeOperation = 'source-over';
             }
         } else {

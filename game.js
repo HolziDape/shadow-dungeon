@@ -3034,19 +3034,30 @@ function updateActiveAbility(dt) {
     if (typeof updatePassiveIconTimers === 'function') updatePassiveIconTimers(dt);
 }
 
-// Loads a real image for any ENEMY_TYPES entry that has `sprite` set, once,
-// at startup — the loaded Image is stashed directly on the ENEMY_TYPES
-// definition object itself (`.spriteImg`), so createEnemy()'s `{...type}`
-// spread carries it onto every instance automatically (one shared Image per
-// type, not per enemy). Entries with `sprite: null` are untouched and keep
-// rendering as the current procedural vector shape (see drawEnemies() in
-// render.js). Drop in a real asset path later — nothing else needs to change.
+// Frames-per-second for animated enemy sprites (a fixed-rate cycle through
+// whatever frames a type provides — see preloadEnemySprites()/drawEnemies()).
+// 8fps matches typical hand-drawn pixel-art animation pacing.
+const ENEMY_ANIM_FPS = 8;
+
+// Loads real image(s) for any ENEMY_TYPES entry that has `sprite` set, once,
+// at startup. `sprite` can be a single path (static) or an array of paths
+// (animation frames, cycled at ENEMY_ANIM_FPS) — either way the loaded
+// Images end up on the ENEMY_TYPES definition itself as `.spriteFrames`
+// (always an array, length 1 for a static sprite), so createEnemy()'s
+// `{...type}` spread carries it onto every instance for free — one shared
+// set of Images per type, not per enemy. Entries with `sprite: null` are
+// untouched and keep rendering as the current procedural vector shape (see
+// drawEnemies() in render.js). Drop in real asset paths later — nothing
+// else needs to change.
 function preloadEnemySprites() {
     Object.values(ENEMY_TYPES).forEach((def) => {
         if (!def.sprite) return;
-        const img = new Image();
-        img.src = def.sprite;
-        def.spriteImg = img;
+        const paths = Array.isArray(def.sprite) ? def.sprite : [def.sprite];
+        def.spriteFrames = paths.map((path) => {
+            const img = new Image();
+            img.src = path;
+            return img;
+        });
     });
 }
 
@@ -3068,6 +3079,7 @@ function createEnemy(type, x, y) {
         maxHp: hp,
         alive: true,
         hitFlash: 0,
+        animTimer: Math.random() * 10, // random phase so same-type enemies don't animate in lockstep
         aiClock: Math.random() * 2,
         sprintCooldown: 1.8 + Math.random(),
         sprintTime: 0,
@@ -4353,6 +4365,7 @@ function updateEnemies(dt) {
 
         enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
         enemy.aiClock += dt;
+        enemy.animTimer += dt;
         enemy.sprintCooldown -= dt;
 
         const dx = player.x - enemy.x;

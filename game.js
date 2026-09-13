@@ -10143,60 +10143,85 @@ function updateMetaHud() {
 // different font/soft-glow pills; this brings it in line with the rest of
 // the redesign's flat, hard-shadow pixel-art tokens. Heart shake-on-hit is
 // triggered directly from damagePlayer() instead of polled here.
+//
+// Runs every rendered frame, so it's written to do as little work as
+// possible when nothing has actually changed: DOM node lookups happen once
+// (cached in _irhEls, not via getElementById every frame) and every write
+// is guarded by a comparison against the last value actually written
+// (_irhLast) — text/width/display are only touched when they'd change,
+// which is most frames for gold/gems/xp (they change occasionally, not
+// every tick).
+let _irhEls = null;
+let _irhLast = {};
 function updateInRunHud() {
     if (!player) return;
+    if (!_irhEls) {
+        _irhEls = {
+            hearts: document.getElementById('irh-hearts'),
+            wave: document.getElementById('irh-wave'),
+            gold: document.getElementById('irh-gold'),
+            gems: document.getElementById('irh-gems'),
+            hitRush: document.getElementById('irh-hitrush-text'),
+            xpLabel: document.getElementById('irh-xp-label'),
+            xpFill: document.getElementById('irh-xp-fill')
+        };
+    }
+    const els = _irhEls;
+    const last = _irhLast;
 
-    const heartsRow = document.getElementById('irh-hearts');
-    if (heartsRow) {
+    if (els.hearts) {
         const total = Math.max(1, Math.floor(player.maxHp));
         const full = Math.max(0, Math.floor(player.hp));
-        if (heartsRow.childElementCount !== total) {
-            heartsRow.innerHTML = Array.from({ length: total }, () => `<img src="icons/small/heart-48.png" class="irh-heart" alt="">`).join('');
+        if (els.hearts.childElementCount !== total) {
+            els.hearts.innerHTML = Array.from({ length: total }, () => `<img src="icons/small/heart-48.png" class="irh-heart" alt="">`).join('');
+            last.heartsFull = -1; // force the empty-state pass below to run
         }
-        [...heartsRow.children].forEach((el, i) => el.classList.toggle('irh-heart-empty', i >= full));
+        if (last.heartsFull !== full) {
+            last.heartsFull = full;
+            for (let i = 0; i < els.hearts.children.length; i++) {
+                els.hearts.children[i].classList.toggle('irh-heart-empty', i >= full);
+            }
+        }
 
         // Extra hearts (Patch Heart) — small gold-tinted hearts after the row.
-        let extraWrap = document.getElementById('irh-hearts-extra');
         const extraCount = Math.min(8, player.extraHearts || 0);
-        if (extraCount > 0) {
-            if (!extraWrap) {
-                extraWrap = document.createElement('div');
-                extraWrap.id = 'irh-hearts-extra';
-                extraWrap.style.display = 'flex';
-                extraWrap.style.gap = '2px';
-                heartsRow.after(extraWrap);
-            }
-            if (extraWrap.childElementCount !== extraCount) {
+        if (extraCount !== last.extraCount) {
+            last.extraCount = extraCount;
+            let extraWrap = document.getElementById('irh-hearts-extra');
+            if (extraCount > 0) {
+                if (!extraWrap) {
+                    extraWrap = document.createElement('div');
+                    extraWrap.id = 'irh-hearts-extra';
+                    extraWrap.style.display = 'flex';
+                    extraWrap.style.gap = '2px';
+                    els.hearts.after(extraWrap);
+                }
                 extraWrap.innerHTML = Array.from({ length: extraCount }, () => `<img src="icons/small/heart-48.png" class="irh-heart-extra" alt="">`).join('');
+            } else if (extraWrap) {
+                extraWrap.remove();
             }
-        } else if (extraWrap) {
-            extraWrap.remove();
         }
     }
 
-    const waveNode = document.getElementById('irh-wave');
-    if (waveNode) {
-        waveNode.textContent = `${t('hud.waveShort')} ${currentMode === 'endless' ? `${currentWave + 1}/INF` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`;
-    }
-    const goldNode = document.getElementById('irh-gold');
-    if (goldNode) goldNode.textContent = save.gold;
-    const gemsNode = document.getElementById('irh-gems');
-    if (gemsNode) gemsNode.textContent = save.gems;
+    const waveText = `${t('hud.waveShort')} ${currentMode === 'endless' ? `${currentWave + 1}/INF` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`;
+    if (els.wave && last.wave !== waveText) { last.wave = waveText; els.wave.textContent = waveText; }
+    if (els.gold && last.gold !== save.gold) { last.gold = save.gold; els.gold.textContent = save.gold; }
+    if (els.gems && last.gems !== save.gems) { last.gems = save.gems; els.gems.textContent = save.gems; }
 
-    const hitRushText = document.getElementById('irh-hitrush-text');
-    if (hitRushText) {
-        if (killStreak > 2) {
-            hitRushText.style.display = '';
-            hitRushText.textContent = `${t('hud.hitRush')} x${killStreak}`;
-        } else {
-            hitRushText.style.display = 'none';
+    if (els.hitRush) {
+        const rushOn = killStreak > 2;
+        if (last.rushOn !== rushOn) { last.rushOn = rushOn; els.hitRush.style.display = rushOn ? '' : 'none'; }
+        if (rushOn && last.killStreak !== killStreak) {
+            last.killStreak = killStreak;
+            els.hitRush.textContent = `${t('hud.hitRush')} x${killStreak}`;
         }
     }
 
-    const xpLabel = document.getElementById('irh-xp-label');
-    if (xpLabel) xpLabel.textContent = `${t('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`;
-    const xpFill = document.getElementById('irh-xp-fill');
-    if (xpFill) xpFill.style.width = `${Math.min(100, Math.max(4, (player.abilityXp / player.nextAbilityXp) * 100))}%`;
+    if (els.xpLabel && (last.xp !== player.abilityXp || last.nextXp !== player.nextAbilityXp)) {
+        last.xp = player.abilityXp; last.nextXp = player.nextAbilityXp;
+        els.xpLabel.textContent = `${t('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`;
+        if (els.xpFill) els.xpFill.style.width = `${Math.min(100, Math.max(4, (player.abilityXp / player.nextAbilityXp) * 100))}%`;
+    }
 }
 
 window.addEventListener('keydown', (event) => {

@@ -589,6 +589,12 @@ function drawEnemies() {
                 ctx.rotate(a);
             }
             const size = enemy.r * 2.2;
+            // Same smoothing toggle used everywhere else a pixel-art image is
+            // drawn (ship skins, passive icons) — without it the browser runs
+            // a bilinear resample on every enemy every frame, which is both
+            // slower and makes the pixel art look blurry instead of crisp.
+            const smoothing = ctx.imageSmoothingEnabled;
+            ctx.imageSmoothingEnabled = false;
             ctx.drawImage(frame, -size / 2, -size / 2, size, size);
             if (enemy.hitFlash > 0) {
                 ctx.globalCompositeOperation = 'lighter';
@@ -596,6 +602,7 @@ function drawEnemies() {
                 ctx.drawImage(frame, -size / 2, -size / 2, size, size);
                 ctx.globalCompositeOperation = 'source-over';
             }
+            ctx.imageSmoothingEnabled = smoothing;
         } else {
         ctx.beginPath();
         if (enemy.isBoss) {

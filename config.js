@@ -541,7 +541,9 @@ function getAbilityRankDef(ability, rank) {
 // preloadEnemySprites() (game.js) loads it once at startup and render.js's
 // drawEnemies() automatically switches that type from its procedural vector
 // shape to the loaded image(s), no other code changes needed. null = keep
-// using the current vector shape (every type today, until assets exist).
+// using the procedural vector shape — no type is null today (all 13 have
+// real Claude Design art below), but the fallback path in drawEnemies()
+// stays intact for any future type shipped without art yet.
 // 3-frame idle-animation set from Claude Design, e.g. spr('drone') ->
 // ['icons/enemies/drone-1-64.png', '...-2-64.png', '...-3-64.png'].
 function spr(name) {
@@ -589,6 +591,11 @@ const ENEMY_INFO = {
 
 function getEnemyLevelStats(typeKey, level) {
     const base = ENEMY_TYPES[typeKey];
+    // Lazy-load this type's sprite the first time it's actually about to
+    // spawn (preloadEnemySprites() in game.js only eagerly loads the
+    // early-game types) — mutates the real ENEMY_TYPES entry, not the
+    // spread copy this function returns, so it only ever runs once per type.
+    if (typeof loadEnemySpriteFrames === 'function') loadEnemySpriteFrames(base);
     const lv = Math.max(1, level);
 
     // Smooth piecewise scaling — designed so player upgrades keep pace at every tier.

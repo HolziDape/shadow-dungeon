@@ -84,6 +84,7 @@ const I18N = {
         'abilities.title': 'ABILITY ARCHIVE',
         'enemyIndex.title': 'ENEMY INDEX',
         'enemyIndex.sub': '0/0 encountered',
+        'enemyIndex.encountered': 'encountered',
         'enemyIndex.locked': 'UNKNOWN',
         'hub.title': 'UPGRADES',
         'hub.sub': "Spend gold to boost your ship's stats.",
@@ -235,6 +236,7 @@ const I18N = {
         'abilities.title': 'FÄHIGKEITS-ARCHIV',
         'enemyIndex.title': 'GEGNER-INDEX',
         'enemyIndex.sub': '0/0 begegnet',
+        'enemyIndex.encountered': 'begegnet',
         'enemyIndex.locked': 'UNBEKANNT',
         'hub.title': 'UPGRADES',
         'hub.sub': 'Gib Gold aus, um die Werte deines Schiffs zu verbessern.',
@@ -959,6 +961,7 @@ window.setLanguage = function(lang) {
     if (typeof renderShop === 'function' && document.getElementById('shop-screen')?.classList.contains('active')) renderShop();
     if (typeof renderLoadout === 'function' && document.getElementById('loadout-screen')?.classList.contains('active')) renderLoadout();
     if (typeof renderAbilityArchive === 'function' && document.getElementById('abilities-screen')?.classList.contains('active')) renderAbilityArchive();
+    if (typeof renderEnemyIndex === 'function' && document.getElementById('enemy-index-screen')?.classList.contains('active')) renderEnemyIndex();
     if (typeof refreshMapRail === 'function') refreshMapRail();
     if (typeof refreshRailBadges === 'function') refreshRailBadges();
     if (typeof drawAbilityChoices === 'function' && document.getElementById('ability-overlay')?.classList.contains('active')) drawAbilityChoices();
@@ -3045,25 +3048,35 @@ function updateActiveAbility(dt) {
 // 8fps matches typical hand-drawn pixel-art animation pacing.
 const ENEMY_ANIM_FPS = 8;
 
-// Loads real image(s) for any ENEMY_TYPES entry that has `sprite` set, once,
-// at startup. `sprite` can be a single path (static) or an array of paths
-// (animation frames, cycled at ENEMY_ANIM_FPS) — either way the loaded
-// Images end up on the ENEMY_TYPES definition itself as `.spriteFrames`
-// (always an array, length 1 for a static sprite), so createEnemy()'s
-// `{...type}` spread carries it onto every instance for free — one shared
-// set of Images per type, not per enemy. Entries with `sprite: null` are
-// untouched and keep rendering as the current procedural vector shape (see
-// drawEnemies() in render.js). Drop in real asset paths later — nothing
-// else needs to change.
+// Loads real image(s) for one ENEMY_TYPES entry that has `sprite` set.
+// `sprite` can be a single path (static) or an array of paths (animation
+// frames, cycled at ENEMY_ANIM_FPS) — either way the loaded Images end up
+// on the entry itself as `.spriteFrames` (always an array, length 1 for a
+// static sprite), so createEnemy()'s `{...type}` spread carries it onto
+// every instance for free — one shared set of Images per type, not per
+// enemy. Idempotent: a type already loaded (or with no sprite) is a no-op.
+function loadEnemySpriteFrames(def) {
+    if (!def.sprite || def.spriteFrames) return;
+    const paths = Array.isArray(def.sprite) ? def.sprite : [def.sprite];
+    def.spriteFrames = paths.map((path) => {
+        const img = new Image();
+        img.src = path;
+        return img;
+    });
+}
+
+// Eagerly loads sprites only for the handful of types a fresh player
+// actually meets early on (unlockLevel <= 10 — drone/boss/swarmling/
+// chaser/brute). The other 8 types (levels 12-35) used to all load
+// upfront regardless — ~24 extra images most sessions never touch,
+// unnecessary bandwidth/startup cost on mobile. Those instead lazy-load
+// via getEnemyLevelStats() (config.js) the first time that type is
+// actually about to spawn, i.e. exactly when the player first reaches its
+// unlock level — the existing vector-shape fallback already covers the
+// brief async gap before that image finishes downloading.
 function preloadEnemySprites() {
     Object.values(ENEMY_TYPES).forEach((def) => {
-        if (!def.sprite) return;
-        const paths = Array.isArray(def.sprite) ? def.sprite : [def.sprite];
-        def.spriteFrames = paths.map((path) => {
-            const img = new Image();
-            img.src = path;
-            return img;
-        });
+        if ((def.unlockLevel || 1) <= 10) loadEnemySpriteFrames(def);
     });
 }
 
@@ -6448,17 +6461,29 @@ function damagePlayer(source, amount = 1) {
         addFxText(player.x, player.y - 30, 'PHOENIX!', '#cd764e', 0.45, 20);
     }
 
-    // Trigger HUD heart shake animation on the heart(s) that just got
-    // depleted (a boss hit can cost 2 at once — see `amount`).
-    const heartsRow = document.getElementById('irh-hearts');
+    // Trigger HUD heart shake/pulse animation: the depleted heart(s) shake
+    // (a boss hit can cost 2 at once — see `amount`), the still-full ones
+    // get a brief pulse so the whole row visibly reacts to the hit, matching
+    // what the old canvas drawHearts() did before this moved to DOM.
+    let heartsRow = document.getElementById('irh-hearts');
+    // updateInRunHud() (called from render() every frame) is normally what
+    // populates this row — but if a hit lands before that's ever run once
+    // (e.g. an enemy already overlapping the player on the very first
+    // update tick of a run), the row is still empty. Populate it now rather
+    // than silently dropping the very first hit's feedback.
+    if (heartsRow && heartsRow.childElementCount === 0 && typeof updateInRunHud === 'function') {
+        updateInRunHud();
+        heartsRow = document.getElementById('irh-hearts');
+    }
     if (heartsRow) {
         const lostFrom = Math.max(0, hpBefore - amount);
         [...heartsRow.children].forEach((el, i) => {
-            if (i >= lostFrom && i < lostFrom + amount) {
-                el.classList.remove('irh-heart-hit');
-                void el.offsetWidth; // restart the animation even if still mid-play from a rapid double-hit
-                el.classList.add('irh-heart-hit');
-            }
+            const isLost = i >= lostFrom && i < lostFrom + amount;
+            const cls = isLost ? 'irh-heart-hit' : 'irh-heart-pulse';
+            el.classList.remove(isLost ? 'irh-heart-pulse' : 'irh-heart-hit');
+            el.classList.remove(cls);
+            void el.offsetWidth; // restart the animation even if still mid-play from a rapid double-hit
+            if (isLost || i < hpBefore) el.classList.add(cls); // only pulse hearts that were actually full
         });
     }
     // Body class for CSS-driven full-screen flash
@@ -9924,7 +9949,7 @@ function renderEnemyIndex() {
 
     const keys = Object.keys(ENEMY_TYPES).sort((a, b) => (ENEMY_TYPES[a].unlockLevel || 1) - (ENEMY_TYPES[b].unlockLevel || 1));
     const unlockedCount = keys.filter((k) => (ENEMY_TYPES[k].unlockLevel || 1) <= (save.unlocked || 1)).length;
-    if (status) status.textContent = `${unlockedCount}/${keys.length} encountered`;
+    if (status) status.textContent = `${unlockedCount}/${keys.length} ${t('enemyIndex.encountered')}`;
 
     grid.innerHTML = '';
     keys.forEach((key) => {

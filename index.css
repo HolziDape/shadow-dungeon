@@ -1785,6 +1785,14 @@ body.in-run .in-run-hud { display: flex; }
   100% { transform: translate(0,0) scale(1); }
 }
 .irh-heart.irh-heart-hit { animation: irhHeartHit .5s ease-out; }
+/* Still-full hearts get a brief pulse on any hit — same "whole row reacts"
+   feedback the old canvas drawHearts() had, just via CSS now. */
+@keyframes irhHeartPulse {
+  0%   { transform: scale(1); filter: brightness(1); }
+  35%  { transform: scale(1.22); filter: brightness(1.5); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.irh-heart.irh-heart-pulse { animation: irhHeartPulse .5s ease-out; }
 
 .irh-pill {
   display: inline-flex; align-items: center; gap: 4px;
@@ -4408,6 +4416,13 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   border-radius: 12px;
 }
 .enemy-index-icon-img { width: 40px; height: 40px; image-rendering: pixelated; }
+/* These cards borrow .unlocked-now purely for the desaturate/opacity
+   locked-state styling — unlike ability cards they don't open a detail
+   view (the full description already sits right on the card), so undo
+   the inherited pointer cursor + press-down affordance that would
+   otherwise make them look clickable for nothing. */
+.enemy-index-card.unlocked-now { cursor: default; }
+.enemy-index-card.unlocked-now:active { transform: none; }
 .ability-archive-card .card-title {
   font-family: var(--font-ui);
   font-size: 14px;

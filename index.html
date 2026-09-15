@@ -614,6 +614,24 @@
         </div>
     </div>
 
+    <div id="skill-reveal-overlay" class="modal-overlay">
+        <div class="modal-content pack-content skill-reveal-content" id="skill-reveal-content">
+            <div class="modal-topline">
+                <h2 class="modal-title" data-i18n="skillReveal.title">NEW SKILL</h2>
+            </div>
+            <div class="pack-reveal-face" id="skill-reveal-face">
+                <div class="prf-badge" id="skr-badge"></div>
+                <div class="prf-frame" id="skr-frame">
+                    <div class="prf-rays" id="skr-rays"></div>
+                    <div class="prf-icon" id="skr-icon"></div>
+                </div>
+                <div class="prf-name" id="skr-name"></div>
+                <div class="prf-desc" id="skr-desc"></div>
+            </div>
+            <button id="skill-reveal-continue" class="btn-glossy btn-gold" type="button" onclick="closeSkillRevealOverlay()" data-i18n="skillReveal.nice">Nice!</button>
+        </div>
+    </div>
+
     <div id="peek-overlay" class="modal-overlay" onclick="closePackPeek(event)">
         <div class="modal-content peek-content" id="peek-content" onclick="event.stopPropagation()">
             <div class="peek-header">

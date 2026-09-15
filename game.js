@@ -33,7 +33,8 @@ let save = {
     daily: { streak: 0, cycleDay: 0, lastClaimKey: '' },
     settings: { sfx: 0.7, music: 0.35, haptics: false, language: 'en' },
     metaSlots: { normalExtra: 0, legendaryExtra: 0 },
-    lastRunSkills: null
+    lastRunSkills: null,
+    pendingSkillReveal: null
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -6778,6 +6779,8 @@ function victory() {
     const gemReward = 1 + Math.floor(currentLevel / 6);
     save.unlocked = Math.max(save.unlocked, currentLevel + 1);
     save.selectedLevel = save.unlocked;
+    const newSkill = ABILITIES.find((a) => (a.unlockLevel || 1) === save.unlocked);
+    if (newSkill) save.pendingSkillReveal = newSkill.id;
     save.gems += gemReward;
     save.gold += goldReward;
 
@@ -8955,6 +8958,11 @@ window.showFight = function() {
     refreshMapRail();
     renderLeaderboard();
     renderLevelRoadmap();
+    if (save.pendingSkillReveal) {
+        const revealId = save.pendingSkillReveal;
+        save.pendingSkillReveal = null;
+        openSkillRevealSequence(revealId);
+    }
     refreshLevelCta();
     playHaptic('soft');
 };
@@ -9163,6 +9171,33 @@ function renderLevelRoadmap() {
         }
     });
 }
+
+// Fires once, the first time the player lands on the Home screen after a
+// level-up that granted a new skill. Nothing is rolled/granted here — the
+// skill is already unlocked by save.unlocked; this is a reveal ceremony.
+// Task 6 replaces the pack visuals, Task 7 adds the drag-to-tear gesture —
+// both extend this function's body, keeping this exact signature.
+function openSkillRevealSequence(abilityId) {
+    const ability = ABILITIES.find((a) => a.id === abilityId);
+    if (!ability) return;
+    const overlay = document.getElementById('skill-reveal-overlay');
+    const badge = document.getElementById('skr-badge');
+    const icon = document.getElementById('skr-icon');
+    const name = document.getElementById('skr-name');
+    const desc = document.getElementById('skr-desc');
+    if (!overlay || !name || !desc) return;
+    const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
+    if (badge) badge.textContent = (ability.rarity || 'common').toUpperCase();
+    if (icon) icon.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
+    name.textContent = (localised && localised.name) || ability.name;
+    desc.textContent = (localised && localised.desc) || ability.desc;
+    overlay.dataset.rarity = (ability.rarity || 'common').toLowerCase();
+    overlay.classList.add('active');
+}
+
+window.closeSkillRevealOverlay = function() {
+    document.getElementById('skill-reveal-overlay')?.classList.remove('active');
+};
 
 function refreshLevelCta() {
     const label = document.getElementById('primary-cta-label');

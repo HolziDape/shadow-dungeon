@@ -2581,6 +2581,28 @@ function navigateRelative(delta, opts = {}) {
     if (typeof playHaptic === 'function') playHaptic('tap');
 }
 
+// One-time starfield for the Home screen background — 46 fixed stars,
+// ~15% twinkle via a staggered CSS opacity pulse. Rendered once on load,
+// never touched again: zero per-frame cost.
+function renderStarfield() {
+    const host = document.querySelector('.cosmic-bg');
+    if (!host || host.querySelector('.starfield-star')) return; // idempotent
+    const layer = document.createElement('div');
+    layer.className = 'starfield-layer';
+    const STAR_COUNT = 46;
+    for (let i = 0; i < STAR_COUNT; i++) {
+        const star = document.createElement('div');
+        const size = i % 5 === 0 ? 'lg' : (i % 2 === 0 ? 'md' : 'sm');
+        const twinkle = i % 7 === 0; // ~15%
+        star.className = `starfield-star size-${size}${twinkle ? ' twinkle' : ''}`;
+        star.style.left = `${(i * 37) % 100}%`;
+        star.style.top = `${(i * 53) % 100}%`;
+        if (twinkle) star.style.animationDelay = `${(i % 5) * 0.7}s`;
+        layer.appendChild(star);
+    }
+    host.appendChild(layer);
+}
+
 function installSwipeNavigation() {
     let startX = 0, startY = 0, startT = 0, tracking = false;
     let committed = false; // once horizontal direction is locked we commit
@@ -10646,6 +10668,7 @@ window.addEventListener('load', () => {
     installSwipeNavigation();
     refreshRailBadges();
     preloadEnemySprites();
+    renderStarfield();
     MusicManager.init();
     startMusicVisualiser();
     setInterval(syncMusicVolume, 500);

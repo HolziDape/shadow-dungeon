@@ -2077,8 +2077,8 @@ function clearHpDangerFlair() {
 }
 
 // Confetti DOM rays burst from center of #pack-confetti
-function spawnPackConfetti(color = '#d6b36a', count = 30) {
-    const host = document.getElementById('pack-confetti');
+function spawnPackConfetti(color = '#d6b36a', count = 30, targetId = 'pack-confetti') {
+    const host = document.getElementById(targetId);
     if (!host) return;
     host.innerHTML = '';
     const palette = [color, '#ffffff', '#e3cf9a', color];
@@ -2665,6 +2665,61 @@ function installSwipeNavigation() {
     root.addEventListener('mousedown', down);
     root.addEventListener('mousemove', move);
     root.addEventListener('mouseup', up);
+}
+
+// Drag-to-tear gesture for the skill-reveal pack. Structurally mirrors
+// installSwipeNavigation()'s touch/mouse handling, but tracks vertical
+// drag distance on one element instead of horizontal swipe on the body.
+function installSkillRevealDrag() {
+    const stage = document.getElementById('skill-reveal-pack-stage');
+    if (!stage) return;
+    let startY = 0, tracking = false;
+    const TEAR_THRESHOLD = 70; // px
+
+    function commitTear() {
+        const top = document.getElementById('skill-reveal-pack-top');
+        const hint = document.getElementById('skill-reveal-hint');
+        const rays = document.getElementById('skill-reveal-rays');
+        const face = document.getElementById('skill-reveal-face');
+        if (!top || top.classList.contains('torn')) return;
+        top.classList.add('torn');
+        if (hint) hint.style.display = 'none';
+        if (rays) rays.classList.add('burst');
+        if (typeof playHaptic === 'function') playHaptic('medium');
+        setTimeout(() => {
+            if (face) face.style.display = '';
+            if (typeof spawnPackConfetti === 'function') spawnPackConfetti('#d6b36a', 30, 'skill-reveal-confetti');
+        }, 320);
+    }
+
+    function down(e) {
+        const t = e.touches ? e.touches[0] : e;
+        startY = t.clientY;
+        tracking = true;
+    }
+    function move(e) {
+        if (!tracking) return;
+        const t = e.touches ? e.touches[0] : e;
+        const dy = t.clientY - startY;
+        if (dy > TEAR_THRESHOLD) {
+            tracking = false;
+            commitTear();
+        }
+    }
+    function up() {
+        tracking = false;
+    }
+    function tap() {
+        commitTear();
+    }
+
+    stage.addEventListener('touchstart', down, { passive: true });
+    stage.addEventListener('touchmove', move, { passive: true });
+    stage.addEventListener('touchend', up, { passive: true });
+    stage.addEventListener('mousedown', down);
+    stage.addEventListener('mousemove', move);
+    stage.addEventListener('mouseup', up);
+    stage.addEventListener('click', tap);
 }
 
 window.openSettings = function() {
@@ -9191,13 +9246,14 @@ function openSkillRevealSequence(abilityId) {
     const ability = ABILITIES.find((a) => a.id === abilityId);
     if (!ability) return;
     const overlay = document.getElementById('skill-reveal-overlay');
-    const packImg = document.getElementById('skill-reveal-pack-img');
+    const packTop = document.getElementById('skill-reveal-pack-top');
+    const packBottom = document.getElementById('skill-reveal-pack-bottom');
     const face = document.getElementById('skill-reveal-face');
     const badge = document.getElementById('skr-badge');
     const icon = document.getElementById('skr-icon');
     const name = document.getElementById('skr-name');
     const desc = document.getElementById('skr-desc');
-    if (!overlay || !packImg || !face || !name || !desc) return;
+    if (!overlay || !packTop || !packBottom || !face || !name || !desc) return;
     const rarity = (ability.rarity || 'common').toLowerCase();
     const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
 
@@ -9211,9 +9267,14 @@ function openSkillRevealSequence(abilityId) {
 
     const heroSrc = `icons/skill-pack-${rarity}-hero.png`;
     const probe = new Image();
-    probe.onload = () => { packImg.src = heroSrc; };
-    probe.onerror = () => { packImg.src = 'icons/pack.png'; }; // fallback if a rarity asset is ever missing
+    probe.onload = () => { packTop.src = heroSrc; packBottom.src = heroSrc; };
+    probe.onerror = () => { packTop.src = 'icons/pack.png'; packBottom.src = 'icons/pack.png'; }; // fallback if a rarity asset is ever missing
     probe.src = heroSrc;
+    // Reset any tear from a previous reveal.
+    packTop.classList.remove('torn');
+    packBottom.classList.remove('torn');
+    packTop.style.transform = '';
+    document.getElementById('skill-reveal-hint').style.display = '';
 
     overlay.dataset.rarity = rarity;
     overlay.classList.add('active');
@@ -10792,6 +10853,7 @@ window.addEventListener('load', () => {
     refreshRailBadges();
     preloadEnemySprites();
     renderStarfield();
+    installSkillRevealDrag();
     MusicManager.init();
     startMusicVisualiser();
     setInterval(syncMusicVolume, 500);

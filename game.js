@@ -9994,16 +9994,19 @@ function renderAbilityArchive() {
         const baseTier = (ability.rarity || 'common').toLowerCase();
         const card = document.createElement('div');
         const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
-        const dispName = (localised && localised.name) || ability.name;
-        const dispDesc = (localised && localised.desc) || ability.desc;
+        const dispName = unlocked ? ((localised && localised.name) || ability.name) : '???';
+        const dispDesc = unlocked ? ((localised && localised.desc) || ability.desc) : '';
+        const iconMarkup = unlocked
+            ? getAbilityIconMarkup(ability.id, ability.icon)
+            : `<div class="ability-icon ability-locked-icon"><img src="icons/small/lock-48.png" class="ability-icon-img" alt=""></div>`;
         card.className = `shop-card ability-card ability-archive-card rarity-tier-${baseTier} ability-${ability.id} ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
         card.innerHTML = `
-            ${getAbilityIconMarkup(ability.id, ability.icon)}
+            ${iconMarkup}
             <div class="card-title">${dispName}</div>
             <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
                 ${baseTier.toUpperCase()} | ${t('milestone.unlockedAt')} ${ability.unlockLevel}
             </div>
-            <div class="card-copy">${dispDesc}</div>
+            ${unlocked ? `<div class="card-copy">${dispDesc}</div>` : ''}
             <button class="archive-cta" type="button" ${unlocked ? '' : 'disabled'}>
                 ${unlocked ? t('milestone.archiveAvailable') : `${t('milestone.lockedFrom')} ${ability.unlockLevel}`}
             </button>

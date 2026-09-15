@@ -8532,6 +8532,7 @@ function renderLoadoutSynergy() {
     const headline = active.find((a) => a.key === 'damageMultiplier') || active[0];
     box.innerHTML = `
         <button class="synergy-head" type="button" onclick="toggleLoadoutSynergy()">
+            <img src="icons/small/bolt-48.png" class="synergy-bolt-icon" alt="">
             <span class="eyebrow">Loadout Synergy</span>
             <span class="synergy-count">${active.length}/${LOADOUT_SYNERGY_AXES.length} ACTIVE</span>
             ${!loadoutSynergyOpen && headline ? `<span class="synergy-headline">${headline.format(totals[headline.key])}</span>` : ''}
@@ -8632,8 +8633,8 @@ function renderLoadout() {
     if (loadoutPanel) loadoutPanel.style.display = loadoutTab === 'loadout' ? '' : 'none';
     if (cardsPanel) cardsPanel.style.display = loadoutTab === 'cards' ? '' : 'none';
 
-    normal.innerHTML = `<p class="eyebrow">${t('equipment.normalSlots')}</p><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped, ownedCounts)}</div>`;
-    legendary.innerHTML = `<p class="eyebrow">${t('equipment.legendarySlots')}</p><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped, ownedCounts)}</div>`;
+    normal.innerHTML = `<div class="loadout-slot-header"><p class="eyebrow">${t('equipment.normalSlots')}</p><span class="loadout-slot-count">${normalEquipped.length}/${caps.normal}</span></div><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped, ownedCounts)}</div>`;
+    legendary.innerHTML = `<div class="loadout-slot-header"><p class="eyebrow">${t('equipment.legendarySlots')}</p><span class="loadout-slot-count">${legendaryEquipped.length}/${caps.legendary}</span></div><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped, ownedCounts)}</div>`;
     renderLoadoutSynergy();
 
     // Featured callout — the best-rarity equipped card gets a description card,

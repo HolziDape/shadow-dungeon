@@ -4,3 +4,4 @@ CHANGELOG.md
 "*.bak" 
 _shots/
 devserver.py
+.superpowers/

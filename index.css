@@ -3998,6 +3998,18 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   width: 12px; height: 12px;
   fill: currentColor; stroke: none;
 }
+/* Real ability icons dropped into the 22px roadmap badge need to be
+   squeezed down from their card-sized default (.ability-icon is 42px/
+   26px inner) regardless of whether the inner content is an <img> or an
+   inline <svg> — getAbilityIconMarkup() can return either. */
+.lr-skill-tag .ability-icon {
+  width: 16px; height: 16px;
+  border: 0; background: none; margin: 0;
+}
+.lr-skill-tag .ability-icon-img,
+.lr-skill-tag .ability-icon svg {
+  width: 14px; height: 14px;
+}
 .lr-skill-tag.rarity-tier-common    { color: #9bd3ff; border-color: #9bd3ff; }
 .lr-skill-tag.rarity-tier-rare      { color: var(--r-blue); border-color: var(--r-blue); }
 .lr-skill-tag.rarity-tier-epic      { color: var(--r-purple); border-color: var(--r-purple); }

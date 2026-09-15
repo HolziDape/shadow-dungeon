@@ -9054,7 +9054,7 @@ function renderLevelRoadmap() {
             <div class="lr-skill-link side-${p.badgeSide}" title="${t('roadmap.skillUnlock')}: ${(typeof tSkill === 'function' && tSkill(p.ability.id)?.name) || p.ability.name}">
                 <span class="lr-skill-arm"></span>
                 <span class="lr-skill-tag rarity-tier-${(p.ability.rarity || 'common').toLowerCase()}">
-                    ${sparkSvg}
+                    ${getAbilityIconMarkup(p.ability.id, sparkSvg)}
                 </span>
             </div>` : '';
         // Reward marker is now a tight chest icon that sits ON the node

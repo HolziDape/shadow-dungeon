@@ -149,6 +149,8 @@ const I18N = {
         'roadmap.locked': 'locked',
         'roadmap.ready': 'ready',
         'roadmap.skillUnlock': 'New skill at this level',
+        'skillReveal.title': 'NEW SKILL',
+        'skillReveal.nice': 'Nice!',
         'milestone.statSuffix': '. ',
         'milestone.unlockedAt': 'Unlocked from Lv',
         'milestone.lockedFrom': 'From Lv',
@@ -299,6 +301,8 @@ const I18N = {
         'roadmap.locked': 'gesperrt',
         'roadmap.ready': 'bereit',
         'roadmap.skillUnlock': 'Neuer Skill auf diesem Level',
+        'skillReveal.title': 'NEUER SKILL',
+        'skillReveal.nice': 'Nice!',
         'milestone.statSuffix': '. ',
         'milestone.unlockedAt': 'Frei ab Lv',
         'milestone.lockedFrom': 'Ab Lv',
@@ -6578,7 +6582,11 @@ function closeMission() {
     if (window.canvas) window.canvas.style.display = 'none';
     document.body.classList.remove('in-run');
     touchState.active = false;
-    showFight();
+    // skipReveal=true: this showFight() runs synchronously inside victory()
+    // (before the Result overlay opens), invisible to the player — do not
+    // consume/open the skill reveal here. It fires on the next genuinely
+    // visible Home arrival (e.g. the player dismissing Victory via Home).
+    showFight(true);
     buildRoadmap();
     updateMetaHud();
 }
@@ -8949,7 +8957,7 @@ function showToast(text) {
     showToast.timer = window.setTimeout(() => toast.classList.remove('visible'), 1700);
 }
 
-window.showFight = function() {
+window.showFight = function(skipReveal) {
     showScreen('fight-screen');
     setActiveNav('nav-fight');
     buildRoadmap();
@@ -8958,7 +8966,7 @@ window.showFight = function() {
     refreshMapRail();
     renderLeaderboard();
     renderLevelRoadmap();
-    if (save.pendingSkillReveal) {
+    if (!skipReveal && save.pendingSkillReveal) {
         const revealId = save.pendingSkillReveal;
         save.pendingSkillReveal = null;
         openSkillRevealSequence(revealId);

@@ -9189,17 +9189,31 @@ function openSkillRevealSequence(abilityId) {
     const ability = ABILITIES.find((a) => a.id === abilityId);
     if (!ability) return;
     const overlay = document.getElementById('skill-reveal-overlay');
+    const packImg = document.getElementById('skill-reveal-pack-img');
+    const face = document.getElementById('skill-reveal-face');
     const badge = document.getElementById('skr-badge');
     const icon = document.getElementById('skr-icon');
     const name = document.getElementById('skr-name');
     const desc = document.getElementById('skr-desc');
-    if (!overlay || !name || !desc) return;
+    if (!overlay || !packImg || !face || !name || !desc) return;
+    const rarity = (ability.rarity || 'common').toLowerCase();
     const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
-    if (badge) badge.textContent = (ability.rarity || 'common').toUpperCase();
+
+    // Populate the (still-hidden) reveal face now so Task 7's tear has
+    // real content ready the instant it flips display:none off.
+    if (badge) badge.textContent = rarity.toUpperCase();
     if (icon) icon.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
     name.textContent = (localised && localised.name) || ability.name;
     desc.textContent = (localised && localised.desc) || ability.desc;
-    overlay.dataset.rarity = (ability.rarity || 'common').toLowerCase();
+    face.style.display = 'none';
+
+    const heroSrc = `icons/skill-pack-${rarity}-hero.png`;
+    const probe = new Image();
+    probe.onload = () => { packImg.src = heroSrc; };
+    probe.onerror = () => { packImg.src = 'icons/pack.png'; }; // fallback if a rarity asset is ever missing
+    probe.src = heroSrc;
+
+    overlay.dataset.rarity = rarity;
     overlay.classList.add('active');
 }
 

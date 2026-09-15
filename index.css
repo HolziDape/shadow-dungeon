@@ -3170,6 +3170,29 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   100% { opacity: 0; transform: translate(-50%,-50%) rotate(var(--a, 0deg)) translateY(-260px); }
 }
 
+/* skill-reveal pack stage (Task 6): hero pack art + rarity-tinted glow */
+.skill-reveal-content { text-align: center; }
+.skill-reveal-pack-stage {
+  position: relative;
+  width: min(100%, 320px);
+  aspect-ratio: 2 / 3;
+  margin: 8px auto;
+}
+.skill-reveal-pack-img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 18px rgba(255,255,255,0.15));
+}
+.skill-reveal-hint {
+  position: absolute; left: 0; right: 0; bottom: -22px;
+  font-family: var(--font-ui); font-size: 10px; letter-spacing: 1px;
+  color: rgba(255,255,255,0.5); text-align: center;
+}
+#skill-reveal-overlay[data-rarity="rare"]      .skill-reveal-pack-img { filter: drop-shadow(0 0 18px rgba(41,209,255,0.35)); }
+#skill-reveal-overlay[data-rarity="epic"]      .skill-reveal-pack-img { filter: drop-shadow(0 0 18px rgba(255,95,209,0.35)); }
+#skill-reveal-overlay[data-rarity="legendary"] .skill-reveal-pack-img { filter: drop-shadow(0 0 22px rgba(255,205,60,0.45)); }
+
 /* pack rip / pre-reveal phase */
 .pack-rip {
   position: absolute; inset: 0;

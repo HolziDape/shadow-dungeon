@@ -8959,6 +8959,66 @@ window.showFight = function() {
     playHaptic('soft');
 };
 
+// Pure function of level — same formula victory()'s milestone bonus uses,
+// evaluated for an arbitrary (usually future) level rather than the level
+// just completed. No new numbers, just the existing formula at a different lvl.
+function getRoadmapRewardPreview(lvl) {
+    const goldReward = Math.round(getLevelGoldReward(lvl) * getEconomyMultiplier());
+    const bonusGold = Math.round(goldReward * 0.5);
+    const bonusGems = 5 + Math.floor(lvl / 4);
+    let packKey = 'supply_pack_i';
+    if (lvl >= 30) packKey = 'apex_pack_iii';
+    else if (lvl >= 12) packKey = 'strike_pack_ii';
+    return { gold: bonusGold, gems: bonusGems, packName: PACK_DEFINITIONS[packKey]?.name || packKey };
+}
+
+window.showRoadmapPreview = function(lvl) {
+    const overlay = document.getElementById('roadmap-preview-overlay');
+    const levelEl = document.getElementById('roadmap-preview-level');
+    const body = document.getElementById('roadmap-preview-body');
+    if (!overlay || !levelEl || !body) return;
+    levelEl.textContent = `LEVEL ${lvl}`;
+
+    const isReward = lvl > 0 && lvl % 3 === 0;
+    const ability = ABILITIES.find((a) => (a.unlockLevel || 1) === lvl);
+    let html = '';
+    if (isReward) {
+        const preview = getRoadmapRewardPreview(lvl);
+        html += `
+            <div class="roadmap-preview-section">
+                <p class="eyebrow">${t('roadmap.reward')}</p>
+                <div class="roadmap-preview-reward-row">
+                    <span>+${formatCompactNumber(preview.gold)} G</span>
+                    <span>+${preview.gems} ◆</span>
+                    <span>1× ${preview.packName}</span>
+                </div>
+            </div>`;
+    }
+    if (ability) {
+        const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
+        const dispName = (localised && localised.name) || ability.name;
+        const dispDesc = (localised && localised.desc) || ability.desc;
+        html += `
+            <div class="roadmap-preview-section">
+                <p class="eyebrow">${t('roadmap.skillUnlock')}</p>
+                <div class="roadmap-preview-skill-row rarity-tier-${(ability.rarity || 'common').toLowerCase()}">
+                    ${getAbilityIconMarkup(ability.id, ability.icon)}
+                    <div>
+                        <div class="roadmap-preview-skill-name">${dispName}</div>
+                        <div class="roadmap-preview-skill-desc">${dispDesc}</div>
+                    </div>
+                </div>
+            </div>`;
+    }
+    body.innerHTML = html;
+    overlay.classList.add('active');
+};
+
+window.closeRoadmapPreview = function(event) {
+    if (event && event.target && event.target.id !== 'roadmap-preview-overlay') return;
+    document.getElementById('roadmap-preview-overlay')?.classList.remove('active');
+};
+
 // Spiral level roadmap. Each node sits on a hand-rolled spiral; nodes are
 // connected by a line; every 3rd level above current shows a reward chest
 // (gold + gems + a level-appropriate pack); levels that unlock a new ability
@@ -9063,7 +9123,8 @@ function renderLevelRoadmap() {
             <div class="lr-reward" title="${t('roadmap.reward')}">
                 ${chestSvg}
             </div>` : '';
-        nodesHtml += `<div class="lr-node ${p.state}" data-lvl="${p.lvl}" style="
+        const clickable = p.reward || p.ability;
+        nodesHtml += `<div class="lr-node ${p.state}${clickable ? ' lr-node-clickable' : ''}" data-lvl="${p.lvl}" ${clickable ? `onclick="showRoadmapPreview(${p.lvl})"` : ''} style="
             left: calc(50% + ${p.x}px);
             top: ${p.yFromTop}px;
         ">

@@ -3945,6 +3945,28 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   0%,100% { transform: translate(-50%, -50%) scale(1); }
   50%     { transform: translate(-50%, -50%) scale(1.06); }
 }
+.lr-node-clickable { cursor: pointer; }
+.lr-node-clickable:active { transform: translate(-50%, -50%) scale(0.94); }
+
+.roadmap-preview-modal { max-width: 340px; }
+.roadmap-preview-modal .lb-style-header { justify-content: center; }
+.roadmap-preview-modal .lb-style-header .screen-title-counter { margin-left: 0; }
+.roadmap-preview-section { margin-top: 12px; }
+.roadmap-preview-section:first-of-type { margin-top: 4px; }
+.roadmap-preview-reward-row {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 800; color: var(--r-gold);
+}
+.roadmap-preview-skill-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 12px; border: 2px solid var(--outline);
+}
+.roadmap-preview-skill-name { font-family: var(--font-display); font-size: 13px; font-weight: 800; color: #fff; }
+.roadmap-preview-skill-desc { font-family: var(--font-ui); font-size: 10px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+.roadmap-preview-skill-row.rarity-tier-common    { border-color: #b9adf0; }
+.roadmap-preview-skill-row.rarity-tier-rare      { border-color: var(--r-blue); }
+.roadmap-preview-skill-row.rarity-tier-epic      { border-color: var(--r-purple); }
+.roadmap-preview-skill-row.rarity-tier-legendary { border-color: var(--r-gold); }
 /* Reward marker — compact chest pinned to the upper-right of the node. */
 .lr-reward {
   position: absolute;

@@ -220,6 +220,16 @@
         </div>
     </div>
 
+    <div id="roadmap-preview-overlay" class="modal-overlay" onclick="closeRoadmapPreview(event)">
+        <div class="modal-content lb-style-modal roadmap-preview-modal" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeRoadmapPreview()">×</button>
+            <div class="lb-style-header">
+                <span class="screen-title-counter" id="roadmap-preview-level">LEVEL --</span>
+            </div>
+            <div id="roadmap-preview-body"></div>
+        </div>
+    </div>
+
     <div id="hub-screen" class="screen">
         <div class="screen-shell">
             <div class="hub-title-row">

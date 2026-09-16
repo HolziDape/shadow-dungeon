@@ -2687,6 +2687,8 @@ function installSkillRevealDrag() {
         if (rays) rays.classList.add('burst');
         if (typeof playHaptic === 'function') playHaptic('medium');
         setTimeout(() => {
+            const packStage = document.getElementById('skill-reveal-pack-stage');
+            if (packStage) packStage.style.display = 'none';
             if (face) face.style.display = '';
             if (typeof spawnPackConfetti === 'function') spawnPackConfetti('#d6b36a', 30, 'skill-reveal-confetti');
         }, 320);
@@ -9026,6 +9028,7 @@ window.showFight = function(skipReveal) {
     if (!skipReveal && save.pendingSkillReveal) {
         const revealId = save.pendingSkillReveal;
         save.pendingSkillReveal = null;
+        saveSave();
         openSkillRevealSequence(revealId);
     }
     refreshLevelCta();
@@ -9068,17 +9071,24 @@ window.showRoadmapPreview = function(lvl) {
             </div>`;
     }
     if (ability) {
+        // Mirror the Ability Archive's (renderAbilityArchive) concealment for
+        // skill-granting levels the player hasn't reached yet — otherwise
+        // this preview spoils exactly what Task 4 deliberately hides.
+        const unlocked = (ability.unlockLevel || 1) <= save.unlocked;
         const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
-        const dispName = (localised && localised.name) || ability.name;
-        const dispDesc = (localised && localised.desc) || ability.desc;
+        const dispName = unlocked ? ((localised && localised.name) || ability.name) : '???';
+        const dispDesc = unlocked ? ((localised && localised.desc) || ability.desc) : '';
+        const iconMarkup = unlocked
+            ? getAbilityIconMarkup(ability.id, ability.icon)
+            : `<div class="ability-icon ability-locked-icon"><img src="icons/small/lock-48.png" class="ability-icon-img" alt=""></div>`;
         html += `
             <div class="roadmap-preview-section">
                 <p class="eyebrow">${t('roadmap.skillUnlock')}</p>
                 <div class="roadmap-preview-skill-row rarity-tier-${(ability.rarity || 'common').toLowerCase()}">
-                    ${getAbilityIconMarkup(ability.id, ability.icon)}
+                    ${iconMarkup}
                     <div>
                         <div class="roadmap-preview-skill-name">${dispName}</div>
-                        <div class="roadmap-preview-skill-desc">${dispDesc}</div>
+                        ${unlocked ? `<div class="roadmap-preview-skill-desc">${dispDesc}</div>` : ''}
                     </div>
                 </div>
             </div>`;
@@ -9274,6 +9284,8 @@ function openSkillRevealSequence(abilityId) {
     packTop.classList.remove('torn');
     packBottom.classList.remove('torn');
     packTop.style.transform = '';
+    const packStage = document.getElementById('skill-reveal-pack-stage');
+    if (packStage) packStage.style.display = '';
     const hint = document.getElementById('skill-reveal-hint');
     if (hint) hint.style.display = '';
     const rays = document.getElementById('skill-reveal-rays');
@@ -9283,7 +9295,8 @@ function openSkillRevealSequence(abilityId) {
     overlay.classList.add('active');
 }
 
-window.closeSkillRevealOverlay = function() {
+window.closeSkillRevealOverlay = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
     document.getElementById('skill-reveal-overlay')?.classList.remove('active');
 };
 

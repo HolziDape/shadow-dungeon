@@ -9274,7 +9274,10 @@ function openSkillRevealSequence(abilityId) {
     packTop.classList.remove('torn');
     packBottom.classList.remove('torn');
     packTop.style.transform = '';
-    document.getElementById('skill-reveal-hint').style.display = '';
+    const hint = document.getElementById('skill-reveal-hint');
+    if (hint) hint.style.display = '';
+    const rays = document.getElementById('skill-reveal-rays');
+    if (rays) rays.classList.remove('burst');
 
     overlay.dataset.rarity = rarity;
     overlay.classList.add('active');

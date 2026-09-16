@@ -3207,13 +3207,24 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
    stage once the card is revealed so the two don't stack, but if content is
    ever still taller than the viewport (long desc, small phone), let this
    overlay's content scroll internally instead of pushing #skill-reveal-continue
-   off-screen with no way back — .pack-content is overflow:hidden globally. */
-#skill-reveal-content { max-height: 92vh; overflow-y: auto; }
+   off-screen with no way back — .pack-content is overflow:hidden globally.
+   Scroll only turns on AFTER the tear (.revealed, set in commitTear()'s
+   setTimeout) — enabling it unconditionally let native touch-scroll hijack
+   the drag-to-tear gesture, since a vertical drag on scrollable content is
+   indistinguishable from a scroll to the browser. Before the tear there's
+   nothing to scroll to anyway (the pack fits), so hidden is safe there. */
+#skill-reveal-content { max-height: 92vh; overflow-y: hidden; }
+#skill-reveal-content.revealed { overflow-y: auto; }
+/* Owns the touch gesture outright so the browser never treats a downward
+   drag here as a page/container scroll — required alongside the JS handler
+   (installSkillRevealDrag), whose touchmove listener is passive and so
+   can't preventDefault() its way out of a native scroll once one starts. */
 .skill-reveal-pack-stage {
   position: relative;
   width: min(100%, 320px);
   aspect-ratio: 2 / 3;
   margin: 8px auto;
+  touch-action: none;
 }
 .skill-reveal-pack-img {
   position: absolute; inset: 0;

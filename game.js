@@ -2690,6 +2690,8 @@ function installSkillRevealDrag() {
             const packStage = document.getElementById('skill-reveal-pack-stage');
             if (packStage) packStage.style.display = 'none';
             if (face) face.style.display = '';
+            const content = document.getElementById('skill-reveal-content');
+            if (content) content.classList.add('revealed');
             if (typeof spawnPackConfetti === 'function') spawnPackConfetti('#d6b36a', 30, 'skill-reveal-confetti');
         }, 320);
     }
@@ -9290,6 +9292,8 @@ function openSkillRevealSequence(abilityId) {
     if (hint) hint.style.display = '';
     const rays = document.getElementById('skill-reveal-rays');
     if (rays) rays.classList.remove('burst');
+    const content = document.getElementById('skill-reveal-content');
+    if (content) content.classList.remove('revealed');
 
     overlay.dataset.rarity = rarity;
     overlay.classList.add('active');

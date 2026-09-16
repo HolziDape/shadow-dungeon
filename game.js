@@ -10706,6 +10706,52 @@ window.testShowAbilityPick = function() {
     openAbilityDraft();
 };
 
+// Cheats — mutate real save data so testers can reach states that normally
+// take real play to earn (a fat wallet, a leveled-up roadmap, a fresh save).
+window.testGiveGold = function() {
+    save.gold += 1000;
+    saveSave();
+    updateMetaHud();
+    showToast('+1000 Gold');
+};
+
+window.testGiveGems = function() {
+    save.gems += 50;
+    saveSave();
+    updateMetaHud();
+    showToast('+50 Gems');
+};
+
+// Mirrors victory()'s level-up + skill-reveal logic exactly, then re-enters
+// the Home screen the same way a real win does, so the skill-reveal pack
+// (if this level grants one) fires immediately instead of waiting.
+window.testLevelUp = function() {
+    save.unlocked += 1;
+    save.selectedLevel = save.unlocked;
+    const newSkill = ABILITIES.find((a) => (a.unlockLevel || 1) === save.unlocked);
+    if (newSkill) save.pendingSkillReveal = newSkill.id;
+    saveSave();
+    closeQuickTest();
+    if (typeof showFight === 'function') showFight();
+};
+
+window.testMaxLevel = function() {
+    save.unlocked = 30;
+    save.selectedLevel = 30;
+    saveSave();
+    closeQuickTest();
+    if (typeof showFight === 'function') showFight();
+};
+
+window.testResetLevel = function() {
+    save.unlocked = 1;
+    save.selectedLevel = 1;
+    save.pendingSkillReveal = null;
+    saveSave();
+    closeQuickTest();
+    if (typeof showFight === 'function') showFight();
+};
+
 window.testGodMode = function(enabled) {
     _testGodMode = enabled;
     if (_testArenaActive && player) {

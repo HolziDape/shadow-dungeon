@@ -3233,12 +3233,32 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   image-rendering: pixelated;
   filter: drop-shadow(0 0 18px rgba(255,255,255,0.15));
 }
-/* Seam measured at ~27% down the source art (skill-pack-*-hero.png). Both
-   images are identical; each shows only its half via clip-path, so together
-   they look like one whole pack until the top half animates away. */
-.skill-reveal-pack-top    { clip-path: polygon(0 0, 100% 0, 100% 27%, 0 27%); transition: transform 0.4s cubic-bezier(.2,.8,.3,1.4); }
-.skill-reveal-pack-bottom { clip-path: polygon(0 27%, 100% 27%, 100% 100%, 0 100%); }
-.skill-reveal-pack-top.torn { transform: translateY(-140%) rotate(-18deg); }
+/* Seam is a slightly tilted line across the source art (skill-pack-*-hero.png,
+   matching the pack's own drawn perspective) — PLACEHOLDER angle, left end at
+   25% down, right end at 29% down (SEAM_Y_LEFT/SEAM_Y_RIGHT in game.js, must
+   match). Both images are identical; each shows only its half via clip-path.
+   The top piece's clip-path is rewritten every frame during a live drag
+   (installSkillRevealDrag) to peel away from the left as the zip handle
+   moves right — this base rule is just its resting (fully zipped) state. */
+.skill-reveal-pack-top    { clip-path: polygon(0 0, 100% 0, 100% 29%, 0 25%); transition: none; }
+.skill-reveal-pack-bottom { clip-path: polygon(0 25%, 100% 29%, 100% 100%, 0 100%); }
+.skill-reveal-pack-top.zip-settling { transition: clip-path 0.25s cubic-bezier(.2,.8,.3,1.4); }
+.skill-reveal-pack-top.torn { transition: transform 0.4s cubic-bezier(.2,.8,.3,1.4); transform: translateY(-140%) rotate(-18deg); }
+/* Draggable handle — code-drawn, not part of the baked art, since the art's
+   own pull-tab graphic sits inside the region that gets clipped away the
+   moment a drag starts. Positioned at the seam's left end at rest so it
+   reads as "attached" to the art's drawn tab before you ever touch it. */
+.skill-reveal-zip-handle {
+  position: absolute;
+  left: 0%; top: 25%;
+  width: 26px; height: 26px;
+  transform: translate(-30%, -50%);
+  border-radius: 6px;
+  background: linear-gradient(160deg, #e8e8ee, #9c9ca8);
+  border: 2px solid #4a4a54;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  pointer-events: none;
+}
 .skill-reveal-hint {
   position: absolute; left: 0; right: 0; bottom: -22px;
   font-family: var(--font-ui); font-size: 10px; letter-spacing: 1px;

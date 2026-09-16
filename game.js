@@ -151,7 +151,7 @@ const I18N = {
         'roadmap.skillUnlock': 'New skill at this level',
         'skillReveal.title': 'NEW SKILL',
         'skillReveal.nice': 'Nice!',
-        'skillReveal.hint': 'SWIPE DOWN TO OPEN',
+        'skillReveal.hint': 'DRAG THE ZIPPER →',
         'milestone.statSuffix': '. ',
         'milestone.unlockedAt': 'Unlocked from Lv',
         'milestone.lockedFrom': 'From Lv',
@@ -304,7 +304,7 @@ const I18N = {
         'roadmap.skillUnlock': 'Neuer Skill auf diesem Level',
         'skillReveal.title': 'NEUER SKILL',
         'skillReveal.nice': 'Nice!',
-        'skillReveal.hint': 'NACH UNTEN ZIEHEN ZUM ÖFFNEN',
+        'skillReveal.hint': 'REISSVERSCHLUSS ZIEHEN →',
         'milestone.statSuffix': '. ',
         'milestone.unlockedAt': 'Frei ab Lv',
         'milestone.lockedFrom': 'Ab Lv',
@@ -2667,23 +2667,61 @@ function installSwipeNavigation() {
     root.addEventListener('mouseup', up);
 }
 
-// Drag-to-tear gesture for the skill-reveal pack. Structurally mirrors
-// installSwipeNavigation()'s touch/mouse handling, but tracks vertical
-// drag distance on one element instead of horizontal swipe on the body.
+// Zipper-drag gesture for the skill-reveal pack. Unlike a canned animation,
+// "progress" here is driven directly by live pointer position — dragging
+// right increases it, dragging back left decreases it, with no timeline of
+// its own. That's what makes it feel physical instead of played-back.
+//
+// SEAM_Y_LEFT/RIGHT must match the base clip-path in index.css (placeholder
+// tilt until the regenerated pack art's real seam angle is measured).
 function installSkillRevealDrag() {
     const stage = document.getElementById('skill-reveal-pack-stage');
     if (!stage) return;
-    let startY = 0, tracking = false;
-    const TEAR_THRESHOLD = 70; // px
+
+    const SEAM_Y_LEFT = 25;  // %
+    const SEAM_Y_RIGHT = 29; // %
+    const COMPLETE_THRESHOLD = 0.92; // release at/above this % completes the unzip
+
+    let progress = 0; // 0 = fully zipped, 1 = fully unzipped
+    let tracking = false, moved = false;
+    let startX = 0, startProgress = 0;
+    let completed = false;
+
+    function render() {
+        const top = document.getElementById('skill-reveal-pack-top');
+        const handle = document.getElementById('skill-reveal-zip-handle');
+        if (!top) return;
+        const leftX = progress * 100;
+        const yAtLeftX = SEAM_Y_LEFT + (SEAM_Y_RIGHT - SEAM_Y_LEFT) * progress;
+        top.style.clipPath = `polygon(${leftX}% ${yAtLeftX}%, 100% ${SEAM_Y_RIGHT}%, 100% 0%, ${leftX}% 0%)`;
+        if (handle) { handle.style.left = leftX + '%'; handle.style.top = yAtLeftX + '%'; }
+    }
+
+    function setProgress(p) {
+        progress = Math.max(0, Math.min(1, p));
+        render();
+    }
+
+    // Exposed so openSkillRevealSequence() can reset a fresh reveal without
+    // reaching into this closure's internals.
+    window._resetSkillRevealZip = function() {
+        completed = false;
+        tracking = false;
+        moved = false;
+        const top = document.getElementById('skill-reveal-pack-top');
+        if (top) top.classList.remove('zip-settling');
+        setProgress(0);
+    };
 
     function commitTear() {
-        const top = document.getElementById('skill-reveal-pack-top');
+        if (completed) return;
+        completed = true;
         const hint = document.getElementById('skill-reveal-hint');
         const rays = document.getElementById('skill-reveal-rays');
         const face = document.getElementById('skill-reveal-face');
-        if (!top || top.classList.contains('torn')) return;
-        top.classList.add('torn');
+        const handle = document.getElementById('skill-reveal-zip-handle');
         if (hint) hint.style.display = 'none';
+        if (handle) handle.style.display = 'none';
         if (rays) rays.classList.add('burst');
         if (typeof playHaptic === 'function') playHaptic('medium');
         setTimeout(() => {
@@ -2696,33 +2734,67 @@ function installSkillRevealDrag() {
         }, 320);
     }
 
+    function settle(target, then) {
+        const top = document.getElementById('skill-reveal-pack-top');
+        if (top) top.classList.add('zip-settling');
+        setProgress(target);
+        setTimeout(() => {
+            if (top) top.classList.remove('zip-settling');
+            if (then) then();
+        }, 260);
+    }
+
     function down(e) {
+        if (completed) return;
         const t = e.touches ? e.touches[0] : e;
-        startY = t.clientY;
+        startX = t.clientX;
+        startProgress = progress;
+        moved = false;
         tracking = true;
     }
     function move(e) {
         if (!tracking) return;
         const t = e.touches ? e.touches[0] : e;
-        const dy = t.clientY - startY;
-        if (dy > TEAR_THRESHOLD) {
-            tracking = false;
-            commitTear();
-        }
+        const dx = t.clientX - startX;
+        if (Math.abs(dx) > 4) moved = true;
+        const width = stage.getBoundingClientRect().width || 1;
+        setProgress(startProgress + dx / width);
     }
     function up() {
+        if (!tracking) return;
         tracking = false;
+        if (completed) return;
+        if (progress >= COMPLETE_THRESHOLD) settle(1, commitTear);
+        else if (moved) settle(0);
+        // A press-release with no real movement isn't a drag at all -- leave
+        // it for the trailing click event to handle as a tap.
     }
     function tap() {
-        commitTear();
+        if (completed) return;
+        if (moved) { moved = false; return; } // trailing click after a real drag
+        const duration = 420;
+        const start = performance.now();
+        const from = progress;
+        function step(now) {
+            const t = Math.min(1, (now - start) / duration);
+            setProgress(from + (1 - from) * t);
+            if (t < 1) requestAnimationFrame(step);
+            else commitTear();
+        }
+        requestAnimationFrame(step);
     }
 
     stage.addEventListener('touchstart', down, { passive: true });
     stage.addEventListener('touchmove', move, { passive: true });
     stage.addEventListener('touchend', up, { passive: true });
     stage.addEventListener('mousedown', down);
-    stage.addEventListener('mousemove', move);
-    stage.addEventListener('mouseup', up);
+    // mousemove/mouseup go on document, not the stage: progress is now
+    // continuously live-tracked (not just a threshold check), so if the
+    // pointer leaves the stage mid-drag it must still keep following and
+    // still be able to release -- otherwise a drag that wanders off the
+    // element gets stuck with no snap-back and no way to complete.
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
     stage.addEventListener('click', tap);
 }
 
@@ -9282,14 +9354,14 @@ function openSkillRevealSequence(abilityId) {
     probe.onload = () => { packTop.src = heroSrc; packBottom.src = heroSrc; };
     probe.onerror = () => { packTop.src = 'icons/pack.png'; packBottom.src = 'icons/pack.png'; }; // fallback if a rarity asset is ever missing
     probe.src = heroSrc;
-    // Reset any tear from a previous reveal.
-    packTop.classList.remove('torn');
-    packBottom.classList.remove('torn');
-    packTop.style.transform = '';
+    // Reset any zip progress from a previous reveal.
+    if (typeof window._resetSkillRevealZip === 'function') window._resetSkillRevealZip();
     const packStage = document.getElementById('skill-reveal-pack-stage');
     if (packStage) packStage.style.display = '';
     const hint = document.getElementById('skill-reveal-hint');
     if (hint) hint.style.display = '';
+    const handle = document.getElementById('skill-reveal-zip-handle');
+    if (handle) handle.style.display = '';
     const rays = document.getElementById('skill-reveal-rays');
     if (rays) rays.classList.remove('burst');
     const content = document.getElementById('skill-reveal-content');

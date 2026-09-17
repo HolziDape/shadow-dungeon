@@ -534,27 +534,68 @@ function getAbilityRankDef(ability, rank) {
 // Tank HP is significantly increased (10 → 38) so they actually feel like tanks.
 // `unlockLevel` is used by getLevelWaves() to gate enemies into later levels.
 // ─────────────────────────────────────────────────────────────────────────────
+// `sprite` is an extension point for real art (Claude Design pixel-art enemy
+// assets): set it to a single icon path ('icons/enemies/drone.png') for a
+// static sprite, or an array of paths (['...idle-1.png', '...idle-2.png'])
+// for a looping animation cycled at ENEMY_ANIM_FPS (game.js). Either way,
+// preloadEnemySprites() (game.js) loads it once at startup and render.js's
+// drawEnemies() automatically switches that type from its procedural vector
+// shape to the loaded image(s), no other code changes needed. null = keep
+// using the procedural vector shape — no type is null today (all 13 have
+// real Claude Design art below), but the fallback path in drawEnemies()
+// stays intact for any future type shipped without art yet.
+// 3-frame idle-animation set from Claude Design, e.g. spr('drone') ->
+// ['icons/enemies/drone-1-64.png', '...-2-64.png', '...-3-64.png'].
+function spr(name) {
+    return [1, 2, 3].map((i) => `icons/enemies/${name}-${i}-64.png`);
+}
+
 const ENEMY_TYPES = {
     // ── Original ──
-    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#6fb7c5', glow: '#6fb7c5', exp: 2, ai: 'strafe',  unlockLevel: 1 },
-    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#a184c9', glow: '#a184c9', exp: 3, ai: 'sprint',  unlockLevel: 4 },
-    tank:      { hp: 38, spd: 0.95, r: 20, color: '#cf9440', glow: '#cf9440', exp: 5, ai: 'heavy',   unlockLevel: 12 },
-    boss:      { hp: 26, spd: 1.08, r: 50, color: '#d0716f', glow: '#d0716f', exp: 14, ai: 'boss',   isBoss: true, unlockLevel: 1 },
+    drone:     { hp: 5,  spd: 1.55, r: 13, color: '#6fb7c5', glow: '#6fb7c5', exp: 2, ai: 'strafe',  unlockLevel: 1, sprite: spr('drone') },
+    chaser:    { hp: 8,  spd: 1.95, r: 12, color: '#a184c9', glow: '#a184c9', exp: 3, ai: 'sprint',  unlockLevel: 4, sprite: spr('chaser') },
+    tank:      { hp: 38, spd: 0.95, r: 20, color: '#cf9440', glow: '#cf9440', exp: 5, ai: 'heavy',   unlockLevel: 12, sprite: spr('tank') },
+    boss:      { hp: 26, spd: 1.08, r: 50, color: '#d0716f', glow: '#d0716f', exp: 14, ai: 'boss',   isBoss: true, unlockLevel: 1, sprite: spr('boss') },
 
     // ── New enemy types (8-9), gated to later levels ──
-    swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#97c7d6', glow: '#97c7d6', exp: 1, ai: 'swarm',     unlockLevel: 1 },
-    brute:     { hp: 22, spd: 0.85, r: 17, color: '#d09c46', glow: '#d09c46', exp: 5, ai: 'brute',     unlockLevel: 8 },
-    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#c9709e', glow: '#c9709e', exp: 4, ai: 'sniper',    unlockLevel: 12 },
-    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#cd7a4e', glow: '#cd7a4e', exp: 5, ai: 'bomber',    unlockLevel: 15 },
-    healer:    { hp: 14, spd: 1.05, r: 14, color: '#74c8a0', glow: '#74c8a0', exp: 6, ai: 'healer',    unlockLevel: 18 },
-    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#8db4d2', glow: '#8db4d2', exp: 6, ai: 'shielder',  unlockLevel: 22, shieldHp: 30 },
-    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9678cc', glow: '#9678cc', exp: 6, ai: 'wraith',    unlockLevel: 26 },
-    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#c96555', glow: '#c96555', exp: 10, ai: 'crusher',   unlockLevel: 30 },
-    berserker: { hp: 16, spd: 1.20, r: 13, color: '#bf4a4c', glow: '#bf4a4c', exp: 7, ai: 'berserker', unlockLevel: 35 }
+    swarmling: { hp: 2,  spd: 2.10, r: 8,  color: '#97c7d6', glow: '#97c7d6', exp: 1, ai: 'swarm',     unlockLevel: 1, sprite: spr('swarmling') },
+    brute:     { hp: 22, spd: 0.85, r: 17, color: '#d09c46', glow: '#d09c46', exp: 5, ai: 'brute',     unlockLevel: 8, sprite: spr('brute') },
+    sniper:    { hp: 6,  spd: 0.90, r: 12, color: '#c9709e', glow: '#c9709e', exp: 4, ai: 'sniper',    unlockLevel: 12, sprite: spr('sniper') },
+    bomber:    { hp: 9,  spd: 1.30, r: 14, color: '#cd7a4e', glow: '#cd7a4e', exp: 5, ai: 'bomber',    unlockLevel: 15, sprite: spr('bomber') },
+    healer:    { hp: 14, spd: 1.05, r: 14, color: '#74c8a0', glow: '#74c8a0', exp: 6, ai: 'healer',    unlockLevel: 18, sprite: spr('healer') },
+    shielder:  { hp: 24, spd: 0.95, r: 16, color: '#8db4d2', glow: '#8db4d2', exp: 6, ai: 'shielder',  unlockLevel: 22, shieldHp: 30, sprite: spr('shielder') },
+    wraith:    { hp: 12, spd: 1.50, r: 12, color: '#9678cc', glow: '#9678cc', exp: 6, ai: 'wraith',    unlockLevel: 26, sprite: spr('wraith') },
+    crusher:   { hp: 80, spd: 0.70, r: 24, color: '#c96555', glow: '#c96555', exp: 10, ai: 'crusher',   unlockLevel: 30, sprite: spr('crusher') },
+    berserker: { hp: 16, spd: 1.20, r: 13, color: '#bf4a4c', glow: '#bf4a4c', exp: 7, ai: 'berserker', unlockLevel: 35, sprite: spr('berserker') }
+};
+
+// Display name + one-line ability blurb for the Enemy Index (game.js
+// renderEnemyIndex()). Kept separate from ENEMY_TYPES to keep that block
+// readable — every fact here is pulled directly from each type's actual
+// AI branch in updateEnemies(), not invented.
+const ENEMY_INFO = {
+    drone:     { name: 'Drone',     desc: 'Basic ranged shooter — fires a shot at you whenever it has line of sight.' },
+    chaser:    { name: 'Chaser',    desc: 'Sprints at you in bursts, then blinks in right behind you.' },
+    tank:      { name: 'Tank',      desc: "Slow and tough. Pulses an EMP that jams your shooting for 1.5s up close, and buffs nearby tanks." },
+    boss:      { name: 'Boss',      desc: "Every level's finale. Its ring-shaped shockwave attack costs 2 hearts instead of 1." },
+    swarmling: { name: 'Swarmling', desc: 'Cheap and fast in numbers — a split fragment explodes the instant it touches you.' },
+    brute:     { name: 'Brute',     desc: 'Ground-slams a shockwave that also leaves a lingering slow zone behind.' },
+    sniper:    { name: 'Sniper',    desc: 'Keeps its distance (~280px) and fires marked or ricocheting shots.' },
+    bomber:    { name: 'Bomber',    desc: 'Charges straight at you and lobs grenades that split into three.' },
+    healer:    { name: 'Healer',    desc: 'Hangs back healing nearby allies, and can revive one dead enemy per wave.' },
+    shielder:  { name: 'Shielder',  desc: 'A personal shield soaks hits until broken, then it rams you at 3x speed.' },
+    wraith:    { name: 'Wraith',    desc: 'Phases in and out of invulnerability, leaving an exploding decoy behind.' },
+    crusher:   { name: 'Crusher',   desc: 'Very tanky — alternates charging dashes with triple ground-slam waves.' },
+    berserker: { name: 'Berserker', desc: 'Gets faster the lower its HP drops, and faster still with every hit it takes.' }
 };
 
 function getEnemyLevelStats(typeKey, level) {
     const base = ENEMY_TYPES[typeKey];
+    // Lazy-load this type's sprite the first time it's actually about to
+    // spawn (preloadEnemySprites() in game.js only eagerly loads the
+    // early-game types) — mutates the real ENEMY_TYPES entry, not the
+    // spread copy this function returns, so it only ever runs once per type.
+    if (typeof loadEnemySpriteFrames === 'function') loadEnemySpriteFrames(base);
     const lv = Math.max(1, level);
 
     // Smooth piecewise scaling — designed so player upgrades keep pace at every tier.

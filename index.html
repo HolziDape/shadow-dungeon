@@ -41,17 +41,17 @@
                 <div class="tile-tag" id="left-skill-tag" data-i18n="rail.newSkill">NEW SKILL</div>
                 <div class="tile-label" id="left-skill-label" data-i18n="rail.skills">Skills</div>
             </button>
+            <button class="rail-tile rail-enemy-index" type="button" onclick="showEnemyIndex()">
+                <div class="tile-icon">
+                    <img src="icons/small/skull-48.png" alt="" class="tile-icon-img">
+                </div>
+                <div class="tile-label" data-i18n="rail.enemyIndex">Enemies</div>
+            </button>
             <button class="rail-tile rail-no-ads" type="button" id="left-no-ads" onclick="buyPremiumOffer('no_ads')">
                 <div class="tile-icon">
                     <img src="icons/small/no-ads-48.png" alt="" class="tile-icon-img">
                 </div>
                 <div class="tile-label" id="left-no-ads-label" data-i18n="rail.noAds">No Ads</div>
-            </button>
-            <button class="rail-tile rail-test" type="button" onclick="openQuickTest()">
-                <div class="tile-icon">
-                    <img src="icons/small/fight-48.png" alt="" class="tile-icon-img">
-                </div>
-                <div class="tile-label" data-i18n="rail.quickTest">Quick Test</div>
             </button>
         </aside>
 
@@ -76,12 +76,6 @@
                 </div>
                 <div class="tile-label" id="right-rewards-label" data-i18n="rail.dailyLogin">Daily Login</div>
                 <span class="tile-badge" id="rewards-badge" style="display:none">!</span>
-            </button>
-            <button class="rail-tile rail-test" type="button" onclick="openTestArena()">
-                <div class="tile-icon">
-                    <img src="icons/small/gear-48.png" alt="" class="tile-icon-img">
-                </div>
-                <div class="tile-label" data-i18n="rail.test">Test</div>
             </button>
         </aside>
 
@@ -211,6 +205,16 @@
             <p class="screen-subtitle" style="text-align:center; margin-bottom:8px" data-i18n="quests.sub">Complete them and climb the league.</p>
             <div id="challenges-list" style="display:flex; flex-direction:column; gap:8px; margin-top:12px"></div>
             <div id="weekly-pass-banner" class="weekly-pass-banner" style="display:none"></div>
+        </div>
+    </div>
+
+    <div id="roadmap-preview-overlay" class="modal-overlay" onclick="closeRoadmapPreview(event)">
+        <div class="modal-content lb-style-modal roadmap-preview-modal" onclick="event.stopPropagation()">
+            <button class="lb-style-close" type="button" onclick="closeRoadmapPreview()">×</button>
+            <div class="lb-style-header">
+                <span class="screen-title-counter" id="roadmap-preview-level">LEVEL --</span>
+            </div>
+            <div id="roadmap-preview-body"></div>
         </div>
     </div>
 
@@ -349,6 +353,17 @@
         </div>
     </div>
 
+    <div id="enemy-index-screen" class="screen">
+        <div class="screen-shell">
+            <div class="screen-title-row">
+                <img src="icons/small/skull-48.png" alt="" class="screen-title-icon">
+                <h1 class="screen-title" data-i18n="enemyIndex.title">ENEMY INDEX</h1>
+            </div>
+            <p class="screen-subtitle" id="enemy-index-status" data-i18n="enemyIndex.sub">0/0 encountered</p>
+            <div id="enemy-index-grid" class="shop-grid ability-archive-grid enemy-index-grid"></div>
+        </div>
+    </div>
+
     <canvas id="game-canvas"></canvas>
     <div id="hp-flair"></div>
 
@@ -360,6 +375,36 @@
     <button class="settings-button in-game-settings-button" id="in-game-settings-button" type="button" onclick="openSettings()" aria-label="Settings">
         <img src="icons/small/gear-48.png" alt="" class="settings-gear-img">
     </button>
+
+    <!-- In-run HUD (hearts, wave/zone, gold/gems, hit rush, ability XP) —
+         real pixel-art DOM elements matching the rest of the redesign,
+         replacing what used to be drawn straight onto the canvas. -->
+    <div id="in-run-hud" class="in-run-hud" aria-hidden="true">
+        <div class="irh-toprow">
+            <div id="irh-hearts" class="irh-hearts"></div>
+        </div>
+        <div class="irh-secondrow">
+            <div class="irh-pill">
+                <img src="icons/small/skull-48.png" alt="" class="irh-pill-icon">
+                <span id="irh-wave">WAVE 0/0</span>
+            </div>
+            <div class="irh-pill irh-pill-gold">
+                <img src="icons/small/coin-48.png" alt="" class="irh-pill-icon">
+                <span id="irh-gold">0</span>
+            </div>
+            <div class="irh-pill irh-pill-gems">
+                <img src="icons/small/gem-48.png" alt="" class="irh-pill-icon">
+                <span id="irh-gems">0</span>
+            </div>
+        </div>
+        <div class="irh-xprow">
+            <div class="irh-xp-labels">
+                <span id="irh-xp-label" class="irh-xp-label"></span>
+                <span id="irh-hitrush-text" class="irh-hitrush-text" style="display:none"></span>
+            </div>
+            <div class="irh-xp-bar"><div id="irh-xp-fill" class="irh-xp-fill"></div></div>
+        </div>
+    </div>
 
     <div id="ability-overlay" class="modal-overlay">
         <div class="modal-content ability-pick-content">
@@ -557,6 +602,34 @@
         </div>
     </div>
 
+    <div id="skill-reveal-overlay" class="modal-overlay" onclick="closeSkillRevealOverlay(event)">
+        <div class="modal-content pack-content skill-reveal-content" id="skill-reveal-content">
+            <div class="skill-reveal-scroll" id="skill-reveal-scroll">
+                <div class="modal-topline">
+                    <h2 class="modal-title" data-i18n="skillReveal.title">NEW SKILL</h2>
+                </div>
+                <div class="pack-stage-rays-clip" aria-hidden="true">
+                    <div class="pack-stage-rays" id="skill-reveal-rays"></div>
+                </div>
+                <div class="skill-reveal-pack-stage" id="skill-reveal-pack-stage">
+                    <canvas id="skill-reveal-pack-canvas" class="skill-reveal-pack-img skill-reveal-pack-canvas" width="1024" height="1536" aria-hidden="true"></canvas>
+                    <div class="skill-reveal-hint" id="skill-reveal-hint" data-i18n="skillReveal.hint">DRAG THE ZIPPER →</div>
+                    <div id="skill-reveal-confetti" class="pack-confetti"></div>
+                </div>
+                <div class="pack-reveal-face" id="skill-reveal-face" style="display:none">
+                    <div class="prf-badge" id="skr-badge"></div>
+                    <div class="prf-frame" id="skr-frame">
+                        <div class="prf-rays" id="skr-rays"></div>
+                        <div class="prf-icon" id="skr-icon"></div>
+                    </div>
+                    <div class="prf-name" id="skr-name"></div>
+                    <div class="prf-desc" id="skr-desc"></div>
+                </div>
+            </div>
+            <button id="skill-reveal-continue" class="btn-glossy btn-gold" type="button" onclick="closeSkillRevealOverlay()" data-i18n="skillReveal.nice" style="display:none">Nice!</button>
+        </div>
+    </div>
+
     <div id="peek-overlay" class="modal-overlay" onclick="closePackPeek(event)">
         <div class="modal-content peek-content" id="peek-content" onclick="event.stopPropagation()">
             <div class="peek-header">
@@ -649,6 +722,16 @@
                 <div class="test-row">
                     <button class="test-btn test-sm" onclick="testShowAbilityPick()" data-i18n="quickTest.abilityPick">🎲 Ability Pick</button>
                 </div>
+                <p class="eyebrow" style="margin-top:10px">CHEATS</p>
+                <div class="test-row">
+                    <button class="test-btn test-sm" onclick="testGiveGold()">💰 +1000 Gold</button>
+                    <button class="test-btn test-sm" onclick="testGiveGems()">💎 +50 Gems</button>
+                </div>
+                <div class="test-row">
+                    <button class="test-btn test-sm" onclick="testLevelUp()">⬆ Level Up</button>
+                    <button class="test-btn test-sm" onclick="testMaxLevel()">⏫ Max Level</button>
+                    <button class="test-btn test-sm" onclick="testResetLevel()">↺ Reset Level</button>
+                </div>
             </div>
         </div>
     </div>
@@ -685,6 +768,7 @@
     <script src="skins.js"></script>
     <script src="config.js"></script>
     <script src="render.js"></script>
+    <script src="icons/zipkit.js"></script>
     <script src="game.js"></script>
     <script>
         const bg = document.getElementById('space-bg');

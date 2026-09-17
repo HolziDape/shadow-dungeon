@@ -33,7 +33,8 @@ let save = {
     daily: { streak: 0, cycleDay: 0, lastClaimKey: '' },
     settings: { sfx: 0.7, music: 0.35, haptics: false, language: 'en' },
     metaSlots: { normalExtra: 0, legendaryExtra: 0 },
-    lastRunSkills: null
+    lastRunSkills: null,
+    pendingSkillReveal: null
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ const I18N = {
         'hud.wave': 'WAVE 0/0',
         'rail.newSkill': 'NEW SKILL',
         'rail.skills': 'Skills',
+        'rail.enemyIndex': 'Enemies',
         'rail.noAds': 'No Ads',
         'rail.leaderboard': 'Leaderboard',
         'rail.quests': 'Quests',
@@ -81,6 +83,10 @@ const I18N = {
         'equipment.empty': 'Empty',
         'equipment.maxNote': 'Max slots: 5 Normal + 2 paid · 2 Legendary + 1 paid. The shop will not sell more than this.',
         'abilities.title': 'ABILITY ARCHIVE',
+        'enemyIndex.title': 'ENEMY INDEX',
+        'enemyIndex.sub': '0/0 encountered',
+        'enemyIndex.encountered': 'encountered',
+        'enemyIndex.locked': 'UNKNOWN',
         'hub.title': 'UPGRADES',
         'hub.sub': "Spend gold to boost your ship's stats.",
         'hub.statUpgrades': 'STAT UPGRADES',
@@ -143,6 +149,9 @@ const I18N = {
         'roadmap.locked': 'locked',
         'roadmap.ready': 'ready',
         'roadmap.skillUnlock': 'New skill at this level',
+        'skillReveal.title': 'NEW SKILL',
+        'skillReveal.nice': 'Nice!',
+        'skillReveal.hint': 'DRAG THE ZIPPER →',
         'milestone.statSuffix': '. ',
         'milestone.unlockedAt': 'Unlocked from Lv',
         'milestone.lockedFrom': 'From Lv',
@@ -150,7 +159,6 @@ const I18N = {
         'pack.subtitle': 'Spin the reel and claim a permanent account card.',
         'hud.levelShort': 'LEVEL',
         'hud.waveShort': 'WAVE',
-        'hud.zone': 'ZONE',
         'hud.hitRush': 'HIT RUSH',
         'hud.abilityXp': 'Ability XP',
         'result.victory': 'VICTORY',
@@ -194,6 +202,7 @@ const I18N = {
         'hud.wave': 'WELLE 0/0',
         'rail.newSkill': 'NEUER SKILL',
         'rail.skills': 'Skills',
+        'rail.enemyIndex': 'Gegner',
         'rail.noAds': 'Keine Werbung',
         'rail.leaderboard': 'Rangliste',
         'rail.quests': 'Aufgaben',
@@ -229,6 +238,10 @@ const I18N = {
         'equipment.empty': 'Leer',
         'equipment.maxNote': 'Maximale Slots: 5 Normal + 2 gekauft · 2 Legendär + 1 gekauft. Der Shop verkauft nicht mehr.',
         'abilities.title': 'FÄHIGKEITS-ARCHIV',
+        'enemyIndex.title': 'GEGNER-INDEX',
+        'enemyIndex.sub': '0/0 begegnet',
+        'enemyIndex.encountered': 'begegnet',
+        'enemyIndex.locked': 'UNBEKANNT',
         'hub.title': 'UPGRADES',
         'hub.sub': 'Gib Gold aus, um die Werte deines Schiffs zu verbessern.',
         'hub.statUpgrades': 'STAT-UPGRADES',
@@ -289,6 +302,9 @@ const I18N = {
         'roadmap.locked': 'gesperrt',
         'roadmap.ready': 'bereit',
         'roadmap.skillUnlock': 'Neuer Skill auf diesem Level',
+        'skillReveal.title': 'NEUER SKILL',
+        'skillReveal.nice': 'Nice!',
+        'skillReveal.hint': 'REISSVERSCHLUSS ZIEHEN →',
         'milestone.statSuffix': '. ',
         'milestone.unlockedAt': 'Frei ab Lv',
         'milestone.lockedFrom': 'Ab Lv',
@@ -296,7 +312,6 @@ const I18N = {
         'pack.subtitle': 'Lass die Walze drehen und sichere dir eine permanente Account-Karte.',
         'hud.levelShort': 'LEVEL',
         'hud.waveShort': 'WELLE',
-        'hud.zone': 'ZONE',
         'hud.hitRush': 'KILLRAUSCH',
         'hud.abilityXp': 'Skill-XP',
         'result.victory': 'SIEG',
@@ -953,6 +968,7 @@ window.setLanguage = function(lang) {
     if (typeof renderShop === 'function' && document.getElementById('shop-screen')?.classList.contains('active')) renderShop();
     if (typeof renderLoadout === 'function' && document.getElementById('loadout-screen')?.classList.contains('active')) renderLoadout();
     if (typeof renderAbilityArchive === 'function' && document.getElementById('abilities-screen')?.classList.contains('active')) renderAbilityArchive();
+    if (typeof renderEnemyIndex === 'function' && document.getElementById('enemy-index-screen')?.classList.contains('active')) renderEnemyIndex();
     if (typeof refreshMapRail === 'function') refreshMapRail();
     if (typeof refreshRailBadges === 'function') refreshRailBadges();
     if (typeof drawAbilityChoices === 'function' && document.getElementById('ability-overlay')?.classList.contains('active')) drawAbilityChoices();
@@ -2061,8 +2077,8 @@ function clearHpDangerFlair() {
 }
 
 // Confetti DOM rays burst from center of #pack-confetti
-function spawnPackConfetti(color = '#d6b36a', count = 30) {
-    const host = document.getElementById('pack-confetti');
+function spawnPackConfetti(color = '#d6b36a', count = 30, targetId = 'pack-confetti') {
+    const host = document.getElementById(targetId);
     if (!host) return;
     host.innerHTML = '';
     const palette = [color, '#ffffff', '#e3cf9a', color];
@@ -2572,6 +2588,28 @@ function navigateRelative(delta, opts = {}) {
     if (typeof playHaptic === 'function') playHaptic('tap');
 }
 
+// One-time starfield for the Home screen background — 46 fixed stars,
+// ~15% twinkle via a staggered CSS opacity pulse. Rendered once on load,
+// never touched again: zero per-frame cost.
+function renderStarfield() {
+    const host = document.querySelector('.cosmic-bg');
+    if (!host || host.querySelector('.starfield-star')) return; // idempotent
+    const layer = document.createElement('div');
+    layer.className = 'starfield-layer';
+    const STAR_COUNT = 46;
+    for (let i = 0; i < STAR_COUNT; i++) {
+        const star = document.createElement('div');
+        const size = i % 5 === 0 ? 'lg' : (i % 2 === 0 ? 'md' : 'sm');
+        const twinkle = i % 7 === 0; // ~15%
+        star.className = `starfield-star size-${size}${twinkle ? ' twinkle' : ''}`;
+        star.style.left = `${(i * 37) % 100}%`;
+        star.style.top = `${(i * 53) % 100}%`;
+        if (twinkle) star.style.animationDelay = `${(i % 5) * 0.7}s`;
+        layer.appendChild(star);
+    }
+    host.appendChild(layer);
+}
+
 function installSwipeNavigation() {
     let startX = 0, startY = 0, startT = 0, tracking = false;
     let committed = false; // once horizontal direction is locked we commit
@@ -2627,6 +2665,163 @@ function installSwipeNavigation() {
     root.addEventListener('mousedown', down);
     root.addEventListener('mousemove', move);
     root.addEventListener('mouseup', up);
+}
+
+// Zipper-drag gesture for the skill-reveal pack. Unlike a canned animation,
+// "progress" here is driven directly by live pointer position — dragging
+// right increases it, dragging back left decreases it, with no timeline of
+// its own. That's what makes it feel physical instead of played-back.
+//
+// The pack itself is rendered by window.ZipKit.frame(tier, progress)
+// (icons/zipkit.js), a procedural pixel-art generator that draws the exact
+// zipper/teeth/light-gap state for ANY progress value, not just a fixed set
+// of frames — so a drag can be scrubbed to any position with no crossfade
+// or ghosting, and reversing direction just redraws with a smaller value.
+function installSkillRevealDrag() {
+    const stage = document.getElementById('skill-reveal-pack-stage');
+    const canvas = document.getElementById('skill-reveal-pack-canvas');
+    if (!stage || !canvas) return;
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('skill-reveal-overlay');
+
+    const COMPLETE_THRESHOLD = 0.92; // release at/above this % completes the unzip
+
+    let progress = 0; // 0 = fully zipped, 1 = fully unzipped
+    let tracking = false, moved = false;
+    let startX = 0, startProgress = 0;
+    let completed = false;
+    let animHandle = 0;
+
+    function tierFor(rarity) {
+        if (!window.ZipKit) return null;
+        return window.ZipKit.TIERS.find((t) => t.id === rarity) || window.ZipKit.TIERS[0];
+    }
+
+    function render() {
+        if (!window.ZipKit) return;
+        const rarity = (overlay && overlay.dataset.rarity) || 'common';
+        const tier = tierFor(rarity);
+        if (!tier) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(window.ZipKit.frame(tier, progress), 0, 0);
+    }
+
+    function setProgress(p) {
+        progress = Math.max(0, Math.min(1, p));
+        render();
+    }
+
+    // easeOutBack: overshoots slightly past the target then settles, giving
+    // the snap-open/spring-back its physical feel (was a CSS cubic-bezier
+    // transition on clip-path before the switch to live canvas rendering).
+    function easeOutBack(t) {
+        const c1 = 1.70158, c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+
+    function animateProgress(target, duration, done) {
+        cancelAnimationFrame(animHandle);
+        const from = progress;
+        if (from === target) { setProgress(target); if (done) done(); return; }
+        const start = performance.now();
+        function step(now) {
+            const raw = Math.min(1, (now - start) / duration);
+            setProgress(from + (target - from) * easeOutBack(raw));
+            if (raw < 1) animHandle = requestAnimationFrame(step);
+            else { setProgress(target); if (done) done(); }
+        }
+        animHandle = requestAnimationFrame(step);
+    }
+
+    // Exposed so openSkillRevealSequence() can reset a fresh reveal without
+    // reaching into this closure's internals.
+    window._resetSkillRevealZip = function() {
+        cancelAnimationFrame(animHandle);
+        completed = false;
+        tracking = false;
+        moved = false;
+        canvas.classList.remove('torn');
+        setProgress(0);
+    };
+
+    function commitTear() {
+        if (completed) return;
+        completed = true;
+        const hint = document.getElementById('skill-reveal-hint');
+        const rays = document.getElementById('skill-reveal-rays');
+        const face = document.getElementById('skill-reveal-face');
+        if (hint) hint.style.display = 'none';
+        if (rays) rays.classList.add('burst');
+        if (typeof playHaptic === 'function') playHaptic('medium');
+        canvas.classList.add('torn');
+        setTimeout(() => {
+            const packStage = document.getElementById('skill-reveal-pack-stage');
+            if (packStage) packStage.style.display = 'none';
+            if (face) face.style.display = '';
+            const content = document.getElementById('skill-reveal-content');
+            if (content) content.classList.add('revealed');
+            const continueBtn = document.getElementById('skill-reveal-continue');
+            if (continueBtn) continueBtn.style.display = '';
+            if (typeof spawnPackConfetti === 'function') spawnPackConfetti('#d6b36a', 30, 'skill-reveal-confetti');
+        }, 320);
+    }
+
+    function settle(target, then) {
+        animateProgress(target, 260, then);
+    }
+
+    function down(e) {
+        if (completed) return;
+        const t = e.touches ? e.touches[0] : e;
+        startX = t.clientX;
+        startProgress = progress;
+        moved = false;
+        tracking = true;
+    }
+    function move(e) {
+        if (!tracking) return;
+        const t = e.touches ? e.touches[0] : e;
+        const dx = t.clientX - startX;
+        if (Math.abs(dx) > 4) moved = true;
+        const width = stage.getBoundingClientRect().width || 1;
+        setProgress(startProgress + dx / width);
+    }
+    function up() {
+        if (!tracking) return;
+        tracking = false;
+        if (completed) return;
+        if (progress >= COMPLETE_THRESHOLD) settle(1, commitTear);
+        else if (moved) settle(0);
+        // A press-release with no real movement isn't a drag at all -- leave
+        // it for the trailing click event to handle as a tap.
+    }
+    function tap() {
+        if (completed) return;
+        if (moved) { moved = false; return; } // trailing click after a real drag
+        const duration = 420;
+        const start = performance.now();
+        const from = progress;
+        function step(now) {
+            const t = Math.min(1, (now - start) / duration);
+            setProgress(from + (1 - from) * t);
+            if (t < 1) requestAnimationFrame(step);
+            else commitTear();
+        }
+        requestAnimationFrame(step);
+    }
+
+    stage.addEventListener('touchstart', down, { passive: true });
+    stage.addEventListener('touchmove', move, { passive: true });
+    stage.addEventListener('touchend', up, { passive: true });
+    stage.addEventListener('mousedown', down);
+    // mousemove/mouseup go on document, not the stage: progress is now
+    // continuously live-tracked (not just a threshold check), so if the
+    // pointer leaves the stage mid-drag it must still keep following and
+    // still be able to release -- otherwise a drag that wanders off the
+    // element gets stuck with no snap-back and no way to complete.
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    stage.addEventListener('click', tap);
 }
 
 window.openSettings = function() {
@@ -3034,6 +3229,43 @@ function updateActiveAbility(dt) {
     if (typeof updatePassiveIconTimers === 'function') updatePassiveIconTimers(dt);
 }
 
+// Frames-per-second for animated enemy sprites (a fixed-rate cycle through
+// whatever frames a type provides — see preloadEnemySprites()/drawEnemies()).
+// 8fps matches typical hand-drawn pixel-art animation pacing.
+const ENEMY_ANIM_FPS = 8;
+
+// Loads real image(s) for one ENEMY_TYPES entry that has `sprite` set.
+// `sprite` can be a single path (static) or an array of paths (animation
+// frames, cycled at ENEMY_ANIM_FPS) — either way the loaded Images end up
+// on the entry itself as `.spriteFrames` (always an array, length 1 for a
+// static sprite), so createEnemy()'s `{...type}` spread carries it onto
+// every instance for free — one shared set of Images per type, not per
+// enemy. Idempotent: a type already loaded (or with no sprite) is a no-op.
+function loadEnemySpriteFrames(def) {
+    if (!def.sprite || def.spriteFrames) return;
+    const paths = Array.isArray(def.sprite) ? def.sprite : [def.sprite];
+    def.spriteFrames = paths.map((path) => {
+        const img = new Image();
+        img.src = path;
+        return img;
+    });
+}
+
+// Eagerly loads sprites only for the handful of types a fresh player
+// actually meets early on (unlockLevel <= 10 — drone/boss/swarmling/
+// chaser/brute). The other 8 types (levels 12-35) used to all load
+// upfront regardless — ~24 extra images most sessions never touch,
+// unnecessary bandwidth/startup cost on mobile. Those instead lazy-load
+// via getEnemyLevelStats() (config.js) the first time that type is
+// actually about to spawn, i.e. exactly when the player first reaches its
+// unlock level — the existing vector-shape fallback already covers the
+// brief async gap before that image finishes downloading.
+function preloadEnemySprites() {
+    Object.values(ENEMY_TYPES).forEach((def) => {
+        if ((def.unlockLevel || 1) <= 10) loadEnemySpriteFrames(def);
+    });
+}
+
 function createEnemy(type, x, y) {
     // Apply Scarier Face HP reduction
     let hp = type.hp;
@@ -3052,6 +3284,7 @@ function createEnemy(type, x, y) {
         maxHp: hp,
         alive: true,
         hitFlash: 0,
+        animTimer: Math.random() * 10, // random phase so same-type enemies don't animate in lockstep
         aiClock: Math.random() * 2,
         sprintCooldown: 1.8 + Math.random(),
         sprintTime: 0,
@@ -4337,6 +4570,7 @@ function updateEnemies(dt) {
 
         enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
         enemy.aiClock += dt;
+        enemy.animTimer += dt;
         enemy.sprintCooldown -= dt;
 
         const dx = player.x - enemy.x;
@@ -6413,10 +6647,31 @@ function damagePlayer(source, amount = 1) {
         addFxText(player.x, player.y - 30, 'PHOENIX!', '#cd764e', 0.45, 20);
     }
 
-    // Trigger HUD heart shake/lost animation
-    window.__heartDamageTime = performance.now();
-    window.__heartLostIdx = Math.max(0, hpBefore - amount); // first heart that got depleted
-    window.__heartLostCount = amount; // how many depleted this hit (bosses can deal 2)
+    // Trigger HUD heart shake/pulse animation: the depleted heart(s) shake
+    // (a boss hit can cost 2 at once — see `amount`), the still-full ones
+    // get a brief pulse so the whole row visibly reacts to the hit, matching
+    // what the old canvas drawHearts() did before this moved to DOM.
+    let heartsRow = document.getElementById('irh-hearts');
+    // updateInRunHud() (called from render() every frame) is normally what
+    // populates this row — but if a hit lands before that's ever run once
+    // (e.g. an enemy already overlapping the player on the very first
+    // update tick of a run), the row is still empty. Populate it now rather
+    // than silently dropping the very first hit's feedback.
+    if (heartsRow && heartsRow.childElementCount === 0 && typeof updateInRunHud === 'function') {
+        updateInRunHud();
+        heartsRow = document.getElementById('irh-hearts');
+    }
+    if (heartsRow) {
+        const lostFrom = Math.max(0, hpBefore - amount);
+        [...heartsRow.children].forEach((el, i) => {
+            const isLost = i >= lostFrom && i < lostFrom + amount;
+            const cls = isLost ? 'irh-heart-hit' : 'irh-heart-pulse';
+            el.classList.remove(isLost ? 'irh-heart-pulse' : 'irh-heart-hit');
+            el.classList.remove(cls);
+            void el.offsetWidth; // restart the animation even if still mid-play from a rapid double-hit
+            if (isLost || i < hpBefore) el.classList.add(cls); // only pulse hearts that were actually full
+        });
+    }
     // Body class for CSS-driven full-screen flash
     document.body.classList.add('hp-flash');
     if (window.__hpFlashTimer) clearTimeout(window.__hpFlashTimer);
@@ -6486,7 +6741,11 @@ function closeMission() {
     if (window.canvas) window.canvas.style.display = 'none';
     document.body.classList.remove('in-run');
     touchState.active = false;
-    showFight();
+    // skipReveal=true: this showFight() runs synchronously inside victory()
+    // (before the Result overlay opens), invisible to the player — do not
+    // consume/open the skill reveal here. It fires on the next genuinely
+    // visible Home arrival (e.g. the player dismissing Victory via Home).
+    showFight(true);
     buildRoadmap();
     updateMetaHud();
 }
@@ -6687,6 +6946,8 @@ function victory() {
     const gemReward = 1 + Math.floor(currentLevel / 6);
     save.unlocked = Math.max(save.unlocked, currentLevel + 1);
     save.selectedLevel = save.unlocked;
+    const newSkill = ABILITIES.find((a) => (a.unlockLevel || 1) === save.unlocked);
+    if (newSkill) save.pendingSkillReveal = newSkill.id;
     save.gems += gemReward;
     save.gold += goldReward;
 
@@ -8463,6 +8724,7 @@ function renderLoadoutSynergy() {
     const headline = active.find((a) => a.key === 'damageMultiplier') || active[0];
     box.innerHTML = `
         <button class="synergy-head" type="button" onclick="toggleLoadoutSynergy()">
+            <img src="icons/small/bolt-48.png" class="synergy-bolt-icon" alt="">
             <span class="eyebrow">Loadout Synergy</span>
             <span class="synergy-count">${active.length}/${LOADOUT_SYNERGY_AXES.length} ACTIVE</span>
             ${!loadoutSynergyOpen && headline ? `<span class="synergy-headline">${headline.format(totals[headline.key])}</span>` : ''}
@@ -8563,8 +8825,8 @@ function renderLoadout() {
     if (loadoutPanel) loadoutPanel.style.display = loadoutTab === 'loadout' ? '' : 'none';
     if (cardsPanel) cardsPanel.style.display = loadoutTab === 'cards' ? '' : 'none';
 
-    normal.innerHTML = `<p class="eyebrow">${t('equipment.normalSlots')}</p><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped, ownedCounts)}</div>`;
-    legendary.innerHTML = `<p class="eyebrow">${t('equipment.legendarySlots')}</p><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped, ownedCounts)}</div>`;
+    normal.innerHTML = `<div class="loadout-slot-header"><p class="eyebrow">${t('equipment.normalSlots')}</p><span class="loadout-slot-count">${normalEquipped.length}/${caps.normal}</span></div><div class="loadout-slots">${buildSlotMarkup('normal', caps.normal, normalEquipped, ownedCounts)}</div>`;
+    legendary.innerHTML = `<div class="loadout-slot-header"><p class="eyebrow">${t('equipment.legendarySlots')}</p><span class="loadout-slot-count">${legendaryEquipped.length}/${caps.legendary}</span></div><div class="loadout-slots">${buildSlotMarkup('legendary', caps.legendary, legendaryEquipped, ownedCounts)}</div>`;
     renderLoadoutSynergy();
 
     // Featured callout — the best-rarity equipped card gets a description card,
@@ -8854,7 +9116,7 @@ function showToast(text) {
     showToast.timer = window.setTimeout(() => toast.classList.remove('visible'), 1700);
 }
 
-window.showFight = function() {
+window.showFight = function(skipReveal) {
     showScreen('fight-screen');
     setActiveNav('nav-fight');
     buildRoadmap();
@@ -8863,8 +9125,81 @@ window.showFight = function() {
     refreshMapRail();
     renderLeaderboard();
     renderLevelRoadmap();
+    if (!skipReveal && save.pendingSkillReveal) {
+        const revealId = save.pendingSkillReveal;
+        save.pendingSkillReveal = null;
+        saveSave();
+        openSkillRevealSequence(revealId);
+    }
     refreshLevelCta();
     playHaptic('soft');
+};
+
+// Pure function of level — same formula victory()'s milestone bonus uses,
+// evaluated for an arbitrary (usually future) level rather than the level
+// just completed. No new numbers, just the existing formula at a different lvl.
+function getRoadmapRewardPreview(lvl) {
+    const goldReward = Math.round(getLevelGoldReward(lvl) * getEconomyMultiplier());
+    const bonusGold = Math.round(goldReward * 0.5);
+    const bonusGems = 5 + Math.floor(lvl / 4);
+    let packKey = 'supply_pack_i';
+    if (lvl >= 30) packKey = 'apex_pack_iii';
+    else if (lvl >= 12) packKey = 'strike_pack_ii';
+    return { gold: bonusGold, gems: bonusGems, packName: PACK_DEFINITIONS[packKey]?.name || packKey };
+}
+
+window.showRoadmapPreview = function(lvl) {
+    const overlay = document.getElementById('roadmap-preview-overlay');
+    const levelEl = document.getElementById('roadmap-preview-level');
+    const body = document.getElementById('roadmap-preview-body');
+    if (!overlay || !levelEl || !body) return;
+    levelEl.textContent = `LEVEL ${lvl}`;
+
+    const isReward = lvl > 0 && lvl % 3 === 0;
+    const ability = ABILITIES.find((a) => (a.unlockLevel || 1) === lvl);
+    let html = '';
+    if (isReward) {
+        const preview = getRoadmapRewardPreview(lvl);
+        html += `
+            <div class="roadmap-preview-section">
+                <p class="eyebrow">${t('roadmap.reward')}</p>
+                <div class="roadmap-preview-reward-row">
+                    <span>+${formatCompactNumber(preview.gold)} G</span>
+                    <span>+${preview.gems} ◆</span>
+                    <span>1× ${preview.packName}</span>
+                </div>
+            </div>`;
+    }
+    if (ability) {
+        // Mirror the Ability Archive's (renderAbilityArchive) concealment for
+        // skill-granting levels the player hasn't reached yet — otherwise
+        // this preview spoils exactly what Task 4 deliberately hides.
+        const unlocked = (ability.unlockLevel || 1) <= save.unlocked;
+        const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
+        const dispName = unlocked ? ((localised && localised.name) || ability.name) : '???';
+        const dispDesc = unlocked ? ((localised && localised.desc) || ability.desc) : '';
+        const iconMarkup = unlocked
+            ? getAbilityIconMarkup(ability.id, ability.icon)
+            : `<div class="ability-icon ability-locked-icon"><img src="icons/small/lock-48.png" class="ability-icon-img" alt=""></div>`;
+        html += `
+            <div class="roadmap-preview-section">
+                <p class="eyebrow">${t('roadmap.skillUnlock')}</p>
+                <div class="roadmap-preview-skill-row rarity-tier-${(ability.rarity || 'common').toLowerCase()}">
+                    ${iconMarkup}
+                    <div>
+                        <div class="roadmap-preview-skill-name">${dispName}</div>
+                        ${unlocked ? `<div class="roadmap-preview-skill-desc">${dispDesc}</div>` : ''}
+                    </div>
+                </div>
+            </div>`;
+    }
+    body.innerHTML = html;
+    overlay.classList.add('active');
+};
+
+window.closeRoadmapPreview = function(event) {
+    if (event && event.target && event.target.id !== 'roadmap-preview-overlay') return;
+    document.getElementById('roadmap-preview-overlay')?.classList.remove('active');
 };
 
 // Spiral level roadmap. Each node sits on a hand-rolled spiral; nodes are
@@ -8962,7 +9297,7 @@ function renderLevelRoadmap() {
             <div class="lr-skill-link side-${p.badgeSide}" title="${t('roadmap.skillUnlock')}: ${(typeof tSkill === 'function' && tSkill(p.ability.id)?.name) || p.ability.name}">
                 <span class="lr-skill-arm"></span>
                 <span class="lr-skill-tag rarity-tier-${(p.ability.rarity || 'common').toLowerCase()}">
-                    ${sparkSvg}
+                    ${getAbilityIconMarkup(p.ability.id, sparkSvg)}
                 </span>
             </div>` : '';
         // Reward marker is now a tight chest icon that sits ON the node
@@ -8971,7 +9306,8 @@ function renderLevelRoadmap() {
             <div class="lr-reward" title="${t('roadmap.reward')}">
                 ${chestSvg}
             </div>` : '';
-        nodesHtml += `<div class="lr-node ${p.state}" data-lvl="${p.lvl}" style="
+        const clickable = p.reward || p.ability;
+        nodesHtml += `<div class="lr-node ${p.state}${clickable ? ' lr-node-clickable' : ''}" data-lvl="${p.lvl}" ${clickable ? `onclick="showRoadmapPreview(${p.lvl})"` : ''} style="
             left: calc(50% + ${p.x}px);
             top: ${p.yFromTop}px;
         ">
@@ -9010,6 +9346,61 @@ function renderLevelRoadmap() {
         }
     });
 }
+
+// Fires once, the first time the player lands on the Home screen after a
+// level-up that granted a new skill. Nothing is rolled/granted here — the
+// skill is already unlocked by save.unlocked; this is a reveal ceremony.
+// Task 6 replaces the pack visuals, Task 7 adds the drag-to-tear gesture —
+// both extend this function's body, keeping this exact signature.
+function openSkillRevealSequence(abilityId) {
+    const ability = ABILITIES.find((a) => a.id === abilityId);
+    if (!ability) return;
+    const overlay = document.getElementById('skill-reveal-overlay');
+    const face = document.getElementById('skill-reveal-face');
+    const badge = document.getElementById('skr-badge');
+    const icon = document.getElementById('skr-icon');
+    const name = document.getElementById('skr-name');
+    const desc = document.getElementById('skr-desc');
+    if (!overlay || !face || !name || !desc) return;
+    const rarity = (ability.rarity || 'common').toLowerCase();
+    const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
+
+    // Populate the (still-hidden) reveal face now so the tear has real
+    // content ready the instant it flips display:none off.
+    if (badge) badge.textContent = rarity.toUpperCase();
+    if (icon) icon.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
+    name.textContent = (localised && localised.name) || ability.name;
+    desc.textContent = (localised && localised.desc) || ability.desc;
+    face.style.display = 'none';
+
+    // Rarity must be set before the reset below: _resetSkillRevealZip()
+    // redraws the pack canvas immediately, reading overlay.dataset.rarity.
+    overlay.dataset.rarity = rarity;
+    if (typeof window._resetSkillRevealZip === 'function') window._resetSkillRevealZip();
+    const packStage = document.getElementById('skill-reveal-pack-stage');
+    if (packStage) packStage.style.display = '';
+    const hint = document.getElementById('skill-reveal-hint');
+    if (hint) hint.style.display = '';
+    const rays = document.getElementById('skill-reveal-rays');
+    if (rays) rays.classList.remove('burst');
+    const content = document.getElementById('skill-reveal-content');
+    if (content) content.classList.remove('revealed');
+    const continueBtn = document.getElementById('skill-reveal-continue');
+    if (continueBtn) continueBtn.style.display = 'none';
+
+    overlay.classList.add('active');
+}
+
+// The pack opening is mandatory: neither the backdrop click nor the Nice
+// button (only shown after a real tear anyway, but this also covers any
+// future close path) can dismiss the overlay until the pack has actually
+// been opened -- the only way out of an unopened pack is leaving the app.
+window.closeSkillRevealOverlay = function(event) {
+    if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const content = document.getElementById('skill-reveal-content');
+    if (content && !content.classList.contains('revealed')) return;
+    document.getElementById('skill-reveal-overlay')?.classList.remove('active');
+};
 
 function refreshLevelCta() {
     const label = document.getElementById('primary-cta-label');
@@ -9841,16 +10232,19 @@ function renderAbilityArchive() {
         const baseTier = (ability.rarity || 'common').toLowerCase();
         const card = document.createElement('div');
         const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
-        const dispName = (localised && localised.name) || ability.name;
-        const dispDesc = (localised && localised.desc) || ability.desc;
+        const dispName = unlocked ? ((localised && localised.name) || ability.name) : '???';
+        const dispDesc = unlocked ? ((localised && localised.desc) || ability.desc) : '';
+        const iconMarkup = unlocked
+            ? getAbilityIconMarkup(ability.id, ability.icon)
+            : `<div class="ability-icon ability-locked-icon"><img src="icons/small/lock-48.png" class="ability-icon-img" alt=""></div>`;
         card.className = `shop-card ability-card ability-archive-card rarity-tier-${baseTier} ability-${ability.id} ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
         card.innerHTML = `
-            ${getAbilityIconMarkup(ability.id, ability.icon)}
+            ${iconMarkup}
             <div class="card-title">${dispName}</div>
             <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
                 ${baseTier.toUpperCase()} | ${t('milestone.unlockedAt')} ${ability.unlockLevel}
             </div>
-            <div class="card-copy">${dispDesc}</div>
+            ${unlocked ? `<div class="card-copy">${dispDesc}</div>` : ''}
             <button class="archive-cta" type="button" ${unlocked ? '' : 'disabled'}>
                 ${unlocked ? t('milestone.archiveAvailable') : `${t('milestone.lockedFrom')} ${ability.unlockLevel}`}
             </button>
@@ -9862,6 +10256,46 @@ function renderAbilityArchive() {
                 showAbilityDetail(ability.id);
             };
         }
+        grid.appendChild(card);
+    });
+}
+
+window.showEnemyIndex = function() {
+    showScreen('enemy-index-screen');
+    renderEnemyIndex();
+    updateMetaHud();
+    playHaptic('soft');
+};
+
+function renderEnemyIndex() {
+    const grid = document.getElementById('enemy-index-grid');
+    const status = document.getElementById('enemy-index-status');
+    if (!grid) return;
+
+    const keys = Object.keys(ENEMY_TYPES).sort((a, b) => (ENEMY_TYPES[a].unlockLevel || 1) - (ENEMY_TYPES[b].unlockLevel || 1));
+    const unlockedCount = keys.filter((k) => (ENEMY_TYPES[k].unlockLevel || 1) <= (save.unlocked || 1)).length;
+    if (status) status.textContent = `${unlockedCount}/${keys.length} ${t('enemyIndex.encountered')}`;
+
+    grid.innerHTML = '';
+    keys.forEach((key) => {
+        const type = ENEMY_TYPES[key];
+        const info = ENEMY_INFO[key] || { name: key, desc: '' };
+        const unlockLevel = type.unlockLevel || 1;
+        const unlocked = unlockLevel <= (save.unlocked || 1);
+        const iconSrc = (type.sprite && type.sprite[0]) || null;
+
+        const card = document.createElement('div');
+        card.className = `shop-card ability-archive-card enemy-index-card ${unlocked ? 'unlocked-now' : 'locked'}`.trim();
+        card.innerHTML = `
+            <div class="enemy-index-icon">
+                ${iconSrc ? `<img src="${iconSrc}" alt="" class="enemy-index-icon-img">` : ''}
+            </div>
+            <div class="card-title">${unlocked ? info.name : '???'}</div>
+            <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
+                ${unlocked ? (type.isBoss ? 'BOSS | ' : '') + t('milestone.unlockedAt') + ' ' + unlockLevel : t('enemyIndex.locked')}
+            </div>
+            <div class="card-copy">${unlocked ? info.desc : t('milestone.lockedFrom') + ' ' + unlockLevel}</div>
+        `;
         grid.appendChild(card);
     });
 }
@@ -10050,6 +10484,93 @@ function updateMetaHud() {
     }
     if (archiveStatus) {
         archiveStatus.textContent = `${getUnlockedAbilities(save.unlocked).length}/${ABILITIES.length} unlocked${nextMilestone ? ` | next spike Lv ${nextMilestone.level}` : ''}`;
+    }
+}
+
+// In-run HUD (hearts, wave/zone, gold/gems, hit rush, ability XP) — real DOM
+// elements now, called once per rendered frame from render.js's
+// drawInGameHud(). Used to be drawn straight onto the canvas with a
+// different font/soft-glow pills; this brings it in line with the rest of
+// the redesign's flat, hard-shadow pixel-art tokens. Heart shake-on-hit is
+// triggered directly from damagePlayer() instead of polled here.
+//
+// Runs every rendered frame, so it's written to do as little work as
+// possible when nothing has actually changed: DOM node lookups happen once
+// (cached in _irhEls, not via getElementById every frame) and every write
+// is guarded by a comparison against the last value actually written
+// (_irhLast) — text/width/display are only touched when they'd change,
+// which is most frames for gold/gems/xp (they change occasionally, not
+// every tick).
+let _irhEls = null;
+let _irhLast = {};
+function updateInRunHud() {
+    if (!player) return;
+    if (!_irhEls) {
+        _irhEls = {
+            hearts: document.getElementById('irh-hearts'),
+            wave: document.getElementById('irh-wave'),
+            gold: document.getElementById('irh-gold'),
+            gems: document.getElementById('irh-gems'),
+            hitRush: document.getElementById('irh-hitrush-text'),
+            xpLabel: document.getElementById('irh-xp-label'),
+            xpFill: document.getElementById('irh-xp-fill')
+        };
+    }
+    const els = _irhEls;
+    const last = _irhLast;
+
+    if (els.hearts) {
+        const total = Math.max(1, Math.floor(player.maxHp));
+        const full = Math.max(0, Math.floor(player.hp));
+        if (els.hearts.childElementCount !== total) {
+            els.hearts.innerHTML = Array.from({ length: total }, () => `<img src="icons/small/heart-48.png" class="irh-heart" alt="">`).join('');
+            last.heartsFull = -1; // force the empty-state pass below to run
+        }
+        if (last.heartsFull !== full) {
+            last.heartsFull = full;
+            for (let i = 0; i < els.hearts.children.length; i++) {
+                els.hearts.children[i].classList.toggle('irh-heart-empty', i >= full);
+            }
+        }
+
+        // Extra hearts (Patch Heart) — small gold-tinted hearts after the row.
+        const extraCount = Math.min(8, player.extraHearts || 0);
+        if (extraCount !== last.extraCount) {
+            last.extraCount = extraCount;
+            let extraWrap = document.getElementById('irh-hearts-extra');
+            if (extraCount > 0) {
+                if (!extraWrap) {
+                    extraWrap = document.createElement('div');
+                    extraWrap.id = 'irh-hearts-extra';
+                    extraWrap.style.display = 'flex';
+                    extraWrap.style.gap = '2px';
+                    els.hearts.after(extraWrap);
+                }
+                extraWrap.innerHTML = Array.from({ length: extraCount }, () => `<img src="icons/small/heart-48.png" class="irh-heart-extra" alt="">`).join('');
+            } else if (extraWrap) {
+                extraWrap.remove();
+            }
+        }
+    }
+
+    const waveText = `${t('hud.waveShort')} ${currentMode === 'endless' ? `${currentWave + 1}/INF` : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`}`;
+    if (els.wave && last.wave !== waveText) { last.wave = waveText; els.wave.textContent = waveText; }
+    if (els.gold && last.gold !== save.gold) { last.gold = save.gold; els.gold.textContent = save.gold; }
+    if (els.gems && last.gems !== save.gems) { last.gems = save.gems; els.gems.textContent = save.gems; }
+
+    if (els.hitRush) {
+        const rushOn = killStreak > 2;
+        if (last.rushOn !== rushOn) { last.rushOn = rushOn; els.hitRush.style.display = rushOn ? '' : 'none'; }
+        if (rushOn && last.killStreak !== killStreak) {
+            last.killStreak = killStreak;
+            els.hitRush.textContent = `${t('hud.hitRush')} x${killStreak}`;
+        }
+    }
+
+    if (els.xpLabel && (last.xp !== player.abilityXp || last.nextXp !== player.nextAbilityXp)) {
+        last.xp = player.abilityXp; last.nextXp = player.nextAbilityXp;
+        els.xpLabel.textContent = `${t('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`;
+        if (els.xpFill) els.xpFill.style.width = `${Math.min(100, Math.max(4, (player.abilityXp / player.nextAbilityXp) * 100))}%`;
     }
 }
 
@@ -10287,6 +10808,52 @@ window.testShowAbilityPick = function() {
     openAbilityDraft();
 };
 
+// Cheats — mutate real save data so testers can reach states that normally
+// take real play to earn (a fat wallet, a leveled-up roadmap, a fresh save).
+window.testGiveGold = function() {
+    save.gold += 1000;
+    saveSave();
+    updateMetaHud();
+    showToast('+1000 Gold');
+};
+
+window.testGiveGems = function() {
+    save.gems += 50;
+    saveSave();
+    updateMetaHud();
+    showToast('+50 Gems');
+};
+
+// Mirrors victory()'s level-up + skill-reveal logic exactly, then re-enters
+// the Home screen the same way a real win does, so the skill-reveal pack
+// (if this level grants one) fires immediately instead of waiting.
+window.testLevelUp = function() {
+    save.unlocked += 1;
+    save.selectedLevel = save.unlocked;
+    const newSkill = ABILITIES.find((a) => (a.unlockLevel || 1) === save.unlocked);
+    if (newSkill) save.pendingSkillReveal = newSkill.id;
+    saveSave();
+    closeQuickTest();
+    if (typeof showFight === 'function') showFight();
+};
+
+window.testMaxLevel = function() {
+    save.unlocked = 30;
+    save.selectedLevel = 30;
+    saveSave();
+    closeQuickTest();
+    if (typeof showFight === 'function') showFight();
+};
+
+window.testResetLevel = function() {
+    save.unlocked = 1;
+    save.selectedLevel = 1;
+    save.pendingSkillReveal = null;
+    saveSave();
+    closeQuickTest();
+    if (typeof showFight === 'function') showFight();
+};
+
 window.testGodMode = function(enabled) {
     _testGodMode = enabled;
     if (_testArenaActive && player) {
@@ -10448,6 +11015,9 @@ window.addEventListener('load', () => {
     showFight();
     installSwipeNavigation();
     refreshRailBadges();
+    preloadEnemySprites();
+    renderStarfield();
+    installSkillRevealDrag();
     MusicManager.init();
     startMusicVisualiser();
     setInterval(syncMusicVolume, 500);

@@ -940,6 +940,10 @@ input:focus-visible,
 }
 .loadout-tab.active .loadout-tab-count { background: rgba(26,20,32,0.25); }
 
+.loadout-slot-header { display: flex; align-items: center; justify-content: space-between; }
+.loadout-slot-header .eyebrow { margin: 0; }
+.loadout-slot-count { font-family: var(--font-ui); font-size: 11px; font-weight: 800; letter-spacing: 0.5px; color: rgba(255,255,255,0.5); }
+
 /* Cards tab: "pick for slot N" banner + rarity filters + card grid */
 .loadout-pick-banner {
   display: flex; align-items: center; gap: 8px;
@@ -1225,7 +1229,7 @@ input:focus-visible,
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .inv-flip-row {
-  display: flex; justify-content: space-between; gap: 4px;
+  display: flex; flex-direction: column; gap: 1px;
   font-family: var(--font-ui); font-size: 8px;
   padding: 3px 0; border-top: 1px solid rgba(255,255,255,0.08);
 }
@@ -1263,6 +1267,7 @@ input:focus-visible,
   cursor: pointer;
   text-align: left;
 }
+.synergy-bolt-icon { width: 14px; height: 14px; image-rendering: pixelated; flex-shrink: 0; }
 .synergy-count {
   margin-left: auto;
   font-family: var(--font-ui);
@@ -1721,11 +1726,11 @@ body.in-run .in-game-settings-button { display: inline-flex; }
   align-items: baseline;
   justify-content: center;
   gap: 8px;
-  padding: 6px 16px;
+  padding: 6px 16px 5px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(13,12,17,0.92), rgba(4,6,16,0.95));
-  border: 1px solid rgba(214,179,106,0.45);
-  box-shadow: 0 2px 14px rgba(0,0,0,0.5), 0 0 11px rgba(214,179,106,0.35);
+  background: #3a2c1a;
+  border: 2px solid var(--outline);
+  box-shadow: 0 3px 0 #0b0818;
   font-family: var(--font-ui);
   pointer-events: none;
   white-space: nowrap;
@@ -1733,17 +1738,110 @@ body.in-run .in-game-settings-button { display: inline-flex; }
 body.in-run .in-run-level-banner { display: flex; }
 .irl-label {
   font-size: 10px;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   text-transform: uppercase;
-  color: rgba(227,210,164,0.7);
+  color: rgba(255,229,166,0.75);
 }
 .irl-num {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  color: #fff;
-  text-shadow: 0 0 12px rgba(214,179,106,0.6), 0 0 12px rgba(211,163,85,0.35);
+  color: var(--r-gold);
+}
+
+/* ── In-run HUD (hearts, wave/zone, gold/gems, hit rush, ability XP) ──
+   Real DOM + the established pixel-art tokens (hard 2D shadow, flat
+   fill, no blur) — this used to be drawn straight onto the canvas with
+   a different font and soft glow pills, the one part of the redesign
+   that never got converted. */
+.in-run-hud {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  left: 0; right: 0;
+  z-index: 1400;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px;
+  pointer-events: none;
+  font-family: var(--font-ui);
+}
+body.in-run .in-run-hud { display: flex; }
+
+/* Reserves the same vertical band as the centered LEVEL banner + top-right
+   gear button (both position:fixed, so normal flex flow doesn't know to
+   leave room for them) — the row below then naturally starts clear of
+   both instead of sliding underneath them. */
+.irh-toprow { display: flex; align-items: center; min-height: 34px; }
+/* Wave + gold + gems share ONE row (was three separate stacked rows,
+   plus a since-removed ZONE pill that was just re-showing the same
+   number as the LEVEL banner) — the whole HUD is 2 rows now instead of 5. */
+.irh-secondrow { display: flex; justify-content: flex-end; gap: 6px; }
+
+.irh-hearts { display: flex; align-items: center; gap: 3px; }
+.irh-heart { width: 20px; height: 20px; image-rendering: pixelated; transition: opacity .15s; }
+.irh-heart-empty { opacity: 0.22; filter: grayscale(1); }
+.irh-heart-extra { width: 16px; height: 16px; image-rendering: pixelated; filter: hue-rotate(30deg) saturate(1.6); margin-left: 2px; }
+@keyframes irhHeartHit {
+  0%   { transform: translate(0,0) scale(1); }
+  30%  { transform: translate(3px,-2px) scale(1.35); }
+  60%  { transform: translate(-3px,1px) scale(1.15); }
+  100% { transform: translate(0,0) scale(1); }
+}
+.irh-heart.irh-heart-hit { animation: irhHeartHit .5s ease-out; }
+/* Still-full hearts get a brief pulse on any hit — same "whole row reacts"
+   feedback the old canvas drawHearts() had, just via CSS now. */
+@keyframes irhHeartPulse {
+  0%   { transform: scale(1); filter: brightness(1); }
+  35%  { transform: scale(1.22); filter: brightness(1.5); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.irh-heart.irh-heart-pulse { animation: irhHeartPulse .5s ease-out; }
+
+.irh-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px 3px;
+  border-radius: 999px;
+  background: #241b4a;
+  border: 2px solid var(--outline);
+  box-shadow: 0 3px 0 #0b0818;
+  font-size: 11px; font-weight: 700;
+  color: #e4dbff;
+  white-space: nowrap;
+}
+.irh-pill-icon { width: 14px; height: 14px; image-rendering: pixelated; flex-shrink: 0; }
+.irh-pill-gold { background: #3a2c1a; color: #ffe98f; }
+.irh-pill-gems { background: #2b2159; color: #cdb8ff; }
+
+/* Ability-XP row: one compact line (label left, hit-rush right when active)
+   sitting directly on top of a thin bar — replaces what used to be its own
+   label line + a whole separate hit-rush pill row. */
+.irh-xprow { margin-top: 4px; }
+.irh-xp-labels {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 3px;
+}
+.irh-xp-label {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+}
+.irh-hitrush-text {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--r-gold);
+}
+.irh-xp-bar {
+  height: 7px;
+  background: var(--bg-deep);
+  border: 2px solid var(--outline);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.irh-xp-fill { height: 100%; background: var(--r-dark); }
+
+@media (max-width: 380px) {
+  .irh-heart { width: 17px; height: 17px; }
+  .irh-pill { font-size: 10px; padding: 3px 7px 2px; }
 }
 
 .result-leaderboard-delta {
@@ -1893,7 +1991,8 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   display:none; align-items:center; justify-content:center;
   padding:16px;
   background:rgba(0,0,0,0.88);
-  
+  overflow-y: auto;
+  overflow-x: hidden;
   z-index:9999;
   backdrop-filter: blur(8px);
 }
@@ -1901,6 +2000,13 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .modal-content {
   width:min(100%,400px); padding:18px;
   border-color:rgba(255,255,255,0.12);
+  /* Safety net for short viewports: align-items:center alone clips a
+     too-tall modal silently (its bottom, e.g. a CTA button, ends up
+     off-screen with no way to reach it). margin:auto collapses to 0 when
+     there's free space (same visual centering as before) but, combined
+     with overflow-y:auto on .modal-overlay, lets the overlay actually
+     scroll to reveal the full modal when it doesn't fit. */
+  margin: auto;
 }
 .modal-topline { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; }
 .modal-title { font-size:15px; font-family:var(--font-ui); letter-spacing:3px; color:var(--r-white); }
@@ -2916,14 +3022,24 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 
 /* Rotating sunburst behind the whole pack card — the one deliberately
    dramatic/glowy screen in this game, kept flat everywhere else. Pure CSS
-   conic-gradient, no image asset. */
+   conic-gradient, no image asset.
+   The wrapper clips it to the card's own bounds: .pack-stage-rays is
+   intentionally oversized (250%) so its rotation never shows a gap at the
+   corners, but #skill-reveal-content is a scrollable element -- without
+   this wrapper that 250% box inflates its scrollHeight hugely (~370px of
+   pure dead scroll space below the visible card), which is exactly the
+   "can still scroll it" bug this wrapper exists to prevent. */
+.pack-stage-rays-clip {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
 .pack-stage-rays {
   position: absolute;
   top: 50%; left: 50%;
   width: 250%; height: 250%;
   transform: translate(-50%, -50%) rotate(0deg);
-  z-index: 0;
-  pointer-events: none;
   background: repeating-conic-gradient(
     rgba(120,95,20,0.35) 0deg 9deg,
     rgba(0,0,0,0) 9deg 18deg
@@ -2934,6 +3050,19 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   .pack-stage-rays { animation: none; }
 }
 @keyframes packRaysSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.pack-stage-rays.burst { animation: skillRevealRaysBurst 0.5s ease-out; }
+/* Must include the base rule's translate(-50%,-50%) in every stop — CSS
+   animations REPLACE the whole transform property rather than composing
+   with it, so a scale-only keyframe drops .pack-stage-rays's top:50%/
+   left:50% centering and the element visibly jumps off-center mid-burst.
+   Same pitfall documented ~70 lines below for .prf-rays (its fix is to
+   avoid a translate anywhere since it centers via inset instead); here the
+   element genuinely needs the translate, so it stays in every stop. */
+@keyframes skillRevealRaysBurst {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  40% { opacity: 1; }
+  100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.15); }
+}
 
 /* ── Pack reveal face — big centered hero-icon reveal (mockup "1i") ──
    Swapped in for the reel strip once a purchase resolves. Only one real
@@ -2968,6 +3097,17 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .pack-reveal-face.rarity-purple { --pf-color: var(--r-purple); }
 .pack-reveal-face.rarity-red    { --pf-color: var(--r-red); }
 .pack-reveal-face.rarity-gold   { --pf-color: var(--r-gold); }
+
+/* Skill-reveal ceremony uses ABILITY-rarity vocabulary (common/rare/epic/
+   legendary, set as overlay[data-rarity]) rather than the equipment-rarity
+   .rarity-blue/dark/purple/red/gold CLASSES above — the two vocabularies are
+   kept separate on purpose (unrelated gacha flow vs this feature), so bridge
+   data-rarity to the same --pf-color custom property here instead of reusing
+   those classes. Tokens match .rarity-tier-* / .lr-skill-tag.rarity-tier-*. */
+#skill-reveal-overlay[data-rarity="common"]    .pack-reveal-face { --pf-color: #b9adf0; }
+#skill-reveal-overlay[data-rarity="rare"]      .pack-reveal-face { --pf-color: var(--r-blue); }
+#skill-reveal-overlay[data-rarity="epic"]      .pack-reveal-face { --pf-color: var(--r-purple); }
+#skill-reveal-overlay[data-rarity="legendary"] .pack-reveal-face { --pf-color: var(--r-gold); }
 
 .prf-badge {
   position: absolute; top: -21px; left: 50%; transform: translateX(-50%);
@@ -3017,6 +3157,13 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   display: flex; align-items: center; justify-content: center;
 }
 .prf-icon svg { width: 100%; height: 100%; }
+/* getAbilityIconMarkup() returns a card-sized .ability-icon (42px, own
+   border/background, 26px inner img) meant for compact contexts — dropped
+   into this 210px .prf-frame it renders as a tiny chip. Mirror the same
+   squeeze-to-fill technique used for .lr-skill-tag .ability-icon above,
+   but stretch to fill instead of shrink. */
+#skr-icon .ability-icon { width: 100%; height: 100%; border: 0; background: none; margin: 0; }
+#skr-icon .ability-icon-img, #skr-icon .ability-icon svg { width: 100%; height: 100%; }
 
 .prf-name {
   font-family: var(--font-display); font-size: 24px; font-weight: 800;
@@ -3071,6 +3218,80 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   20%  { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%,-50%) rotate(var(--a, 0deg)) translateY(-260px); }
 }
+
+/* skill-reveal pack stage (Task 6): hero pack art + rarity-tinted glow */
+.skill-reveal-content { text-align: center; }
+/* #skill-reveal-continue must NEVER be scrolled out of view -- a button you
+   have to scroll to find isn't a real "can't skip it" gate, and padding
+   tweaks here in the past only pushed the problem around instead of fixing
+   it. So #skill-reveal-content is a flex column with exactly two children:
+   #skill-reveal-scroll (everything that can be tall/variable -- title, pack
+   art, reveal face) and the button, which as a plain flex item never
+   shrinks and is never part of the scrollable region -- it's always
+   visible, full stop, regardless of viewport height or description length.
+   min-height:0 on the scroll child is required for it to actually shrink
+   and scroll internally instead of just growing the flex container. */
+#skill-reveal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+}
+#skill-reveal-scroll {
+  position: relative;
+  min-height: 0;
+  overflow-y: hidden;
+  overflow-x: hidden;
+}
+/* Safety net (final review, finding #1): if content is ever still taller
+   than the available space (long desc, small phone), let it scroll
+   internally rather than clip. Scroll only turns on AFTER the tear
+   (.revealed, set in commitTear()'s setTimeout) -- enabling it
+   unconditionally let native touch-scroll hijack the drag-to-tear gesture,
+   since a vertical drag on scrollable content is indistinguishable from a
+   scroll to the browser. Before the tear there's nothing to scroll to
+   anyway (the pack fits), so hidden is safe there. */
+#skill-reveal-content.revealed #skill-reveal-scroll { overflow-y: auto; }
+#skill-reveal-continue { flex: none; }
+/* Owns the touch gesture outright so the browser never treats a downward
+   drag here as a page/container scroll — required alongside the JS handler
+   (installSkillRevealDrag), whose touchmove listener is passive and so
+   can't preventDefault() its way out of a native scroll once one starts. */
+.skill-reveal-pack-stage {
+  position: relative;
+  width: min(100%, 320px);
+  aspect-ratio: 2 / 3;
+  margin: 8px auto;
+  touch-action: none;
+}
+.skill-reveal-pack-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 18px rgba(255,255,255,0.15));
+}
+/* The pack art is rendered live into this canvas by icons/zipkit.js
+   (window.ZipKit.frame(tier, progress)) — a procedural pixel-art generator,
+   not a set of pre-baked images. Every pointermove during a drag calls
+   frame() again with the live progress value (0..1), so the zipper teeth,
+   pull-tab and light gap all animate continuously and exactly, with no
+   crossfade/ghosting between discrete frames (installSkillRevealDrag in
+   game.js). The 36 skill-pack-*-zip-*.png files in icons/ are this same
+   generator's output at 9 fixed checkpoints, kept only as static reference/
+   fallback art (e.g. shop thumbnails), not used by the live drag itself. */
+.skill-reveal-pack-canvas.torn {
+  transition: transform 0.4s cubic-bezier(.2,.8,.3,1.4), opacity 0.35s ease;
+  transform: translateY(-16%) scale(0.9) rotate(-6deg);
+  opacity: 0;
+}
+.skill-reveal-hint {
+  position: absolute; left: 0; right: 0; bottom: -22px;
+  font-family: var(--font-ui); font-size: 10px; letter-spacing: 1px;
+  color: rgba(255,255,255,0.5); text-align: center;
+}
+#skill-reveal-overlay[data-rarity="rare"]      .skill-reveal-pack-img { filter: drop-shadow(0 0 18px rgba(41,209,255,0.35)); }
+#skill-reveal-overlay[data-rarity="epic"]      .skill-reveal-pack-img { filter: drop-shadow(0 0 18px rgba(255,95,209,0.35)); }
+#skill-reveal-overlay[data-rarity="legendary"] .skill-reveal-pack-img { filter: drop-shadow(0 0 22px rgba(255,205,60,0.45)); }
 
 /* pack rip / pre-reveal phase */
 .pack-rip {
@@ -3748,6 +3969,22 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   background: var(--bg);
 }
 
+.starfield-layer { position: absolute; inset: 0; overflow: hidden; }
+.starfield-star {
+  position: absolute;
+  background: #fff;
+  border-radius: 1px;
+  opacity: 0.5;
+}
+.starfield-star.size-sm { width: 2px; height: 2px; opacity: 0.35; }
+.starfield-star.size-md { width: 3px; height: 3px; opacity: 0.5; }
+.starfield-star.size-lg { width: 4px; height: 4px; opacity: 0.65; }
+.starfield-star.twinkle { animation: starTwinkle 4s ease-in-out infinite; }
+@keyframes starTwinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.9; }
+}
+
 /* Spiral level roadmap. Nodes are absolutely positioned by JS along a sine
    path; the host scrolls vertically and the connecting line is built from a
    stack of rotated 1-pixel-thin div segments. */
@@ -3831,6 +4068,28 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   0%,100% { transform: translate(-50%, -50%) scale(1); }
   50%     { transform: translate(-50%, -50%) scale(1.06); }
 }
+.lr-node-clickable { cursor: pointer; }
+.lr-node-clickable:active { transform: translate(-50%, -50%) scale(0.94); }
+
+.roadmap-preview-modal { max-width: 340px; }
+.roadmap-preview-modal .lb-style-header { justify-content: center; }
+.roadmap-preview-modal .lb-style-header .screen-title-counter { margin-left: 0; }
+.roadmap-preview-section { margin-top: 12px; }
+.roadmap-preview-section:first-of-type { margin-top: 4px; }
+.roadmap-preview-reward-row {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 800; color: var(--r-gold);
+}
+.roadmap-preview-skill-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 12px; border: 2px solid var(--outline);
+}
+.roadmap-preview-skill-name { font-family: var(--font-display); font-size: 13px; font-weight: 800; color: #fff; }
+.roadmap-preview-skill-desc { font-family: var(--font-ui); font-size: 10px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+.roadmap-preview-skill-row.rarity-tier-common    { border-color: #b9adf0; }
+.roadmap-preview-skill-row.rarity-tier-rare      { border-color: var(--r-blue); }
+.roadmap-preview-skill-row.rarity-tier-epic      { border-color: var(--r-purple); }
+.roadmap-preview-skill-row.rarity-tier-legendary { border-color: var(--r-gold); }
 /* Reward marker — compact chest pinned to the upper-right of the node. */
 .lr-reward {
   position: absolute;
@@ -3883,6 +4142,18 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .lr-skill-tag svg {
   width: 12px; height: 12px;
   fill: currentColor; stroke: none;
+}
+/* Real ability icons dropped into the 22px roadmap badge need to be
+   squeezed down from their card-sized default (.ability-icon is 42px/
+   26px inner) regardless of whether the inner content is an <img> or an
+   inline <svg> — getAbilityIconMarkup() can return either. */
+.lr-skill-tag .ability-icon {
+  width: 16px; height: 16px;
+  border: 0; background: none; margin: 0;
+}
+.lr-skill-tag .ability-icon-img,
+.lr-skill-tag .ability-icon svg {
+  width: 14px; height: 14px;
 }
 .lr-skill-tag.rarity-tier-common    { color: #9bd3ff; border-color: #9bd3ff; }
 .lr-skill-tag.rarity-tier-rare      { color: var(--r-blue); border-color: var(--r-blue); }
@@ -4314,6 +4585,22 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   width: 42px; height: 42px;
   margin-bottom: 8px;
 }
+.enemy-index-icon {
+  width: 48px; height: 48px;
+  margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-deep);
+  border: 2px solid var(--outline);
+  border-radius: 12px;
+}
+.enemy-index-icon-img { width: 40px; height: 40px; image-rendering: pixelated; }
+/* These cards borrow .unlocked-now purely for the desaturate/opacity
+   locked-state styling — unlike ability cards they don't open a detail
+   view (the full description already sits right on the card), so undo
+   the inherited pointer cursor + press-down affordance that would
+   otherwise make them look clickable for nothing. */
+.enemy-index-card.unlocked-now { cursor: default; }
+.enemy-index-card.unlocked-now:active { transform: none; }
 .ability-archive-card .card-title {
   font-family: var(--font-ui);
   font-size: 14px;

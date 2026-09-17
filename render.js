@@ -563,6 +563,47 @@ function drawEnemies() {
         const phaseAlpha = enemy.phasing ? 0.35 : blinkAlpha;
         ctx.globalAlpha = phaseAlpha;
 
+        // ── Sprite path: if this enemy type has loaded image frame(s) (see
+        // preloadEnemySprites() in game.js — populated once at startup from
+        // ENEMY_TYPES[key].sprite, so dropping in a Claude Design asset later
+        // needs zero changes here), draw that instead of the vector shape
+        // below. Everything BELOW this block (status-indicator overlays:
+        // EMP rings, drone barrel, shield ring, etc.) still applies on top
+        // either way — only the body silhouette itself is swapped out.
+        // Multiple frames cycle at ENEMY_ANIM_FPS using each enemy's own
+        // animTimer (randomized phase per instance, see createEnemy), so a
+        // drawImage-based animation costs the same as a static one — it's
+        // just picking a different (equally cheap) source image per frame.
+        const frames = enemy.spriteFrames;
+        const frame = frames && frames.length ? frames[Math.floor(enemy.animTimer * ENEMY_ANIM_FPS) % frames.length] : null;
+        const hasSprite = frame && frame.complete && frame.naturalWidth > 0;
+        if (hasSprite) {
+            if (enemy.ai === 'sprint') {
+                // Chaser normally self-orients toward the player (see below);
+                // sprites get the same treatment so a directional asset reads
+                // correctly instead of always facing "up".
+                const a = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                ctx.rotate(a - Math.PI / 2);
+            } else if (enemy.ai === 'sniper') {
+                const a = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                ctx.rotate(a);
+            }
+            const size = enemy.r * 2.2;
+            // Same smoothing toggle used everywhere else a pixel-art image is
+            // drawn (ship skins, passive icons) — without it the browser runs
+            // a bilinear resample on every enemy every frame, which is both
+            // slower and makes the pixel art look blurry instead of crisp.
+            const smoothing = ctx.imageSmoothingEnabled;
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(frame, -size / 2, -size / 2, size, size);
+            if (enemy.hitFlash > 0) {
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.globalAlpha = phaseAlpha * 0.5;
+                ctx.drawImage(frame, -size / 2, -size / 2, size, size);
+                ctx.globalCompositeOperation = 'source-over';
+            }
+            ctx.imageSmoothingEnabled = smoothing;
+        } else {
         ctx.beginPath();
         if (enemy.isBoss) {
             // Hexagon
@@ -663,6 +704,7 @@ function drawEnemies() {
             ctx.fillStyle = `rgba(255, 255, 255, 0.25)`;
             ctx.fill();
         }
+        } // end vector-shape fallback (hasSprite branch above)
 
         // ── Swarmling: split dividing line ──
         if (enemy.ai === 'swarm' && !enemy.hasSplit) {
@@ -792,7 +834,7 @@ function drawEnemies() {
 
         ctx.globalAlpha = 1;
 
-        ctx.font = enemy.isBoss ? '700 18px "IBM Plex Sans"' : '700 14px "IBM Plex Sans"';
+        ctx.font = enemy.isBoss ? '700 18px "Silkscreen", monospace' : '700 14px "Silkscreen", monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
@@ -1115,7 +1157,7 @@ function drawParticles() {
 function drawFxTexts() {
     fxTexts.forEach((text) => {
         ctx.globalAlpha = text.life / text.maxLife;
-        ctx.font = `900 ${text.size}px "IBM Plex Sans", "Arial Black", sans-serif`;
+        ctx.font = `700 ${text.size}px "Silkscreen", monospace`;
         ctx.textAlign = 'center';
 
         // Glow: ability + crit popups get a heavy multi-pass neon halo so they
@@ -1214,74 +1256,6 @@ function drawOffscreenEnemyIndicators(width, height) {
     });
 }
 
-// `total` = the player's max hearts. This loop used to be hardcoded to 3, which
-// was fine while 3 was the only possible value — with the Panzerung upgrade the
-// player reaches 8 and hearts 4..8 were never drawn, so damage had no feedback.
-// Spacing and size now shrink as the count grows so the row still fits a 375px
-// phone (8 hearts at the old 34px step would have been 272px wide).
-function drawHearts(x, y, hp, total = 3) {
-    const count = Math.max(1, Math.floor(total));
-    const fullHearts = Math.max(0, Math.floor(hp));
-    const step      = count <= 3 ? 34  : count <= 5 ? 28  : count <= 6 ? 24   : 21;
-    const baseScale = count <= 3 ? 1.2 : count <= 5 ? 1.0 : count <= 6 ? 0.86 : 0.76;
-
-    // Compute damage-flash factor (0 = idle, 1 = just damaged, decays in 0.6s)
-    const damageT = (typeof window.__heartDamageTime === 'number')
-        ? Math.max(0, 1 - (_renderNow - window.__heartDamageTime) / 600)
-        : 0;
-    // Lost-heart range: which heart(s) got depleted this hit? Animate them
-    // shaking out. A boss hit can cost 2 hearts at once, so this is a range
-    // (start index + count), not a single index.
-    const lostHeartIdx = (typeof window.__heartLostIdx === 'number') ? window.__heartLostIdx : -1;
-    const lostHeartCount = (typeof window.__heartLostCount === 'number') ? window.__heartLostCount : 1;
-
-    for (let i = 0; i < count; i++) {
-        ctx.save();
-        // Default position
-        let cx = x + i * step;
-        let cy = y;
-        let scale = baseScale;
-        let color = i < fullHearts ? '#d0716f' : 'rgba(255,255,255,0.12)';
-        let glow = 0;
-
-        // Lost heart(s): shake + fade out
-        if (i >= lostHeartIdx && i < lostHeartIdx + lostHeartCount && lostHeartIdx >= 0 && damageT > 0) {
-            cx += Math.sin(damageT * 22) * 4 * damageT;
-            cy += Math.cos(damageT * 18) * 3 * damageT;
-            scale = baseScale * (1 + damageT * 0.6); // grow as it "explodes"
-            color = `rgba(255, ${Math.floor(55 + damageT * 200)}, ${Math.floor(95 + damageT * 80)}, ${(1 - damageT * 0.6).toFixed(2)})`;
-            glow = damageT * 18;
-        }
-        // Remaining hearts pulse briefly when damage hits
-        else if (i < fullHearts && damageT > 0) {
-            scale = baseScale * (1 + damageT * 0.18);
-            glow = damageT * 12;
-        }
-
-        ctx.translate(cx, cy);
-        ctx.scale(scale, scale);
-        if (glow > 0) {
-            ctx.shadowColor = '#d0716f';
-            ctx.shadowBlur=GLOW_SCALE*(glow);
-        }
-        drawHeartShape(color);
-        ctx.restore();
-    }
-    // Where the row ends, so callers can lay out things after it.
-    return x + count * step;
-}
-
-function drawHeartShape(color) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.shadowBlur=GLOW_SCALE*(color === 'rgba(255,255,255,0.12)' ? 0 : 10);
-    ctx.shadowColor = color;
-    ctx.beginPath();
-    ctx.moveTo(0, 10);
-    ctx.bezierCurveTo(12, 2, 12, -10, 0, -4);
-    ctx.bezierCurveTo(-12, -10, -12, 2, 0, 10);
-    ctx.stroke();
-}
 
 function drawOverlayFx(width, height) {
     if (powerPulse > 0) {
@@ -1307,110 +1281,14 @@ function drawInGameHud(width) {
 
     const height = window.GH || window.innerHeight;
     const safeTop = height > width ? 48 : 16;
-    const barLeft = 20;
-    const barTop = safeTop + 70;
-    const barWidth = width - 40;
-    const abilityPct = Math.min(1, player.abilityXp / player.nextAbilityXp);
-    const waveLabel = currentMode === 'endless'
-        ? `${currentWave + 1}/INF`
-        : `${Math.min(currentWave + 1, currentLevelWaves.length)}/${Math.max(1, currentLevelWaves.length)}`;
 
-    // Row width now depends on max hearts, so the extra-heart row follows on
-    // from wherever the regular row actually ended.
-    const heartsEndX = drawHearts(24, safeTop + 8, player.hp, player.maxHp);
-
-    // ── Extra hearts (Patch Heart) — drawn after the regular hearts ──
-    if (player.extraHearts && player.extraHearts > 0) {
-        drawExtraHearts(heartsEndX, safeTop + 8, player.extraHearts);
-    }
-
-    const _tt2 = (typeof t === 'function') ? t : ((k) => k);
-    const topPills = [
-        { text: `${_tt2('hud.waveShort')} ${waveLabel}`, color: '#ffffff' },
-        { text: `${_tt2('hud.zone')} ${currentLevel}`, color: '#ffffff' }
-    ];
-    const currencyPills = [
-        { text: `GOLD ${save.gold}`, color: '#d6b36a' },
-        { text: `GEMS ${save.gems}`, color: '#bb98d6' }
-    ];
-
-    let rightX = width - 18;
-    ctx.textAlign = 'right';
-    topPills.slice().reverse().forEach((pill) => {
-        ctx.font = '700 10px "Saira Condensed"';
-        const textWidth = ctx.measureText(pill.text).width;
-        const pillWidth = textWidth + 18;
-        const pillX = rightX - pillWidth;
-        ctx.fillStyle = 'rgba(13,12,17, 0.72)';
-        ctx.strokeStyle = pill.color === '#d6b36a'
-            ? 'rgba(214,179,106,0.28)'
-            : pill.color === '#bb98d6'
-                ? 'rgba(217,140,255,0.28)'
-                : 'rgba(255,255,255,0.1)';
-        ctx.lineWidth = 1;
-        ctx.shadowBlur=GLOW_SCALE*(16);
-        ctx.shadowColor = pill.color === '#ffffff' ? 'rgba(255,255,255,0.06)' : pill.color;
-        ctx.beginPath();
-        ctx.roundRect(pillX, safeTop, pillWidth, 24, 12);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = pill.color;
-        ctx.fillText(pill.text, rightX - 9, safeTop + 17);
-        ctx.shadowBlur=GLOW_SCALE*(0);
-        rightX = pillX - 6;
-    });
-
-    rightX = width - 18;
-    currencyPills.slice().reverse().forEach((pill) => {
-        ctx.font = '700 10px "Saira Condensed"';
-        const textWidth = ctx.measureText(pill.text).width;
-        const pillWidth = textWidth + 18;
-        const pillX = rightX - pillWidth;
-        ctx.fillStyle = 'rgba(13,12,17, 0.78)';
-        ctx.strokeStyle = pill.color === '#d6b36a' ? 'rgba(214,179,106,0.34)' : 'rgba(217,140,255,0.34)';
-        ctx.lineWidth = 1;
-        ctx.shadowBlur=GLOW_SCALE*(18);
-        ctx.shadowColor = pill.color;
-        ctx.beginPath();
-        ctx.roundRect(pillX, safeTop + 30, pillWidth, 24, 12);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = pill.color;
-        ctx.fillText(pill.text, rightX - 9, safeTop + 47);
-        ctx.shadowBlur=GLOW_SCALE*(0);
-        rightX = pillX - 6;
-    });
-
-    if (killStreak > 2) {
-        ctx.textAlign = 'center';
-        ctx.font = '700 13px "Saira Condensed"';
-        ctx.fillStyle = '#cf9440';
-        ctx.shadowBlur=GLOW_SCALE*(14);
-        ctx.shadowColor = '#cf9440';
-        ctx.fillText(`${_tt2('hud.hitRush')} x${killStreak}`, width * 0.5, safeTop + 20);
-        ctx.shadowBlur=GLOW_SCALE*(0);
-    }
-
-    ctx.textAlign = 'left';
-    ctx.font = '700 12px "IBM Plex Sans"';
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fillText(`${_tt2('hud.abilityXp')} ${player.abilityXp} / ${player.nextAbilityXp}`, barLeft, safeTop + 62);
-
-    ctx.fillStyle = 'rgba(4, 8, 20, 0.42)';
-    ctx.beginPath();
-    ctx.roundRect(barLeft, barTop, barWidth, 8, 999);
-    ctx.fill();
-    ctx.fillStyle = '#a184c9';
-    ctx.beginPath();
-    ctx.roundRect(barLeft, barTop, Math.max(12, barWidth * abilityPct), 8, 999);
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(12, safeTop + 96);
-    ctx.lineTo(width - 12, safeTop + 96);
-    ctx.stroke();
+    // Hearts, wave/zone, gold/gems, hit rush and the ability-XP bar are real
+    // DOM elements now (see updateInRunHud() in game.js) — matches the rest
+    // of the redesign's flat pixel-art tokens instead of being drawn on the
+    // canvas with a different font and soft glow pills. Only the dynamic,
+    // harder-to-templatize pieces (boss bars, frenzy ring, passive icons)
+    // still render here.
+    updateInRunHud();
 
     drawBossBars(width, safeTop);
     drawFrenzyIndicator(width, safeTop);
@@ -1541,7 +1419,7 @@ function drawBossBars(width, safeTop) {
         ctx.fill();
 
         ctx.shadowBlur=GLOW_SCALE*(0);
-        ctx.font = '700 11px "Saira Condensed"';
+        ctx.font = '700 11px "Silkscreen", monospace';
         ctx.textAlign = 'left';
         ctx.fillStyle = '#ffe1e8';
         const name = boss.bossName || 'BOSS';
@@ -1585,34 +1463,13 @@ function drawFrenzyIndicator(width, safeTop) {
     ctx.beginPath();
     ctx.roundRect(x + 1, y + 1, Math.max(2, (w - 2) * pct), h - 2, 5);
     ctx.fill();
-    ctx.font = '700 10px "Saira Condensed"';
+    ctx.font = '700 10px "Silkscreen", monospace';
     ctx.fillStyle = '#e3cf9a';
     ctx.textAlign = 'center';
     ctx.fillText(`FRENZY +${(stack * 100).toFixed(0)}%`, width / 2, y - 3);
     ctx.restore();
 }
 
-// ── Extra hearts (Patch Heart) — golden hearts to the right of normal ones ──
-function drawExtraHearts(x, y, count) {
-    const max = Math.min(8, count);
-    for (let i = 0; i < max; i++) {
-        ctx.save();
-        ctx.translate(x + i * 30, y);
-        ctx.scale(1.1, 1.1);
-        ctx.shadowColor = '#d6b36a';
-        ctx.shadowBlur=GLOW_SCALE*(14);
-        ctx.strokeStyle = '#d6b36a';
-        ctx.fillStyle = 'rgba(214,179,106, 0.25)';
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(0, 10);
-        ctx.bezierCurveTo(12, 2, 12, -10, 0, -4);
-        ctx.bezierCurveTo(-12, -10, -12, 2, 0, 10);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-    }
-}
 
 // ── VFX Rings ─────────────────────────────────────────────────────────────────
 function drawVfxRings() {

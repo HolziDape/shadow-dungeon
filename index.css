@@ -1991,7 +1991,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   display:none; align-items:center; justify-content:center;
   padding:16px;
   background:rgba(0,0,0,0.88);
-  
+  overflow-y: auto;
   z-index:9999;
   backdrop-filter: blur(8px);
 }
@@ -1999,6 +1999,13 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .modal-content {
   width:min(100%,400px); padding:18px;
   border-color:rgba(255,255,255,0.12);
+  /* Safety net for short viewports: align-items:center alone clips a
+     too-tall modal silently (its bottom, e.g. a CTA button, ends up
+     off-screen with no way to reach it). margin:auto collapses to 0 when
+     there's free space (same visual centering as before) but, combined
+     with overflow-y:auto on .modal-overlay, lets the overlay actually
+     scroll to reveal the full modal when it doesn't fit. */
+  margin: auto;
 }
 .modal-topline { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; }
 .modal-title { font-size:15px; font-family:var(--font-ui); letter-spacing:3px; color:var(--r-white); }
@@ -3014,14 +3021,24 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 
 /* Rotating sunburst behind the whole pack card — the one deliberately
    dramatic/glowy screen in this game, kept flat everywhere else. Pure CSS
-   conic-gradient, no image asset. */
+   conic-gradient, no image asset.
+   The wrapper clips it to the card's own bounds: .pack-stage-rays is
+   intentionally oversized (250%) so its rotation never shows a gap at the
+   corners, but #skill-reveal-content is a scrollable element -- without
+   this wrapper that 250% box inflates its scrollHeight hugely (~370px of
+   pure dead scroll space below the visible card), which is exactly the
+   "can still scroll it" bug this wrapper exists to prevent. */
+.pack-stage-rays-clip {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
 .pack-stage-rays {
   position: absolute;
   top: 50%; left: 50%;
   width: 250%; height: 250%;
   transform: translate(-50%, -50%) rotate(0deg);
-  z-index: 0;
-  pointer-events: none;
   background: repeating-conic-gradient(
     rgba(120,95,20,0.35) 0deg 9deg,
     rgba(0,0,0,0) 9deg 18deg
@@ -3203,18 +3220,36 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 
 /* skill-reveal pack stage (Task 6): hero pack art + rarity-tinted glow */
 .skill-reveal-content { text-align: center; }
-/* Safety net for finding #1 (final review): commitTear() now hides the pack
-   stage once the card is revealed so the two don't stack, but if content is
-   ever still taller than the viewport (long desc, small phone), let this
-   overlay's content scroll internally instead of pushing #skill-reveal-continue
-   off-screen with no way back — .pack-content is overflow:hidden globally.
-   Scroll only turns on AFTER the tear (.revealed, set in commitTear()'s
-   setTimeout) — enabling it unconditionally let native touch-scroll hijack
-   the drag-to-tear gesture, since a vertical drag on scrollable content is
-   indistinguishable from a scroll to the browser. Before the tear there's
-   nothing to scroll to anyway (the pack fits), so hidden is safe there. */
-#skill-reveal-content { max-height: 92vh; overflow-y: hidden; }
-#skill-reveal-content.revealed { overflow-y: auto; }
+/* #skill-reveal-continue must NEVER be scrolled out of view -- a button you
+   have to scroll to find isn't a real "can't skip it" gate, and padding
+   tweaks here in the past only pushed the problem around instead of fixing
+   it. So #skill-reveal-content is a flex column with exactly two children:
+   #skill-reveal-scroll (everything that can be tall/variable -- title, pack
+   art, reveal face) and the button, which as a plain flex item never
+   shrinks and is never part of the scrollable region -- it's always
+   visible, full stop, regardless of viewport height or description length.
+   min-height:0 on the scroll child is required for it to actually shrink
+   and scroll internally instead of just growing the flex container. */
+#skill-reveal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+}
+#skill-reveal-scroll {
+  position: relative;
+  min-height: 0;
+  overflow-y: hidden;
+}
+/* Safety net (final review, finding #1): if content is ever still taller
+   than the available space (long desc, small phone), let it scroll
+   internally rather than clip. Scroll only turns on AFTER the tear
+   (.revealed, set in commitTear()'s setTimeout) -- enabling it
+   unconditionally let native touch-scroll hijack the drag-to-tear gesture,
+   since a vertical drag on scrollable content is indistinguishable from a
+   scroll to the browser. Before the tear there's nothing to scroll to
+   anyway (the pack fits), so hidden is safe there. */
+#skill-reveal-content.revealed #skill-reveal-scroll { overflow-y: auto; }
+#skill-reveal-continue { flex: none; }
 /* Owns the touch gesture outright so the browser never treats a downward
    drag here as a page/container scroll — required alongside the JS handler
    (installSkillRevealDrag), whose touchmove listener is passive and so
@@ -3233,31 +3268,19 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   image-rendering: pixelated;
   filter: drop-shadow(0 0 18px rgba(255,255,255,0.15));
 }
-/* Seam is a slightly tilted line across the source art (skill-pack-*-hero.png,
-   matching the pack's own drawn perspective) — PLACEHOLDER angle, left end at
-   25% down, right end at 29% down (SEAM_Y_LEFT/SEAM_Y_RIGHT in game.js, must
-   match). Both images are identical; each shows only its half via clip-path.
-   The top piece's clip-path is rewritten every frame during a live drag
-   (installSkillRevealDrag) to peel away from the left as the zip handle
-   moves right — this base rule is just its resting (fully zipped) state. */
-.skill-reveal-pack-top    { clip-path: polygon(0 0, 100% 0, 100% 29%, 0 25%); transition: none; }
-.skill-reveal-pack-bottom { clip-path: polygon(0 25%, 100% 29%, 100% 100%, 0 100%); }
-.skill-reveal-pack-top.zip-settling { transition: clip-path 0.25s cubic-bezier(.2,.8,.3,1.4); }
-.skill-reveal-pack-top.torn { transition: transform 0.4s cubic-bezier(.2,.8,.3,1.4); transform: translateY(-140%) rotate(-18deg); }
-/* Draggable handle — code-drawn, not part of the baked art, since the art's
-   own pull-tab graphic sits inside the region that gets clipped away the
-   moment a drag starts. Positioned at the seam's left end at rest so it
-   reads as "attached" to the art's drawn tab before you ever touch it. */
-.skill-reveal-zip-handle {
-  position: absolute;
-  left: 0%; top: 25%;
-  width: 26px; height: 26px;
-  transform: translate(-30%, -50%);
-  border-radius: 6px;
-  background: linear-gradient(160deg, #e8e8ee, #9c9ca8);
-  border: 2px solid #4a4a54;
-  box-shadow: 0 2px 0 rgba(0,0,0,0.4);
-  pointer-events: none;
+/* The pack art is rendered live into this canvas by icons/zipkit.js
+   (window.ZipKit.frame(tier, progress)) — a procedural pixel-art generator,
+   not a set of pre-baked images. Every pointermove during a drag calls
+   frame() again with the live progress value (0..1), so the zipper teeth,
+   pull-tab and light gap all animate continuously and exactly, with no
+   crossfade/ghosting between discrete frames (installSkillRevealDrag in
+   game.js). The 36 skill-pack-*-zip-*.png files in icons/ are this same
+   generator's output at 9 fixed checkpoints, kept only as static reference/
+   fallback art (e.g. shop thumbnails), not used by the live drag itself. */
+.skill-reveal-pack-canvas.torn {
+  transition: transform 0.4s cubic-bezier(.2,.8,.3,1.4), opacity 0.35s ease;
+  transform: translateY(-16%) scale(0.9) rotate(-6deg);
+  opacity: 0;
 }
 .skill-reveal-hint {
   position: absolute; left: 0; right: 0; bottom: -22px;

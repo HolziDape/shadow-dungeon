@@ -2672,29 +2672,38 @@ function installSwipeNavigation() {
 // right increases it, dragging back left decreases it, with no timeline of
 // its own. That's what makes it feel physical instead of played-back.
 //
-// SEAM_Y_LEFT/RIGHT must match the base clip-path in index.css (placeholder
-// tilt until the regenerated pack art's real seam angle is measured).
+// The pack itself is rendered by window.ZipKit.frame(tier, progress)
+// (icons/zipkit.js), a procedural pixel-art generator that draws the exact
+// zipper/teeth/light-gap state for ANY progress value, not just a fixed set
+// of frames — so a drag can be scrubbed to any position with no crossfade
+// or ghosting, and reversing direction just redraws with a smaller value.
 function installSkillRevealDrag() {
     const stage = document.getElementById('skill-reveal-pack-stage');
-    if (!stage) return;
+    const canvas = document.getElementById('skill-reveal-pack-canvas');
+    if (!stage || !canvas) return;
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('skill-reveal-overlay');
 
-    const SEAM_Y_LEFT = 25;  // %
-    const SEAM_Y_RIGHT = 29; // %
     const COMPLETE_THRESHOLD = 0.92; // release at/above this % completes the unzip
 
     let progress = 0; // 0 = fully zipped, 1 = fully unzipped
     let tracking = false, moved = false;
     let startX = 0, startProgress = 0;
     let completed = false;
+    let animHandle = 0;
+
+    function tierFor(rarity) {
+        if (!window.ZipKit) return null;
+        return window.ZipKit.TIERS.find((t) => t.id === rarity) || window.ZipKit.TIERS[0];
+    }
 
     function render() {
-        const top = document.getElementById('skill-reveal-pack-top');
-        const handle = document.getElementById('skill-reveal-zip-handle');
-        if (!top) return;
-        const leftX = progress * 100;
-        const yAtLeftX = SEAM_Y_LEFT + (SEAM_Y_RIGHT - SEAM_Y_LEFT) * progress;
-        top.style.clipPath = `polygon(${leftX}% ${yAtLeftX}%, 100% ${SEAM_Y_RIGHT}%, 100% 0%, ${leftX}% 0%)`;
-        if (handle) { handle.style.left = leftX + '%'; handle.style.top = yAtLeftX + '%'; }
+        if (!window.ZipKit) return;
+        const rarity = (overlay && overlay.dataset.rarity) || 'common';
+        const tier = tierFor(rarity);
+        if (!tier) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(window.ZipKit.frame(tier, progress), 0, 0);
     }
 
     function setProgress(p) {
@@ -2702,14 +2711,36 @@ function installSkillRevealDrag() {
         render();
     }
 
+    // easeOutBack: overshoots slightly past the target then settles, giving
+    // the snap-open/spring-back its physical feel (was a CSS cubic-bezier
+    // transition on clip-path before the switch to live canvas rendering).
+    function easeOutBack(t) {
+        const c1 = 1.70158, c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+
+    function animateProgress(target, duration, done) {
+        cancelAnimationFrame(animHandle);
+        const from = progress;
+        if (from === target) { setProgress(target); if (done) done(); return; }
+        const start = performance.now();
+        function step(now) {
+            const raw = Math.min(1, (now - start) / duration);
+            setProgress(from + (target - from) * easeOutBack(raw));
+            if (raw < 1) animHandle = requestAnimationFrame(step);
+            else { setProgress(target); if (done) done(); }
+        }
+        animHandle = requestAnimationFrame(step);
+    }
+
     // Exposed so openSkillRevealSequence() can reset a fresh reveal without
     // reaching into this closure's internals.
     window._resetSkillRevealZip = function() {
+        cancelAnimationFrame(animHandle);
         completed = false;
         tracking = false;
         moved = false;
-        const top = document.getElementById('skill-reveal-pack-top');
-        if (top) top.classList.remove('zip-settling');
+        canvas.classList.remove('torn');
         setProgress(0);
     };
 
@@ -2719,29 +2750,24 @@ function installSkillRevealDrag() {
         const hint = document.getElementById('skill-reveal-hint');
         const rays = document.getElementById('skill-reveal-rays');
         const face = document.getElementById('skill-reveal-face');
-        const handle = document.getElementById('skill-reveal-zip-handle');
         if (hint) hint.style.display = 'none';
-        if (handle) handle.style.display = 'none';
         if (rays) rays.classList.add('burst');
         if (typeof playHaptic === 'function') playHaptic('medium');
+        canvas.classList.add('torn');
         setTimeout(() => {
             const packStage = document.getElementById('skill-reveal-pack-stage');
             if (packStage) packStage.style.display = 'none';
             if (face) face.style.display = '';
             const content = document.getElementById('skill-reveal-content');
             if (content) content.classList.add('revealed');
+            const continueBtn = document.getElementById('skill-reveal-continue');
+            if (continueBtn) continueBtn.style.display = '';
             if (typeof spawnPackConfetti === 'function') spawnPackConfetti('#d6b36a', 30, 'skill-reveal-confetti');
         }, 320);
     }
 
     function settle(target, then) {
-        const top = document.getElementById('skill-reveal-pack-top');
-        if (top) top.classList.add('zip-settling');
-        setProgress(target);
-        setTimeout(() => {
-            if (top) top.classList.remove('zip-settling');
-            if (then) then();
-        }, 260);
+        animateProgress(target, 260, then);
     }
 
     function down(e) {
@@ -9330,49 +9356,49 @@ function openSkillRevealSequence(abilityId) {
     const ability = ABILITIES.find((a) => a.id === abilityId);
     if (!ability) return;
     const overlay = document.getElementById('skill-reveal-overlay');
-    const packTop = document.getElementById('skill-reveal-pack-top');
-    const packBottom = document.getElementById('skill-reveal-pack-bottom');
     const face = document.getElementById('skill-reveal-face');
     const badge = document.getElementById('skr-badge');
     const icon = document.getElementById('skr-icon');
     const name = document.getElementById('skr-name');
     const desc = document.getElementById('skr-desc');
-    if (!overlay || !packTop || !packBottom || !face || !name || !desc) return;
+    if (!overlay || !face || !name || !desc) return;
     const rarity = (ability.rarity || 'common').toLowerCase();
     const localised = (typeof tSkill === 'function') ? tSkill(ability.id) : null;
 
-    // Populate the (still-hidden) reveal face now so Task 7's tear has
-    // real content ready the instant it flips display:none off.
+    // Populate the (still-hidden) reveal face now so the tear has real
+    // content ready the instant it flips display:none off.
     if (badge) badge.textContent = rarity.toUpperCase();
     if (icon) icon.innerHTML = getAbilityIconMarkup(ability.id, ability.icon);
     name.textContent = (localised && localised.name) || ability.name;
     desc.textContent = (localised && localised.desc) || ability.desc;
     face.style.display = 'none';
 
-    const heroSrc = `icons/skill-pack-${rarity}-hero.png`;
-    const probe = new Image();
-    probe.onload = () => { packTop.src = heroSrc; packBottom.src = heroSrc; };
-    probe.onerror = () => { packTop.src = 'icons/pack.png'; packBottom.src = 'icons/pack.png'; }; // fallback if a rarity asset is ever missing
-    probe.src = heroSrc;
-    // Reset any zip progress from a previous reveal.
+    // Rarity must be set before the reset below: _resetSkillRevealZip()
+    // redraws the pack canvas immediately, reading overlay.dataset.rarity.
+    overlay.dataset.rarity = rarity;
     if (typeof window._resetSkillRevealZip === 'function') window._resetSkillRevealZip();
     const packStage = document.getElementById('skill-reveal-pack-stage');
     if (packStage) packStage.style.display = '';
     const hint = document.getElementById('skill-reveal-hint');
     if (hint) hint.style.display = '';
-    const handle = document.getElementById('skill-reveal-zip-handle');
-    if (handle) handle.style.display = '';
     const rays = document.getElementById('skill-reveal-rays');
     if (rays) rays.classList.remove('burst');
     const content = document.getElementById('skill-reveal-content');
     if (content) content.classList.remove('revealed');
+    const continueBtn = document.getElementById('skill-reveal-continue');
+    if (continueBtn) continueBtn.style.display = 'none';
 
-    overlay.dataset.rarity = rarity;
     overlay.classList.add('active');
 }
 
+// The pack opening is mandatory: neither the backdrop click nor the Nice
+// button (only shown after a real tear anyway, but this also covers any
+// future close path) can dismiss the overlay until the pack has actually
+// been opened -- the only way out of an unopened pack is leaving the app.
 window.closeSkillRevealOverlay = function(event) {
     if (event && event.currentTarget && event.target !== event.currentTarget) return;
+    const content = document.getElementById('skill-reveal-content');
+    if (content && !content.classList.contains('revealed')) return;
     document.getElementById('skill-reveal-overlay')?.classList.remove('active');
 };
 

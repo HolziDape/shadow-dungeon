@@ -616,27 +616,29 @@
 
     <div id="skill-reveal-overlay" class="modal-overlay" onclick="closeSkillRevealOverlay(event)">
         <div class="modal-content pack-content skill-reveal-content" id="skill-reveal-content">
-            <div class="modal-topline">
-                <h2 class="modal-title" data-i18n="skillReveal.title">NEW SKILL</h2>
-            </div>
-            <div class="pack-stage-rays" id="skill-reveal-rays" aria-hidden="true"></div>
-            <div class="skill-reveal-pack-stage" id="skill-reveal-pack-stage">
-                <img id="skill-reveal-pack-top" class="skill-reveal-pack-img skill-reveal-pack-top" src="" alt="">
-                <img id="skill-reveal-pack-bottom" class="skill-reveal-pack-img skill-reveal-pack-bottom" src="" alt="">
-                <div class="skill-reveal-zip-handle" id="skill-reveal-zip-handle" aria-hidden="true"></div>
-                <div class="skill-reveal-hint" id="skill-reveal-hint" data-i18n="skillReveal.hint">DRAG THE ZIPPER →</div>
-                <div id="skill-reveal-confetti" class="pack-confetti"></div>
-            </div>
-            <div class="pack-reveal-face" id="skill-reveal-face" style="display:none">
-                <div class="prf-badge" id="skr-badge"></div>
-                <div class="prf-frame" id="skr-frame">
-                    <div class="prf-rays" id="skr-rays"></div>
-                    <div class="prf-icon" id="skr-icon"></div>
+            <div class="skill-reveal-scroll" id="skill-reveal-scroll">
+                <div class="modal-topline">
+                    <h2 class="modal-title" data-i18n="skillReveal.title">NEW SKILL</h2>
                 </div>
-                <div class="prf-name" id="skr-name"></div>
-                <div class="prf-desc" id="skr-desc"></div>
+                <div class="pack-stage-rays-clip" aria-hidden="true">
+                    <div class="pack-stage-rays" id="skill-reveal-rays"></div>
+                </div>
+                <div class="skill-reveal-pack-stage" id="skill-reveal-pack-stage">
+                    <canvas id="skill-reveal-pack-canvas" class="skill-reveal-pack-img skill-reveal-pack-canvas" width="1024" height="1536" aria-hidden="true"></canvas>
+                    <div class="skill-reveal-hint" id="skill-reveal-hint" data-i18n="skillReveal.hint">DRAG THE ZIPPER →</div>
+                    <div id="skill-reveal-confetti" class="pack-confetti"></div>
+                </div>
+                <div class="pack-reveal-face" id="skill-reveal-face" style="display:none">
+                    <div class="prf-badge" id="skr-badge"></div>
+                    <div class="prf-frame" id="skr-frame">
+                        <div class="prf-rays" id="skr-rays"></div>
+                        <div class="prf-icon" id="skr-icon"></div>
+                    </div>
+                    <div class="prf-name" id="skr-name"></div>
+                    <div class="prf-desc" id="skr-desc"></div>
+                </div>
             </div>
-            <button id="skill-reveal-continue" class="btn-glossy btn-gold" type="button" onclick="closeSkillRevealOverlay()" data-i18n="skillReveal.nice">Nice!</button>
+            <button id="skill-reveal-continue" class="btn-glossy btn-gold" type="button" onclick="closeSkillRevealOverlay()" data-i18n="skillReveal.nice" style="display:none">Nice!</button>
         </div>
     </div>
 
@@ -778,6 +780,7 @@
     <script src="skins.js"></script>
     <script src="config.js"></script>
     <script src="render.js"></script>
+    <script src="icons/zipkit.js"></script>
     <script src="game.js"></script>
     <script>
         const bg = document.getElementById('space-bg');

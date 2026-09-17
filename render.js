@@ -834,7 +834,7 @@ function drawEnemies() {
 
         ctx.globalAlpha = 1;
 
-        ctx.font = enemy.isBoss ? '700 18px "IBM Plex Sans"' : '700 14px "IBM Plex Sans"';
+        ctx.font = enemy.isBoss ? '700 18px "Silkscreen", monospace' : '700 14px "Silkscreen", monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
@@ -1157,7 +1157,7 @@ function drawParticles() {
 function drawFxTexts() {
     fxTexts.forEach((text) => {
         ctx.globalAlpha = text.life / text.maxLife;
-        ctx.font = `900 ${text.size}px "IBM Plex Sans", "Arial Black", sans-serif`;
+        ctx.font = `700 ${text.size}px "Silkscreen", monospace`;
         ctx.textAlign = 'center';
 
         // Glow: ability + crit popups get a heavy multi-pass neon halo so they
@@ -1419,7 +1419,7 @@ function drawBossBars(width, safeTop) {
         ctx.fill();
 
         ctx.shadowBlur=GLOW_SCALE*(0);
-        ctx.font = '700 11px "Saira Condensed"';
+        ctx.font = '700 11px "Silkscreen", monospace';
         ctx.textAlign = 'left';
         ctx.fillStyle = '#ffe1e8';
         const name = boss.bossName || 'BOSS';
@@ -1463,7 +1463,7 @@ function drawFrenzyIndicator(width, safeTop) {
     ctx.beginPath();
     ctx.roundRect(x + 1, y + 1, Math.max(2, (w - 2) * pct), h - 2, 5);
     ctx.fill();
-    ctx.font = '700 10px "Saira Condensed"';
+    ctx.font = '700 10px "Silkscreen", monospace';
     ctx.fillStyle = '#e3cf9a';
     ctx.textAlign = 'center';
     ctx.fillText(`FRENZY +${(stack * 100).toFixed(0)}%`, width / 2, y - 3);

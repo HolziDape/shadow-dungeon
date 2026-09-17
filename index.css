@@ -1992,6 +1992,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   padding:16px;
   background:rgba(0,0,0,0.88);
   overflow-y: auto;
+  overflow-x: hidden;
   z-index:9999;
   backdrop-filter: blur(8px);
 }
@@ -3239,6 +3240,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   position: relative;
   min-height: 0;
   overflow-y: hidden;
+  overflow-x: hidden;
 }
 /* Safety net (final review, finding #1): if content is ever still taller
    than the available space (long desc, small phone), let it scroll

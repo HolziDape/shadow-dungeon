@@ -14,6 +14,11 @@
 /* ── Tokens ─────────────────────────────────────────────── */
 :root {
   color-scheme: dark;
+  /* Fixed logical game size — same on every device. #stage is scaled
+     to fit the real screen via a CSS transform (see stage.js), so
+     everything below always lays out against these dimensions. */
+  --stage-w: 420px;
+  --stage-h: 900px;
   --bg:           #171130;
   --bg-mid:       #1c1540;
   --bg-panel:     #211947;
@@ -70,7 +75,43 @@ html, body { width:100%; height:100%; overflow:hidden; }
 body {
   font-family: var(--font-body);
   color: #fff;
+  /* letterbox color behind the fixed-size stage on mismatched screens */
+  background: var(--bg-deep);
+}
+
+/* ── Fixed-resolution stage ──────────────────────────────────
+   #stage-outer centers a stage of exactly --stage-w x --stage-h
+   and lets the real page background show through as a letterbox.
+   #stage itself is scaled to fit via an inline transform (stage.js);
+   giving it its own `transform` also makes it the containing block
+   for every position:fixed descendant (HUD, modals, canvas, etc.),
+   so they stay confined to the stage instead of the real viewport. */
+#stage-outer {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+#stage {
+  position: relative;
+  width: var(--stage-w);
+  height: var(--stage-h);
+  /* #stage-outer is a flexbox — without this, flex's default shrink
+     behavior would squeeze #stage below 420x900 on any real viewport
+     narrower than that, fighting the JS scale() below and breaking the
+     "always the same logical size" guarantee. */
+  flex-shrink: 0;
+  overflow: hidden;
   background: var(--bg);
+  transform: scale(1);
+  transform-origin: center center;
+  /* Existing @media width breakpoints below were written against a real
+     phone viewport. Now that every device renders at the same fixed
+     --stage-w, those breakpoints are converted to container queries
+     against #stage's own (pre-scale) layout size, so they still key off
+     "how wide is the game", just against a constant instead of the
+     real screen. */
+  container: stage / inline-size;
 }
 button { font: inherit; cursor: pointer; }
 /* universal press feedback — brightness only, so transform-positioned
@@ -168,7 +209,7 @@ input:focus-visible,
   min-height: 0;
   box-shadow: 0 3px 0 #0b0818;
 }
-@media (max-width: 420px) {
+@container stage (max-width: 420px) {
   .currency-badge { padding: 4px 7px 3px; font-size: 11px; }
   .currency-badge.currency-level { padding: 4px 8px 3px; font-size: 11px; }
   .currency-gold span, .currency-gems span { font-size: 11px; }
@@ -229,8 +270,8 @@ input:focus-visible,
   color: var(--r-white);
   text-shadow: 2px 2px 0 #000;
 }
-.hero-panel h1 { font-size: clamp(24px, 8vw, 34px); line-height:1.15; }
-.screen-title  { font-size: clamp(22px, 7vw, 30px); margin-bottom:4px; line-height:1.15; }
+.hero-panel h1 { font-size: clamp(24px, calc(var(--stage-w) * 8 / 100), 34px); line-height:1.15; }
+.screen-title  { font-size: clamp(22px, calc(var(--stage-w) * 7 / 100), 30px); margin-bottom:4px; line-height:1.15; }
 .screen-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .screen-title-row .screen-title { margin-bottom: 0; }
 .screen-title-counter {
@@ -321,7 +362,7 @@ input:focus-visible,
   content: '';
   position: fixed;
   left:50%; top:60px;
-  width: min(100vw, 440px);
+  width: min(var(--stage-w), 440px);
   height: 280px;
   transform: translateX(-50%);
   background: radial-gradient(circle at 50% 30%, rgba(214,179,106,0.07) 0%, transparent 55%);
@@ -333,7 +374,7 @@ input:focus-visible,
 #roadmap-container {
   position: relative;
   width: min(100%, 420px);
-  height: calc(100vh - 258px);
+  height: calc(var(--stage-h) - 258px);
   min-height: 480px;
   margin: 0 auto;
   padding: 12px 0;
@@ -1840,7 +1881,7 @@ body.in-run .in-run-hud { display: flex; }
 }
 .irh-xp-fill { height: 100%; background: var(--r-dark); }
 
-@media (max-width: 380px) {
+@container stage (max-width: 380px) {
   .irh-heart { width: 17px; height: 17px; }
   .irh-pill { font-size: 10px; padding: 3px 7px 2px; }
 }
@@ -2160,7 +2201,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 }
 .ability-detail-tree-list {
   display: flex; flex-direction: column; gap: 8px;
-  max-height: 38vh;
+  max-height: calc(var(--stage-h) * 38 / 100);
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: none;
@@ -2969,7 +3010,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  max-height: 50vh;
+  max-height: calc(var(--stage-h) * 50 / 100);
   overflow-y: auto;
   padding: 4px;
   scrollbar-width: none;
@@ -3235,7 +3276,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 #skill-reveal-content {
   display: flex;
   flex-direction: column;
-  max-height: 92vh;
+  max-height: calc(var(--stage-h) * 92 / 100);
 }
 #skill-reveal-scroll {
   position: relative;
@@ -3315,7 +3356,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .pack-rip.hidden { display: none; }
 
 /* ── Mobile responsiveness ─────────────────────────────────── */
-@media (max-width:560px) {
+@container stage (max-width: 560px) {
   .pack-card-v2 .pack-hero { height: 150px; }
   .pack-hero-icon { width: 90px; height: 90px; }
   .shop-feature-banner { padding: 12px; }
@@ -3371,15 +3412,15 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   position: fixed;
   left: 8px;
   bottom: 76px;
-  width: min(180px, 38vw);
+  width: min(180px, calc(var(--stage-w) * 38 / 100));
   z-index: 950;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.12);
   background: linear-gradient(180deg, rgba(14,16,30,0.95), rgba(12,11,15,0.95));
   padding: 10px 8px;
   box-shadow: 0 4px 18px rgba(0,0,0,0.5);
-  
-  max-height: 38vh; overflow: hidden;
+
+  max-height: calc(var(--stage-h) * 38 / 100); overflow: hidden;
   display: flex; flex-direction: column;
   backdrop-filter: blur(10px);
 }
@@ -3423,10 +3464,10 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .daily-panel.legacy-hidden { display: none !important; }
 
 /* Push the fight-screen content right of the rail on wider screens */
-@media (max-width: 380px) {
+@container stage (max-width: 380px) {
   .map-rail { width: 78px; }
   .map-rail-btn { font-size: 8px; }
-  .leaderboard-panel { width: 78vw; left: 4px; }
+  .leaderboard-panel { width: calc(var(--stage-w) * 78 / 100); left: 4px; }
 }
 
 /* Pack offer button overflow fix — buy button is now price-only */
@@ -3477,7 +3518,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 }
 /* Daily + Quests merged into one screen — taller content, needs its own scroll */
 .modal-content.lb-style-modal.daily-quests-modal {
-  max-height: 88vh;
+  max-height: calc(var(--stage-h) * 88 / 100);
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -3615,7 +3656,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 #challenges-list {
   display: flex; flex-direction: column; gap: 8px;
   margin-top: 14px;
-  max-height: 60vh; overflow-y: auto;
+  max-height: calc(var(--stage-h) * 60 / 100); overflow-y: auto;
   scrollbar-width: none;
   padding: 2px 2px 16px;
 }
@@ -3854,7 +3895,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   display: flex; flex-direction: column;
   gap: 8px;
   margin-top: 14px;
-  max-height: 60vh;
+  max-height: calc(var(--stage-h) * 60 / 100);
   overflow-y: auto;
 }
 .run-summary-empty {
@@ -3998,7 +4039,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   /* Stay narrow enough that even at radius=46 nodes don't reach the rails */
   width: min(220px, 64%);
   /* Scrollable vertical viewport. */
-  max-height: calc(100vh - 340px);
+  max-height: calc(var(--stage-h) - 340px);
   min-height: 280px;
   overflow-y: auto;
   scrollbar-width: none;
@@ -4296,7 +4337,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .btn-endless-pill:hover { transform: translate(-1px,-1px); background: rgba(255,210,63,0.12); }
 
 /* Mobile narrow tweaks */
-@media (max-width: 380px) {
+@container stage (max-width: 380px) {
   .left-rail, .right-rail { width: 80px; }
   .rail-tile { padding: 8px 2px 6px; }
   .rail-tile .tile-icon { width: 32px; height: 32px; }
@@ -4360,14 +4401,14 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 .lb-row .lb-score { font-size: 10px; }
 
 /* On very narrow screens (< 380px) the rail collapses to icon-only */
-@media (max-width: 380px) {
+@container stage (max-width: 380px) {
   .fight-hero, .fight-cta, .leaderboard-panel { margin-left: 96px; width: calc(100% - 104px); }
   .map-rail { width: 78px; }
   .map-rail-btn { font-size: 8px; padding: 8px 2px; }
 }
 
 /* On wider screens (> 700px) center everything classically */
-@media (min-width: 700px) {
+@container stage (min-width: 700px) {
   .fight-hero, .fight-cta, .leaderboard-panel {
     margin-left: auto; margin-right: auto;
     width: min(420px, calc(100% - 200px));
@@ -4384,7 +4425,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   border: 3px solid var(--outline) !important;
   border-radius: 22px !important;
   position: relative;
-  max-height: 90vh;
+  max-height: calc(var(--stage-h) * 90 / 100);
   overflow-y: auto;
   scrollbar-width: none;
   box-shadow: 0 8px 0 rgba(0,0,0,0.4) !important;
@@ -4947,7 +4988,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 }
 
 /* Mobile narrow tweaks */
-@media (max-width: 380px) {
+@container stage (max-width: 380px) {
   .ability-list .pick-diamond .diamond-frame { width: 54px; height: 54px; }
   .ability-list .pick-diamond .diamond-icon svg { width: 26px; height: 26px; }
   .ability-list .pick-diamond .diamond-icon img { width: 26px; height: 26px; }
@@ -5019,10 +5060,10 @@ body.hp-flash::after {
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
-@media (max-width:560px) {
+@container stage (max-width: 560px) {
   .hud-bar { padding:10px; }
   .hud-left,.hud-right { gap:5px; }
-  #roadmap-container { height:calc(100vh - 242px); min-height:520px; }
+  #roadmap-container { height:calc(var(--stage-h) - 242px); min-height:520px; }
   .shop-grid,.single-column,.pack-shop-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
   .premium-column { grid-template-columns: 1fr; }
   .shop-card { min-height:200px; padding:10px; }
@@ -5042,7 +5083,7 @@ body.hp-flash::after {
    ══════════════════════════════════════════════════════════════ */
 .test-arena-content {
   max-width: 520px;
-  max-height: 90vh;
+  max-height: calc(var(--stage-h) * 90 / 100);
   overflow-y: auto;
   padding: 16px 18px 24px;
   scrollbar-width: thin;

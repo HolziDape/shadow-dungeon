@@ -1,7 +1,9 @@
 window.ctx = null;
 window.canvas = null;
-window.GW = window.innerWidth;
-window.GH = window.innerHeight;
+// Fixed game resolution (see stage.js) — same on every device, not the
+// real window size. #stage is what actually gets scaled to fit the screen.
+window.GW = window.STAGE_W || 420;
+window.GH = window.STAGE_H || 900;
 
 // iOS Safari only matches CSS :active at all once at least one touch
 // listener exists on the page — without this, every button's press-down
@@ -1414,7 +1416,7 @@ let packOpeningState = null;
 let packTickTimer = null;
 let packAnimationFrame = null;
 let endlessWaveRewardGold = 0;
-let arena = { width: window.innerWidth, height: window.innerHeight, top: 150 };
+let arena = { width: window.GW, height: window.GH, top: 150 };
 let camera = { x: 0, y: 0 };
 let runRerollCredits = 0;
 let lastHapticAt = {};
@@ -2995,8 +2997,8 @@ function startLevel() {
 
 function resizeCanvas() {
     if (!window.canvas) return;
-    window.GW = window.innerWidth;
-    window.GH = window.innerHeight;
+    window.GW = window.STAGE_W || 420;
+    window.GH = window.STAGE_H || 900;
     window.canvas.width = window.GW;
     window.canvas.height = window.GH;
     if (gameRunning) {
@@ -9329,13 +9331,13 @@ function renderLevelRoadmap() {
 
     // Scroll so the CURRENT node sits ~88% down the visible area.
     // RAF ensures the browser has computed scrollHeight before we set scrollTop.
-    // We use window.innerHeight - 340 instead of host.clientHeight because during
+    // We use window.GH - 340 instead of host.clientHeight because during
     // the screenIn animation #fight-screen has a CSS transform applied (making it
     // the containing block for fixed children), which can report clientHeight as 0.
     // Using the pre-computed yFromTop avoids DOM offsetTop queries that are also
     // unreliable at that moment.
     requestAnimationFrame(() => {
-        const containerH = Math.min(totalHeight, window.innerHeight - 340);
+        const containerH = Math.min(totalHeight, window.GH - 340);
         const curP = positions.find(p => p.state === 'current');
         if (curP) {
             const nodeH = 80; // .lr-node.current { height: 80px }

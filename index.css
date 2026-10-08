@@ -1357,11 +1357,40 @@ input:focus-visible,
 
 /* ── Ability archive ─────────────────────────────────────── */
 .ability-archive-grid { align-items:stretch; }
-.ability-milestones { display:grid; gap:10px; margin-bottom:16px; }
+.ability-milestones { display:grid; gap:8px; margin-bottom:14px; }
+.ability-milestones[hidden] { display:none; }
+
+/* archive progress bar + collapsible level-bonus strip */
+.archive-progress {
+  height: 10px; margin: 8px 0 12px;
+  background: var(--bg-deep);
+  border: 2px solid var(--outline);
+  border-radius: 999px; overflow: hidden;
+}
+.archive-progress-fill {
+  height: 100%; width: 0;
+  background: linear-gradient(180deg, #ffe07a, var(--r-gold));
+  border-radius: 999px;
+  transition: width .5s cubic-bezier(.22,.8,.36,1);
+}
+.milestone-toggle {
+  width: 100%; margin-bottom: 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border: 3px solid var(--outline); border-radius: 14px;
+  box-shadow: 0 4px 0 #0b0818;
+  color: var(--r-gold);
+  font-family: var(--font-ui); font-size: 10px; letter-spacing: 2px; font-weight: 700;
+}
+.milestone-toggle:active { transform: translateY(3px); box-shadow: 0 1px 0 #0b0818; }
+.milestone-toggle-caret { transition: transform .2s; }
+.milestone-toggle.open .milestone-toggle-caret { transform: rotate(180deg); }
 .milestone-card {
-  padding:12px 14px; border-radius: 10px;
-  border:2px solid var(--outline);
-  background:var(--bg-mid);
+  padding:10px 12px; border-radius: 14px;
+  border:3px solid var(--outline);
+  background:var(--bg-panel);
+  box-shadow: 0 4px 0 #0b0818;
 }
 .milestone-card.unlocked { border-color: var(--r-gold); }
 .milestone-card.locked   { opacity:.6; }
@@ -1372,7 +1401,7 @@ input:focus-visible,
 }
 .milestone-title { font-weight:700; color:rgba(255,255,255,0.85); }
 .milestone-level { color:var(--r-gold); }
-.milestone-copy  { font-size:12px; color:rgba(255,255,255,0.6); }
+.milestone-copy  { font-size:11px; line-height:1.4; color:rgba(255,255,255,0.6); }
 .ability-archive-card.locked { opacity:.5; filter:saturate(.2); }
 .ability-archive-card .card-meta.locked-meta { color:var(--r-red); }
 
@@ -2139,6 +2168,47 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
    DOM template in game.js's showAbilityDetail() innerHTML, hidden here as
    a safety net in case that markup is still emitted. */
 .detail-arc-container { display: none; }
+
+/* Big centered hero icon: the inner .ability-icon keeps its 42px card-size
+   box otherwise, which pinned the icon to the top-left of the frame. */
+.ability-detail-icon-wrap { width: 160px; height: 160px; border-radius: 24px; overflow: visible; }
+.ability-detail-icon-wrap .neon-svg {
+  width: 104px; height: 104px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 2;
+  animation: detailFloat 2.6s ease-in-out infinite;
+}
+.ability-detail-icon-wrap .neon-svg .ability-icon {
+  width: 100%; height: 100%; margin: 0; border: 0; box-shadow: none;
+}
+.ability-detail-icon-wrap .neon-svg .ability-icon-img,
+.ability-detail-icon-wrap .neon-svg .ability-icon svg {
+  width: 100%; height: 100%; image-rendering: pixelated;
+  filter: drop-shadow(0 0 8px var(--detail-accent, #fff));
+}
+/* pulsing rarity glow behind the icon */
+.ability-detail-icon-wrap::before {
+  content: ''; position: absolute; inset: 14px; z-index: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--detail-accent, #fff) 55%, transparent) 0%, transparent 70%);
+  animation: detailGlow 2.6s ease-in-out infinite;
+}
+/* pixel sparkles twinkling around the icon */
+.ability-detail-icon-wrap::after {
+  content: ''; position: absolute; z-index: 3; top: 22px; left: 26px;
+  width: 6px; height: 6px;
+  background: var(--detail-accent, #fff);
+  box-shadow: 100px 10px 0 0 #fff, 88px 92px 0 0 var(--detail-accent, #fff), -6px 84px 0 0 #fff;
+  animation: detailTwinkle 1.8s steps(2, end) infinite;
+}
+@keyframes detailFloat { 0%,100% { transform: translateY(3px); } 50% { transform: translateY(-5px); } }
+@keyframes detailGlow  { 0%,100% { opacity: .55; transform: scale(.92); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes detailTwinkle { 0%,100% { opacity: 1; } 50% { opacity: .15; } }
+@media (prefers-reduced-motion: reduce) {
+  .ability-detail-icon-wrap .neon-svg,
+  .ability-detail-icon-wrap::before,
+  .ability-detail-icon-wrap::after { animation: none; }
+}
 
 /* stats row */
 .ability-detail-stats {
@@ -4615,18 +4685,107 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
 }
 .lb-action-arrow svg { width: 14px; height: 14px; stroke: #6ec496; fill: none; stroke-width: 2.5; }
 
+/* ── Leaderboard: match the game's card language ─────────────
+   3px outline, hard offset shadow, pixel icons instead of emoji/SVG. */
+.lb-title-row { margin: 2px 40px 0 2px; }
+.lb-modal .lb-leagues {
+  margin: 12px 0 12px;
+  border: 3px solid var(--outline); border-radius: 16px;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 0 #0b0818;
+  padding: 10px 8px 8px;
+}
+.lb-modal .lb-leagues::after { top: 32px; height: 3px; background: var(--outline); }
+.lb-modal .lb-league-trophy {
+  width: 40px; height: 40px;
+  border: 3px solid var(--outline);
+  background: var(--bg-deep);
+}
+.lb-league-trophy img { width: 22px; height: 22px; image-rendering: pixelated; }
+.lb-league.locked { opacity: .55; }
+.lb-league.locked .lb-league-trophy img { width: 16px; height: 16px; }
+.lb-league.active .lb-league-trophy {
+  border-color: var(--r-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--r-gold) 25%, transparent);
+}
+img.lb-league-gift { width: 16px; height: 16px; image-rendering: pixelated; }
+.lb-modal .lb-league-header {
+  border: 3px solid var(--outline); border-radius: 16px;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 0 #0b0818;
+}
+.lb-modal .lb-league-name { -webkit-text-stroke: 3px var(--outline); paint-order: stroke fill; text-shadow: none; }
+.lb-modal .lb-prize {
+  border-width: 3px; border-radius: 16px;
+  background: color-mix(in srgb, var(--prize-color) 10%, var(--bg-panel));
+}
+.lb-modal .lb-prize-rank { border-radius: 8px 8px 0 0; top: -13px; }
+.lb-modal .lb-reward {
+  display: inline-flex; align-items: center; gap: 4px;
+  border-radius: 8px;
+}
+.lb-reward img { width: 14px; height: 14px; image-rendering: pixelated; }
+.lb-modal .lb-row-v2 {
+  grid-template-columns: 32px 1fr auto auto;
+  padding: 8px 12px 8px 8px;
+  border: 3px solid var(--outline); border-radius: 14px;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 0 #0b0818;
+  margin-bottom: 4px;
+}
+.lb-row-v2 .lb-r-rank {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: var(--bg-deep);
+  font-size: 13px;
+}
+.lb-row-v2.top-1 .lb-r-rank { background: var(--r-gold); color: var(--outline); }
+.lb-row-v2.top-2 .lb-r-rank { background: #c0d6ff; color: var(--outline); }
+.lb-row-v2.top-3 .lb-r-rank { background: #cd8a60; color: var(--outline); }
+.lb-row-v2.top-1 { border-color: color-mix(in srgb, var(--r-gold) 55%, var(--outline)); }
+.lb-row-v2 .lb-r-name { font-family: var(--font-ui); font-size: 11px; letter-spacing: 1px; }
+.lb-row-v2 .lb-r-flag {
+  font-family: var(--font-ui); font-size: 9px; letter-spacing: 1px; font-weight: 700;
+  color: #8d84c4;
+  padding: 2px 5px; border-radius: 5px;
+  background: var(--bg-deep);
+}
+.lb-row-v2 .lb-r-score { font-size: 13px; }
+.lb-r-trophy { width: 16px; height: 16px; image-rendering: pixelated; }
+.lb-modal .lb-row-v2.you {
+  border-color: #6ec496;
+  background: color-mix(in srgb, #6ec496 14%, var(--bg-panel));
+}
+.lb-modal .lb-row-v2.you .lb-r-rank { background: #6ec496; color: var(--outline); }
+
 /* ============================================================
-   SKILLS ARCHIVE — clean simple cards (old design restored)
+   SKILLS ARCHIVE — back to the original left-aligned card layout
+   (icon top-left, meta line, description, CTA pill), with a touch
+   of polish: rarity-tinted icon frame + glow, colored tier word.
    ============================================================ */
 .ability-archive-card {
   padding: 14px 12px;
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: column;
+  text-align: left;
+  min-height: 0;
+  border-width: 3px;
+  border-radius: 16px;
+  background: var(--bg-panel);
   box-shadow: 0 4px 0 #0d0920;
 }
+.ability-archive-card:hover { transform: none; box-shadow: 0 4px 0 #0d0920; }
+.ability-archive-card.rarity-tier-common    { --tier: #b9adf0; }
+.ability-archive-card.rarity-tier-rare      { --tier: var(--r-blue); }
+.ability-archive-card.rarity-tier-epic      { --tier: var(--r-purple); }
+.ability-archive-card.rarity-tier-legendary { --tier: var(--r-gold); }
 .ability-archive-card .ability-icon {
   width: 42px; height: 42px;
   margin-bottom: 8px;
+  border-width: 2px;
+  border-color: var(--tier, rgba(255,255,255,0.2));
 }
+.ability-archive-card .card-meta .archive-tier-word { color: var(--tier, inherit); font-weight: 700; }
 .enemy-index-icon {
   width: 48px; height: 48px;
   margin-bottom: 8px;
@@ -4648,12 +4807,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   font-size: 14px;
   letter-spacing: 1.2px;
   color: #fff;
-}
-.ability-archive-card .card-meta {
-  font-size: 9.5px;
-  letter-spacing: 1.5px;
-  color: rgba(255,255,255,0.55);
-  text-transform: uppercase;
+  line-height: 1.15;
 }
 .ability-archive-card .card-copy {
   font-size: 11.5px;
@@ -4679,9 +4833,9 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   transition: transform .08s ease, box-shadow .08s ease;
   cursor: pointer;
 }
-.ability-archive-card.unlocked-now .archive-cta:active {
-  transform: translateY(3px); box-shadow: none;
-}
+.ability-archive-card.unlocked-now .archive-cta:active { transform: translateY(3px); box-shadow: none; }
+.ability-archive-card.unlocked-now:active { transform: translateY(3px); box-shadow: 0 1px 0 #0d0920; }
+.ability-archive-card.locked { opacity: .75; filter: saturate(.25); }
 .ability-archive-card.locked .archive-cta {
   border-color: var(--outline);
   background: var(--bg-deep);
@@ -4689,6 +4843,7 @@ body.in-run #global-nav, body.in-run #main-hud { display:none; }
   box-shadow: none;
   cursor: default;
 }
+.ability-archive-card.locked .ability-icon { border-color: var(--outline); box-shadow: none; }
 
 /* ============================================================
    IN-RUN ABILITY PICKER — diamond cards + tree (matches reference)

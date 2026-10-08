@@ -130,13 +130,18 @@
         <div class="modal-content lb-modal" onclick="event.stopPropagation()">
             <button class="lb-close" type="button" onclick="closeLeaderboardOverlay()">×</button>
 
+            <div class="screen-title-row lb-title-row">
+                <img src="icons/small/trophy-48.png" alt="" class="screen-title-icon">
+                <h1 class="screen-title" data-i18n="leaderboard.title">LEADERBOARD</h1>
+            </div>
+
             <!-- League ribbon: 5 trophy badges in progression -->
             <div class="lb-leagues">
-                <div class="lb-league active"><div class="lb-league-trophy gold"><svg viewBox="0 0 24 24"><polygon points="6,4 18,4 17,9 12,11 7,9" fill="currentColor"/><path d="M12 11v6" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9 17h6v3H9z" fill="currentColor"/></svg></div><span class="lb-league-gift">🎁</span></div>
-                <div class="lb-league"><div class="lb-league-trophy silver"><svg viewBox="0 0 24 24"><polygon points="6,4 18,4 17,9 12,11 7,9" fill="currentColor"/><polygon points="10,5 14,5 13,8 12,9 11,8" fill="rgba(0,0,0,0.4)"/></svg></div><span class="lb-league-gift">🎁</span></div>
-                <div class="lb-league"><div class="lb-league-trophy silver"><svg viewBox="0 0 24 24"><polygon points="6,4 18,4 17,9 12,11 7,9" fill="currentColor"/><circle cx="12" cy="7" r="2" fill="rgba(0,0,0,0.4)"/></svg></div><span class="lb-league-gift">🎁</span></div>
-                <div class="lb-league"><div class="lb-league-trophy silver"><svg viewBox="0 0 24 24"><polygon points="6,4 18,4 17,9 12,11 7,9" fill="currentColor"/><polyline points="10,5 12,8 14,5" stroke="rgba(0,0,0,0.4)" stroke-width="1.5" fill="none"/></svg></div><span class="lb-league-gift">🎁</span></div>
-                <div class="lb-league"><div class="lb-league-trophy silver"><svg viewBox="0 0 24 24"><polygon points="6,4 18,4 17,9 12,11 7,9" fill="currentColor"/></svg></div><span class="lb-league-gift">🎁</span></div>
+                <div class="lb-league active"><div class="lb-league-trophy gold"><img src="icons/small/trophy-48.png" alt=""></div><img src="icons/small/chest-48.png" alt="" class="lb-league-gift"></div>
+                <div class="lb-league locked"><div class="lb-league-trophy"><img src="icons/small/lock-48.png" alt=""></div><img src="icons/small/chest-48.png" alt="" class="lb-league-gift"></div>
+                <div class="lb-league locked"><div class="lb-league-trophy"><img src="icons/small/lock-48.png" alt=""></div><img src="icons/small/chest-48.png" alt="" class="lb-league-gift"></div>
+                <div class="lb-league locked"><div class="lb-league-trophy"><img src="icons/small/lock-48.png" alt=""></div><img src="icons/small/chest-48.png" alt="" class="lb-league-gift"></div>
+                <div class="lb-league locked"><div class="lb-league-trophy"><img src="icons/small/lock-48.png" alt=""></div><img src="icons/small/chest-48.png" alt="" class="lb-league-gift"></div>
             </div>
 
             <!-- Current league header -->
@@ -156,23 +161,23 @@
                 <div class="lb-prize lb-prize-2">
                     <div class="lb-prize-rank">2.</div>
                     <div class="lb-prize-rewards">
-                        <div class="lb-reward gem">◆ 500</div>
-                        <div class="lb-reward card">🃏 20</div>
+                        <div class="lb-reward gem"><img src="icons/small/gem-48.png" alt="">500</div>
+                        <div class="lb-reward card"><img src="icons/small/pack-48.png" alt="">20</div>
                     </div>
                 </div>
                 <div class="lb-prize lb-prize-1">
                     <div class="lb-prize-rank">1.</div>
                     <div class="lb-prize-rewards">
-                        <div class="lb-reward gem">◆ 750</div>
-                        <div class="lb-reward card">🃏 40</div>
-                        <div class="lb-reward hero">★ 10</div>
+                        <div class="lb-reward gem"><img src="icons/small/gem-48.png" alt="">750</div>
+                        <div class="lb-reward card"><img src="icons/small/pack-48.png" alt="">40</div>
+                        <div class="lb-reward hero"><img src="icons/small/star-48.png" alt="">10</div>
                     </div>
                 </div>
                 <div class="lb-prize lb-prize-3">
                     <div class="lb-prize-rank">3.</div>
                     <div class="lb-prize-rewards">
-                        <div class="lb-reward gem">◆ 250</div>
-                        <div class="lb-reward card">🃏 10</div>
+                        <div class="lb-reward gem"><img src="icons/small/gem-48.png" alt="">250</div>
+                        <div class="lb-reward card"><img src="icons/small/pack-48.png" alt="">10</div>
                     </div>
                 </div>
             </div>
@@ -349,9 +354,18 @@
 
     <div id="abilities-screen" class="screen">
         <div class="screen-shell">
-            <h1 class="screen-title" data-i18n="abilities.title">ABILITY ARCHIVE</h1>
+            <div class="screen-title-row">
+                <img src="icons/small/star-48.png" alt="" class="screen-title-icon">
+                <h1 class="screen-title" data-i18n="abilities.title">SKILLS</h1>
+                <span class="screen-title-counter" id="ability-archive-counter"></span>
+            </div>
             <p class="screen-subtitle" id="ability-archive-status">0/0 unlocked</p>
-            <div id="ability-milestones" class="ability-milestones"></div>
+            <div class="archive-progress"><div class="archive-progress-fill" id="ability-archive-fill"></div></div>
+            <button type="button" class="milestone-toggle" id="ability-milestone-toggle" aria-expanded="false">
+                <span class="milestone-toggle-label">LEVEL BONUSES</span>
+                <span class="milestone-toggle-caret">▾</span>
+            </button>
+            <div id="ability-milestones" class="ability-milestones" hidden></div>
             <div id="ability-archive-grid" class="shop-grid ability-archive-grid"></div>
         </div>
     </div>

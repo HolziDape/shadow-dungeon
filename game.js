@@ -84,7 +84,7 @@ const I18N = {
         'equipment.slotLockedAt': 'Unlocks at Lv',
         'equipment.empty': 'Empty',
         'equipment.maxNote': 'Max slots: 5 Normal + 2 paid · 2 Legendary + 1 paid. The shop will not sell more than this.',
-        'abilities.title': 'ABILITY ARCHIVE',
+        'abilities.title': 'SKILLS',
         'enemyIndex.title': 'ENEMY INDEX',
         'enemyIndex.sub': '0/0 encountered',
         'enemyIndex.encountered': 'encountered',
@@ -127,6 +127,7 @@ const I18N = {
         'daily.later': 'Later',
         'quests.title': 'CHALLENGES',
         'quests.sub': 'Complete them and climb the league.',
+        'leaderboard.title': 'LEADERBOARD',
         'leaderboard.subline': 'Reach <strong>Top 3</strong> and win great prizes!',
         'runSummary.title': 'SKILLS USED',
         'runSummary.sub': 'Abilities you leveraged this run.',
@@ -239,7 +240,7 @@ const I18N = {
         'equipment.slotLockedAt': 'Frei ab Lv',
         'equipment.empty': 'Leer',
         'equipment.maxNote': 'Maximale Slots: 5 Normal + 2 gekauft · 2 Legendär + 1 gekauft. Der Shop verkauft nicht mehr.',
-        'abilities.title': 'FÄHIGKEITS-ARCHIV',
+        'abilities.title': 'SKILLS',
         'enemyIndex.title': 'GEGNER-INDEX',
         'enemyIndex.sub': '0/0 begegnet',
         'enemyIndex.encountered': 'begegnet',
@@ -280,6 +281,7 @@ const I18N = {
         'daily.later': 'Später',
         'quests.title': 'HERAUSFORDERUNGEN',
         'quests.sub': 'Erledige sie und steige in der Liga auf.',
+        'leaderboard.title': 'RANGLISTE',
         'leaderboard.subline': 'Erreiche <strong>Top 3</strong> und gewinne tolle Preise!',
         'runSummary.title': 'GENUTZTE SKILLS',
         'runSummary.sub': 'Diese Fähigkeiten hast du in diesem Run genutzt.',
@@ -9412,13 +9414,15 @@ function refreshLevelCta() {
 }
 
 // Leaderboard overlay (right rail Rangliste button) — new design with flags
-const LB_FLAGS = ['🇩🇪','🇮🇹','🇪🇸','🇫🇷','🇬🇧','🇺🇸','🇯🇵','🇧🇷','🇸🇪','🇰🇷','🇨🇦','🇲🇽'];
+// Country-code chips instead of emoji flags: emoji flags don't render on
+// Windows and clash with the pixel-art look everywhere else.
+const LB_FLAGS = ['DE','IT','ES','FR','GB','US','JP','BR','SE','KR','CA','MX'];
 function _flagFor(name) {
     let h = 0;
     for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
     return LB_FLAGS[h % LB_FLAGS.length];
 }
-const TROPHY_SVG = '<svg viewBox="0 0 24 24"><polygon points="6,4 18,4 17,9 12,11 7,9"/><path d="M12 11v5"/><polygon points="9,16 15,16 14,21 10,21"/></svg>';
+const TROPHY_IMG = '<img src="icons/small/trophy-48.png" alt="" class="lb-r-trophy">';
 
 window.openLeaderboardOverlay = function() {
     const overlay = document.getElementById('leaderboard-overlay');
@@ -9437,14 +9441,14 @@ window.openLeaderboardOverlay = function() {
                 <span class="lb-action-arrow"><svg viewBox="0 0 24 24"><polyline points="6,15 12,9 18,15"/></svg></span>
             </div>`;
         }
-        const flag = row.isYou ? '🇩🇪' : _flagFor(row.name);
+        const flag = row.isYou ? 'DE' : _flagFor(row.name);
         const display = row.isYou ? `Player_${(save.leaderboardSeed || 7).toString().slice(-4)}` : row.name;
         html += `
-            <div class="lb-row-v2 ${row.isYou ? 'you' : ''}">
+            <div class="lb-row-v2 ${row.isYou ? 'you' : ''} ${rank <= 3 ? 'top-' + rank : ''}">
                 <span class="lb-r-rank">${rank}</span>
                 <span class="lb-r-name">${display}</span>
                 <span class="lb-r-flag">${flag}</span>
-                <span class="lb-r-score">${row.score.toLocaleString()} ${TROPHY_SVG}</span>
+                <span class="lb-r-score">${row.score.toLocaleString()} ${TROPHY_IMG}</span>
             </div>
         `;
     });
@@ -10216,6 +10220,23 @@ function renderAbilityArchive() {
         </div>
     `).join('');
 
+    const unlockedTotal = ABILITIES.filter((a) => (a.unlockLevel || 1) <= save.unlocked).length;
+    const counterEl = document.getElementById('ability-archive-counter');
+    const fillEl = document.getElementById('ability-archive-fill');
+    if (counterEl) counterEl.textContent = `${unlockedTotal}/${ABILITIES.length}`;
+    if (fillEl) fillEl.style.width = `${Math.round((unlockedTotal / Math.max(1, ABILITIES.length)) * 100)}%`;
+    const msToggle = document.getElementById('ability-milestone-toggle');
+    if (msToggle && !msToggle.dataset.bound) {
+        msToggle.dataset.bound = '1';
+        msToggle.addEventListener('click', () => {
+            const open = milestones.hidden;
+            milestones.hidden = !open;
+            msToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            msToggle.classList.toggle('open', open);
+            playHaptic('soft');
+        });
+    }
+
     grid.innerHTML = '';
     // Sort by unlockLevel ASC so e.g. lvl 6 skill sits near top, not buried at the bottom
     const sortedAbilities = [...ABILITIES].sort((a, b) => {
@@ -10244,7 +10265,7 @@ function renderAbilityArchive() {
             ${iconMarkup}
             <div class="card-title">${dispName}</div>
             <div class="card-meta ${unlocked ? '' : 'locked-meta'}">
-                ${baseTier.toUpperCase()} | ${t('milestone.unlockedAt')} ${ability.unlockLevel}
+                ${unlocked ? `<span class="archive-tier-word">${baseTier.toUpperCase()}</span>` : baseTier.toUpperCase()} | ${t('milestone.unlockedAt')} ${ability.unlockLevel}
             </div>
             ${unlocked ? `<div class="card-copy">${dispDesc}</div>` : ''}
             <button class="archive-cta" type="button" ${unlocked ? '' : 'disabled'}>
